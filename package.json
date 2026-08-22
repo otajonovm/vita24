@@ -4,10 +4,6 @@
   "engines": {
     "node": ">=20"
   },
-  "workspaces": [
-    "app/frontend",
-    "app/backend"
-  ],
   "scripts": {
     "dev": "concurrently -n backend,frontend -c blue,green \"npm run dev --prefix app/backend\" \"npm run dev --prefix app/frontend\"",
     "dev:backend": "npm run dev --prefix app/backend",

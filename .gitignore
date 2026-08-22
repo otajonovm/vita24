@@ -12,3 +12,5 @@ backend/prisma/dev.db
 backend/prisma/dev.db-journal
 app/backend/prisma/dev.db
 app/backend/prisma/dev.db-journal
+app/frontend/package-lock.json
+app/package-lock.json

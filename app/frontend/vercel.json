@@ -1,6 +1,6 @@
 {
-  "installCommand": "npm install --include=optional --workspaces=false --install-strategy=nested && npm install --include=optional --workspaces=false --no-save --no-package-lock --install-strategy=nested @rollup/rollup-linux-x64-gnu@4.62.5 @tailwindcss/oxide-linux-x64-gnu@4.3.3 lightningcss-linux-x64-gnu@1.32.0",
-  "buildCommand": "npm run build",
+  "installCommand": "npm install --include=optional --no-package-lock --workspaces=false",
+  "buildCommand": "node ./scripts/ensure-linux-binaries.mjs && npx vite build",
   "outputDirectory": "dist",
   "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
 }

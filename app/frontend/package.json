@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "vite",
-    "prebuild": "node ./scripts/ensure-linux-binaries.mjs",
+    "postinstall": "node ./scripts/ensure-linux-binaries.mjs",
     "build": "node ./scripts/ensure-linux-binaries.mjs && vite build",
     "preview": "vite preview"
   },
