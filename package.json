@@ -1,6 +1,9 @@
 {
   "name": "vita24",
   "private": true,
+  "engines": {
+    "node": ">=20"
+  },
   "workspaces": [
     "app/frontend",
     "app/backend"
