@@ -1,0 +1,14 @@
+node_modules
+.env
+.env.local
+dist
+build
+.next
+.DS_Store
+.vscode
+*.db
+*.db-journal
+backend/prisma/dev.db
+backend/prisma/dev.db-journal
+app/backend/prisma/dev.db
+app/backend/prisma/dev.db-journal

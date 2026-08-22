@@ -1,0 +1,19 @@
+{
+  "name": "vita24",
+  "private": true,
+  "workspaces": [
+    "app/frontend",
+    "app/backend"
+  ],
+  "scripts": {
+    "dev": "concurrently -n backend,frontend -c blue,green \"npm run dev --prefix app/backend\" \"npm run dev --prefix app/frontend\"",
+    "dev:backend": "npm run dev --prefix app/backend",
+    "dev:frontend": "npm run dev --prefix app/frontend",
+    "start": "npm run start --prefix app/backend",
+    "start:frontend": "npm run preview --prefix app/frontend",
+    "build": "npm run build --prefix app/frontend"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

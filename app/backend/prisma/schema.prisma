@@ -1,0 +1,169 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  CUSTOMER
+  BRANCH_ADMIN
+  SUPER_ADMIN
+}
+
+enum OrderStatus {
+  PENDING_PRESCRIPTION
+  PENDING_BRANCH
+  WAITING_PAYMENT
+  PAID
+  DELIVERING
+  COMPLETED
+  CANCELLED
+}
+
+enum PrescriptionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+model User {
+  id            String         @id @default(uuid())
+  name          String
+  phone         String         @unique
+  email         String?        @unique
+  passwordHash  String
+  role          Role           @default(CUSTOMER)
+  branchId      String?
+  branch        Branch?        @relation(fields: [branchId], references: [id])
+  orders        Order[]
+  prescriptions Prescription[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+}
+
+model Branch {
+  id           String        @id @default(uuid())
+  name         String
+  slug         String        @unique
+  address      String
+  phone        String
+  city         String        @default("Toshkent")
+  district     String
+  workingHours String
+  isActive     Boolean       @default(true)
+  stocks       BranchStock[]
+  orders       Order[]
+  staff        User[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+}
+
+model Category {
+  id        String     @id @default(uuid())
+  name      String
+  slug      String     @unique
+  icon      String
+  sortOrder Int        @default(0)
+  medicines Medicine[]
+}
+
+model Medicine {
+  id             String        @id @default(uuid())
+  name           String
+  slug           String        @unique
+  description    String
+  manufacturer   String
+  dosageForm     String
+  isPrescription Boolean       @default(false)
+  imageEmoji     String
+  externalApiId  String?
+  categoryId     String
+  category       Category      @relation(fields: [categoryId], references: [id])
+  stocks         BranchStock[]
+  orderItems     OrderItem[]
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+}
+
+model BranchStock {
+  id            String   @id @default(uuid())
+  branchId      String
+  medicineId    String
+  price         Decimal
+  stockCount    Int      @default(0)
+  reservedCount Int      @default(0)
+  branch        Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  medicine      Medicine @relation(fields: [medicineId], references: [id], onDelete: Cascade)
+  updatedAt     DateTime @updatedAt
+
+  @@unique([branchId, medicineId])
+  @@index([branchId])
+}
+
+model Prescription {
+  id        String             @id @default(uuid())
+  userId    String?
+  orderId   String             @unique
+  fileUrl   String
+  fileName  String
+  status    PrescriptionStatus @default(PENDING)
+  user      User?              @relation(fields: [userId], references: [id])
+  order     Order              @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  createdAt DateTime           @default(now())
+}
+
+model Order {
+  id              String              @id @default(uuid())
+  orderNumber     String              @unique
+  userId          String?
+  branchId        String
+  status          OrderStatus         @default(PENDING_BRANCH)
+  customerName    String
+  customerPhone   String
+  deliveryAddress String
+  notes           String?
+  subtotal        Decimal
+  reservedUntil   DateTime
+  user            User?               @relation(fields: [userId], references: [id])
+  branch          Branch              @relation(fields: [branchId], references: [id])
+  items           OrderItem[]
+  prescription    Prescription?
+  payment         PaymentTransaction?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  @@index([branchId, status])
+}
+
+model OrderItem {
+  id             String   @id @default(uuid())
+  orderId        String
+  medicineId     String
+  quantity       Int
+  unitPrice      Decimal
+  isPrescription Boolean  @default(false)
+  order          Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  medicine       Medicine @relation(fields: [medicineId], references: [id])
+}
+
+model PaymentTransaction {
+  id         String        @id @default(uuid())
+  orderId    String        @unique
+  amount     Decimal
+  provider   String        @default("MOCK")
+  status     PaymentStatus @default(PENDING)
+  externalId String?
+  paidAt     DateTime?
+  order      Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+}
