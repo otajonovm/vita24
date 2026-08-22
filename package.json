@@ -14,5 +14,8 @@
   },
   "devDependencies": {
     "concurrently": "^9.1.2"
+  },
+  "overrides": {
+    "rollup": "npm:@rollup/wasm-node@4.62.5"
   }
 }

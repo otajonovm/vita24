@@ -1,6 +1,7 @@
 {
   "installCommand": "npm install --prefix app/frontend --include=optional --no-package-lock --workspaces=false",
-  "buildCommand": "node app/frontend/scripts/ensure-linux-binaries.mjs && npx --prefix app/frontend vite build",
+  "buildCommand": "npm run build --prefix app/frontend",
   "outputDirectory": "app/frontend/dist",
+  "ignoreCommand": "exit 1",
   "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
 }

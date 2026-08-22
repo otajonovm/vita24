@@ -2,7 +2,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 
-// Vita24 storefront build (GitHub/Vercel sync check)
+// Vita24 storefront — Rollup WASM (no Linux native binary)
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   base: "/",
