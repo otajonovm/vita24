@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "vite",
     "prebuild": "node ./scripts/ensure-linux-binaries.mjs",
-    "build": "vite build",
+    "build": "node ./scripts/ensure-linux-binaries.mjs && vite build",
     "preview": "vite preview"
   },
   "dependencies": {

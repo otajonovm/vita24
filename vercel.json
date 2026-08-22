@@ -1,6 +1,6 @@
 {
-  "installCommand": "npm install --include=optional && npm install --workspace=frontend --include=optional --no-save --no-package-lock @rollup/rollup-linux-x64-gnu@4.62.5 @tailwindcss/oxide-linux-x64-gnu@4.3.3 lightningcss-linux-x64-gnu@1.32.0",
-  "buildCommand": "npm run build --workspace=frontend",
+  "installCommand": "npm install --include=optional && npm install --prefix app/frontend --include=optional --workspaces=false --no-save --no-package-lock --install-strategy=nested @rollup/rollup-linux-x64-gnu@4.62.5 @tailwindcss/oxide-linux-x64-gnu@4.3.3 lightningcss-linux-x64-gnu@1.32.0",
+  "buildCommand": "npm run build --prefix app/frontend",
   "outputDirectory": "app/frontend/dist",
   "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
 }
