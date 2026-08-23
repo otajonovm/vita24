@@ -62,41 +62,41 @@ export default function PromoCarousel() {
   const Icon = slide.Icon;
 
   return (
-    <section className="@container relative w-full min-w-0 overflow-hidden rounded-2xl bg-gradient-to-br from-brand to-brand-dark text-white shadow-sm">
+    <section className="relative w-full min-w-0 overflow-hidden rounded-2xl bg-gradient-to-br from-brand to-brand-dark text-white shadow-sm">
       <span
         aria-hidden
-        className="pointer-events-none absolute -right-10 -top-16 h-36 w-36 rounded-full bg-white/10 @[768px]:h-52 @[768px]:w-52 @[1024px]:-right-6 @[1024px]:h-72 @[1024px]:w-72"
+        className="pointer-events-none absolute -right-8 -top-12 h-28 w-28 rounded-full bg-white/10 md:h-52 md:w-52 lg:-right-6 lg:h-72 lg:w-72"
       />
       <span
         aria-hidden
-        className="pointer-events-none absolute -bottom-16 right-16 hidden h-36 w-36 rounded-full bg-white/10 @[768px]:block @[1024px]:right-40 @[1024px]:h-48 @[1024px]:w-48"
+        className="pointer-events-none absolute -bottom-16 right-16 hidden h-36 w-36 rounded-full bg-white/10 md:block lg:right-40 lg:h-48 lg:w-48"
       />
 
       <div
-        className="relative flex h-40 w-full select-none items-center px-4 @[768px]:h-52 @[768px]:px-8 @[1024px]:h-64 @[1024px]:px-14"
+        className="relative flex h-36 w-full select-none items-center px-4 md:h-52 md:px-8 lg:h-64 lg:px-14"
         onTouchStart={(event) => onStart(event.touches[0].clientX)}
         onTouchMove={(event) => onMove(event.touches[0].clientX)}
         onTouchEnd={onEnd}
       >
-        <div className="flex w-full min-w-0 items-center justify-between gap-4">
-          <div className="flex min-w-0 max-w-2xl items-center gap-3 @[768px]:gap-5">
-            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-white/15 @[768px]:h-14 @[768px]:w-14 @[1024px]:h-16 @[1024px]:w-16">
-              <Icon className="h-5 w-5 @[768px]:h-7 @[768px]:w-7 @[1024px]:h-8 @[1024px]:w-8" />
+        <div className="flex w-full min-w-0 items-center justify-between gap-3 md:gap-4">
+          <div className="flex min-w-0 max-w-2xl items-center gap-3 md:gap-5">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-white/15 md:h-14 md:w-14 lg:h-16 lg:w-16">
+              <Icon className="h-5 w-5 md:h-7 md:w-7 lg:h-8 lg:w-8" />
             </span>
             <div className="min-w-0">
-              <h1 className="text-base font-extrabold leading-tight @[768px]:text-2xl @[1024px]:text-3xl">
+              <h1 className="text-base font-extrabold leading-tight md:text-2xl lg:text-3xl">
                 {slide.title}
               </h1>
-              <p className="mt-1 truncate text-xs text-white/90 @[768px]:mt-1.5 @[768px]:whitespace-normal @[768px]:text-sm @[1024px]:text-lg">
+              <p className="mt-1 line-clamp-2 text-xs text-white/90 md:mt-1.5 md:line-clamp-none md:text-sm lg:text-lg">
                 {slide.text}
               </p>
-              <p className="mt-2 hidden text-xs font-semibold uppercase tracking-wider text-white/70 @[768px]:block">
+              <p className="mt-2 hidden text-xs font-semibold uppercase tracking-wider text-white/70 md:block">
                 {slide.hint}
               </p>
             </div>
           </div>
 
-          <div className="hidden shrink-0 rounded-2xl bg-white/12 px-4 py-3 text-right backdrop-blur-sm @[1024px]:block">
+          <div className="hidden shrink-0 rounded-2xl bg-white/12 px-4 py-3 text-right backdrop-blur-sm lg:block">
             <p className="text-xs font-semibold uppercase tracking-wider text-white/70">Vita24</p>
             <p className="mt-1 text-sm font-bold leading-snug">{slide.hint}</p>
           </div>
@@ -107,7 +107,7 @@ export default function PromoCarousel() {
         type="button"
         aria-label="Oldingi slayd"
         onClick={() => go(-1)}
-        className="absolute left-2 top-1/2 hidden h-10 w-10 -translate-y-1/2 place-items-center rounded-full bg-white/90 text-slate-800 shadow-sm @[768px]:grid @[1024px]:left-3 @[1024px]:h-11 @[1024px]:w-11"
+        className="absolute left-2 top-1/2 hidden h-10 w-10 -translate-y-1/2 place-items-center rounded-full bg-white/90 text-slate-800 shadow-sm md:grid lg:left-3 lg:h-11 lg:w-11"
       >
         <ChevronLeft className="h-5 w-5" />
       </button>
@@ -115,12 +115,12 @@ export default function PromoCarousel() {
         type="button"
         aria-label="Keyingi slayd"
         onClick={() => go(1)}
-        className="absolute right-2 top-1/2 hidden h-10 w-10 -translate-y-1/2 place-items-center rounded-full bg-white/90 text-slate-800 shadow-sm @[768px]:grid @[1024px]:right-3 @[1024px]:h-11 @[1024px]:w-11"
+        className="absolute right-2 top-1/2 hidden h-10 w-10 -translate-y-1/2 place-items-center rounded-full bg-white/90 text-slate-800 shadow-sm md:grid lg:right-3 lg:h-11 lg:w-11"
       >
         <ChevronRight className="h-5 w-5" />
       </button>
 
-      <div className="absolute inset-x-0 bottom-2.5 flex justify-center gap-1.5 @[768px]:bottom-3">
+      <div className="absolute inset-x-0 bottom-2.5 flex justify-center gap-1.5 md:bottom-3">
         {SLIDES.map((item, dotIndex) => (
           <button
             key={item.id}

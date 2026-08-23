@@ -52,16 +52,16 @@ export default function HomePage() {
   };
 
   return (
-    <div className="grid w-full min-w-0 gap-5 lg:gap-8">
+    <div className="grid w-full min-w-0 gap-4 md:gap-5 lg:gap-8">
       <PromoCarousel />
       <CategoryBar categories={categories} activeId={categoryId} onSelect={setCategory} />
 
-      <section>
-        <div className="mb-3 flex items-end justify-between">
-          <h2 className="text-lg font-extrabold text-slate-900 md:text-xl">
+      <section className="min-w-0">
+        <div className="mb-2.5 flex items-end justify-between gap-3 md:mb-3">
+          <h2 className="min-w-0 text-base font-extrabold text-slate-900 md:text-xl">
             {query ? "Qidiruv natijasi" : "Mashhur dorilar"}
           </h2>
-          <span className="text-xs font-semibold text-slate-400">{medicines.length} ta</span>
+          <span className="shrink-0 text-xs font-semibold text-slate-400">{medicines.length} ta</span>
         </div>
 
         {loading && <p className="text-sm text-slate-500">Yuklanmoqda...</p>}

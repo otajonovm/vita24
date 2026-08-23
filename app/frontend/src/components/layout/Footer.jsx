@@ -61,7 +61,7 @@ export default function Footer() {
   const [openId, setOpenId] = useState("");
 
   return (
-    <footer className="mt-auto mb-[4.75rem] bg-[#083929] text-[#d7efe4] lg:mb-0">
+    <footer className="mt-auto hidden bg-[#083929] text-[#d7efe4] lg:block">
       <div className="mx-auto hidden max-w-7xl grid-cols-4 gap-8 px-6 py-10 lg:grid">
         <div>
           <strong className="text-lg text-white">Vita24</strong>

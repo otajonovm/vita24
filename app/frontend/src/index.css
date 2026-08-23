@@ -16,10 +16,13 @@ html,
 body,
 #root {
   min-height: 100%;
+  width: 100%;
+  max-width: 100%;
 }
 
 body {
   margin: 0;
+  overflow-x: hidden;
   background: #f8fafc;
   color: #0f172a;
   font-family: var(--font-sans);

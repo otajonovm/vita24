@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { Building2, Check, MapPin, Search, XCircle } from "lucide-react";
+import {
+  LiaCheckSolid,
+  LiaClinicMedicalSolid,
+  LiaMapMarkerSolid,
+  LiaSearchSolid,
+  LiaTimesCircleSolid,
+} from "react-icons/lia";
 import { fetchBranches } from "../../services/api";
 import { useBranchStore } from "../../store/useBranchStore";
 import { useCartStore } from "../../store/useCartStore";
@@ -68,7 +74,7 @@ export default function BranchModal() {
               onClick={closeModal}
               className="grid h-9 w-9 place-items-center rounded-full bg-slate-50"
             >
-              <XCircle className="h-4 w-4" />
+              <LiaTimesCircleSolid className="h-4 w-4" aria-hidden />
             </button>
           )}
         </div>
@@ -78,12 +84,12 @@ export default function BranchModal() {
         </p>
 
         <div className="relative mb-4">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <LiaSearchSolid className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden />
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Filial yoki tuman bo'yicha qidirish"
-            className="h-12 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-3 text-sm outline-none ring-brand/30 focus:ring-2"
+            className="h-12 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-3 text-sm outline-none ring-[#087b51]/30 focus:ring-2"
           />
         </div>
 
@@ -97,17 +103,17 @@ export default function BranchModal() {
                 key={item.id}
                 type="button"
                 onClick={() => handleSelect(item)}
-                className={`rounded-2xl border p-4 text-left shadow-sm ${
-                  active ? "border-brand bg-brand-soft" : "border-slate-100 bg-white"
+                className={`rounded-2xl border p-4 text-left shadow-sm transition-all hover:border-[#087b51] hover:shadow-md ${
+                  active ? "border-[#087b51] bg-[#e7f6ef]" : "border-slate-100 bg-white"
                 }`}
               >
                 <div className="mb-2 flex items-center justify-between">
-                  <Building2 className="h-5 w-5 text-brand" />
-                  {active && <Check className="h-5 w-5 text-brand" />}
+                  <LiaClinicMedicalSolid className="h-5 w-5 text-[#087b51]" aria-hidden />
+                  {active && <LiaCheckSolid className="h-5 w-5 text-[#087b51]" aria-hidden />}
                 </div>
                 <strong className="block text-slate-900">{item.name}</strong>
                 <span className="mt-1 flex items-start gap-1.5 text-sm text-slate-500">
-                  <MapPin className="mt-0.5 h-4 w-4 shrink-0" />
+                  <LiaMapMarkerSolid className="mt-0.5 h-4 w-4 shrink-0 text-[#087b51]" aria-hidden />
                   {item.address}
                 </span>
                 <em className="mt-2 block text-xs not-italic text-slate-500">

@@ -22,7 +22,7 @@ function normalizeMedicine(raw, branchId) {
     id: raw.id,
     name: raw.name,
     description: raw.description || "",
-    dosage: raw.dosage || dosageMatch?.[0] || "",
+    dosage: raw.dosage || raw.dosageForm || dosageMatch?.[0] || "",
     dosageUnit: raw.dosageUnit || "tabletka",
     isPrescription: Boolean(raw.isPrescription ?? raw.requiresPrescription),
     imageUrl: raw.imageUrl || "",
@@ -54,10 +54,11 @@ function normalizeOrder(raw) {
   };
 }
 
-async function withFallback(request, fallback) {
+async function withFallback(request, fallback, { treatEmptyAsMiss = false } = {}) {
   try {
     const data = await request();
     if (data == null) return fallback();
+    if (treatEmptyAsMiss && Array.isArray(data) && data.length === 0) return fallback();
     return data;
   } catch {
     return fallback();
@@ -67,14 +68,16 @@ async function withFallback(request, fallback) {
 export async function fetchBranches() {
   return withFallback(
     async () => unwrap(await client.get("/branches")),
-    () => MOCK_BRANCHES.filter((branch) => branch.isActive)
+    () => MOCK_BRANCHES.filter((branch) => branch.isActive),
+    { treatEmptyAsMiss: true }
   );
 }
 
 export async function fetchCategories() {
   return withFallback(
     async () => unwrap(await client.get("/medicines/categories")),
-    () => getMockCategories()
+    () => getMockCategories(),
+    { treatEmptyAsMiss: true }
   );
 }
 
@@ -88,7 +91,8 @@ export async function fetchMedicines({ branchId, search = "", categoryId = "" } 
       );
       return (data || []).map((item) => normalizeMedicine(item, branchId));
     },
-    () => getMockMedicines(branchId, search, categoryId)
+    () => getMockMedicines(branchId, search, categoryId),
+    { treatEmptyAsMiss: true }
   );
 }
 

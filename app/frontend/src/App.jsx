@@ -12,9 +12,9 @@ import SuperAdminPage from "./pages/SuperAdminPage";
 
 function StorefrontShell({ children }) {
   return (
-    <div className="flex min-h-dvh flex-col bg-canvas text-slate-900">
+    <div className="flex min-h-dvh w-full min-w-0 flex-col overflow-x-hidden bg-canvas text-slate-900">
       <Header />
-      <main className="mx-auto w-full max-w-7xl flex-1 px-3 pb-24 pt-3 md:px-6 lg:pb-10">
+      <main className="mx-auto w-full min-w-0 max-w-7xl flex-1 px-3 pb-24 pt-3 md:px-6 lg:pb-10">
         {children}
       </main>
       <Footer />
