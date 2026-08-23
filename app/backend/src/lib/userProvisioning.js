@@ -29,6 +29,12 @@ function serializeUser(user) {
     phone: user.phone,
     role: user.role,
     createdAt: user.createdAt,
+    lastStreet: user.lastStreet || "",
+    lastApartment: user.lastApartment || "",
+    lastFloor: user.lastFloor || "",
+    lastIntercom: user.lastIntercom || "",
+    lastLat: user.lastLat ?? null,
+    lastLng: user.lastLng ?? null,
   };
 }
 

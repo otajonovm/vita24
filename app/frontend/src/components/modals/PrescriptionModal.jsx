@@ -38,12 +38,12 @@ export default function PrescriptionModal({ open, onClose }) {
 
   return (
     <div
-      className="fixed inset-0 z-40 grid place-items-center bg-slate-900/45 p-5"
+      className="fixed inset-0 z-40 flex items-end justify-center bg-slate-900/45 p-0 md:items-center md:p-5"
       onClick={onClose}
       role="presentation"
     >
       <div
-        className="w-full max-w-lg rounded-2xl border border-slate-100 bg-white p-6 shadow-sm"
+        className="max-h-[92dvh] w-full max-w-lg overflow-y-auto rounded-t-2xl border border-slate-100 bg-white p-4 shadow-sm md:rounded-2xl md:p-6"
         onClick={(event) => event.stopPropagation()}
         role="dialog"
         aria-labelledby="rx-modal-title"

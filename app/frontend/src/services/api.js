@@ -143,8 +143,14 @@ export async function createOrder(payload) {
         customerName: payload.fullName,
         customerPhone: payload.phone,
         deliveryAddress: payload.deliveryAddress,
+        lat: payload.lat,
+        lng: payload.lng,
+        street: payload.street,
+        apartment: payload.apartment,
+        floor: payload.floor,
+        intercom: payload.intercom,
         subtotal: totalAmount,
-        reservedUntil: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+        reservedUntil: new Date(Date.now() + 10 * 1000).toISOString(),
         createdAt: new Date().toISOString(),
         branchId: payload.branchId,
         userId: user.id,
@@ -206,6 +212,20 @@ export async function updateOrderStatus(orderId, status, cancelReason = "") {
   );
 }
 
+export async function fetchSavedAddress(phone) {
+  return withFallback(
+    async () => unwrap(await client.get("/customers/address", { params: { phone } })),
+    () => null
+  );
+}
+
+export async function saveCustomerAddress(payload) {
+  return withFallback(
+    async () => unwrap(await client.put("/customers/address", payload)),
+    () => payload
+  );
+}
+
 export async function mockPay(orderId) {
   return withFallback(
     async () => normalizeOrder(unwrap(await client.post(`/orders/${orderId}/mock-pay`))),
@@ -213,7 +233,7 @@ export async function mockPay(orderId) {
       const order = mockOrders.find((item) => item.id === orderId);
       if (!order) throw new Error("Buyurtma topilmadi");
       if (order.status === "PAID") return { ...order };
-      if (order.status !== "WAITING_PAYMENT") {
+      if (!["WAITING_PAYMENT", "PENDING_BRANCH"].includes(order.status)) {
         throw new Error("To'lov faqat tasdiqlangan buyurtmalar uchun");
       }
       order.status = "PAID";

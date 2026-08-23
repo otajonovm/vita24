@@ -46,6 +46,12 @@ model User {
   branch        Branch?        @relation(fields: [branchId], references: [id])
   orders        Order[]
   prescriptions Prescription[]
+  lastStreet    String?
+  lastApartment String?
+  lastFloor     String?
+  lastIntercom  String?
+  lastLat       Float?
+  lastLng       Float?
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 }
@@ -130,6 +136,8 @@ model Order {
   customerName    String
   customerPhone   String
   deliveryAddress String
+  deliveryLat     Float?
+  deliveryLng     Float?
   notes           String?
   subtotal        Decimal
   reservedUntil   DateTime

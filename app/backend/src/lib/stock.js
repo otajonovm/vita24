@@ -1,11 +1,11 @@
 const prisma = require("./prisma");
 const { AppError } = require("./response");
 
-const RESERVATION_MINUTES = Number(process.env.RESERVATION_MINUTES || 15);
+const RESERVATION_MS = Number(process.env.RESERVATION_MS || 10 * 1000);
 const ACTIVE_STATUSES = ["PENDING_PRESCRIPTION", "PENDING_BRANCH", "WAITING_PAYMENT"];
 
 function reservationDeadline() {
-  return new Date(Date.now() + RESERVATION_MINUTES * 60 * 1000);
+  return new Date(Date.now() + RESERVATION_MS);
 }
 
 function availableCount(stock) {
@@ -108,7 +108,7 @@ async function captureStock(tx, order) {
 }
 
 module.exports = {
-  RESERVATION_MINUTES,
+  RESERVATION_MS,
   ACTIVE_STATUSES,
   reservationDeadline,
   availableCount,

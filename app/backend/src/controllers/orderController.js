@@ -25,6 +25,8 @@ function serializeOrder(order) {
     customerName: order.customerName,
     customerPhone: order.customerPhone,
     deliveryAddress: order.deliveryAddress,
+    deliveryLat: order.deliveryLat ?? null,
+    deliveryLng: order.deliveryLng ?? null,
     notes: order.notes,
     subtotal: Number(order.subtotal),
     reservedUntil: order.reservedUntil,
@@ -175,10 +177,12 @@ const createOrder = asyncHandler(async (req, res) => {
         orderNumber: buildOrderNumber(),
         userId: customer.id,
         branchId,
-        status: hasRxItems ? "PENDING_PRESCRIPTION" : "PENDING_BRANCH",
+        status: hasRxItems ? "PENDING_PRESCRIPTION" : "WAITING_PAYMENT",
         customerName: customer.name,
         customerPhone: customer.phone,
         deliveryAddress: String(deliveryAddress).trim(),
+        deliveryLat: Number.isFinite(Number(body.lat)) ? Number(body.lat) : null,
+        deliveryLng: Number.isFinite(Number(body.lng)) ? Number(body.lng) : null,
         notes: notes ? String(notes).trim() : null,
         subtotal,
         reservedUntil: reservationDeadline(),
@@ -206,7 +210,20 @@ const createOrder = asyncHandler(async (req, res) => {
       include: orderInclude,
     });
 
-    return { order: createdOrder, user: customer };
+    const updatedUser = await tx.user.update({
+      where: { id: customer.id },
+      data: {
+        name: customer.name,
+        lastStreet: String(body.street || deliveryAddress).trim(),
+        lastApartment: String(body.apartment || "").trim() || null,
+        lastFloor: String(body.floor || "").trim() || null,
+        lastIntercom: String(body.intercom || "").trim() || null,
+        lastLat: Number.isFinite(Number(body.lat)) ? Number(body.lat) : null,
+        lastLng: Number.isFinite(Number(body.lng)) ? Number(body.lng) : null,
+      },
+    });
+
+    return { order: createdOrder, user: updatedUser };
   });
 
   return sendSuccess(
@@ -343,7 +360,7 @@ const mockPay = asyncHandler(async (req, res) => {
     return sendSuccess(res, serializeOrder(current), "To'lov allaqachon qabul qilingan");
   }
 
-  if (order.status !== "WAITING_PAYMENT") {
+  if (!["WAITING_PAYMENT", "PENDING_BRANCH"].includes(order.status)) {
     throw new AppError(
       "To'lov faqat farmatsevt tasdiqlagan buyurtmalar uchun mumkin",
       409,
@@ -372,7 +389,7 @@ const mockPay = asyncHandler(async (req, res) => {
       });
     }
 
-    if (locked.status !== "WAITING_PAYMENT") {
+    if (!["WAITING_PAYMENT", "PENDING_BRANCH"].includes(locked.status)) {
       throw new AppError(
         "To'lov faqat farmatsevt tasdiqlagan buyurtmalar uchun mumkin",
         409,

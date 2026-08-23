@@ -1,33 +1,36 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   AlertCircle,
+  ArrowLeft,
   CheckCircle2,
   Clock,
   CreditCard,
-  MapPin,
   Minus,
   Phone,
   Pill,
   Plus,
   Trash2,
+  UploadCloud,
   User,
+  Wallet,
 } from "lucide-react";
-import PrescriptionModal from "../components/modals/PrescriptionModal";
+import MapCheckoutSection from "../components/checkout/MapCheckoutSection";
 import { formatReservation, formatSom, STATUS_LABELS } from "../lib/format";
 import { lineTotal } from "../lib/mockData";
-import { createOrder, mockPay } from "../services/api";
+import { createOrder, fetchSavedAddress, mockPay, saveCustomerAddress } from "../services/api";
 import { useAuthStore } from "../store/useAuthStore";
 import { useBranchStore } from "../store/useBranchStore";
 import { useCartStore } from "../store/useCartStore";
 
-const emptyForm = {
-  phone: "",
-  fullName: "",
-  deliveryAddress: "",
-};
+const PAYMENT_OPTIONS = [
+  { id: "payme", label: "Payme" },
+  { id: "click", label: "Click" },
+  { id: "cash", label: "Naqd pul" },
+];
 
 export default function CartPage() {
+  const navigate = useNavigate();
   const branch = useBranchStore((state) => state.branch);
   const user = useAuthStore((state) => state.user);
   const setSession = useAuthStore((state) => state.setSession);
@@ -36,17 +39,31 @@ export default function CartPage() {
   const removeFromCart = useCartStore((state) => state.removeFromCart);
   const clearCart = useCartStore((state) => state.clearCart);
   const prescription = useCartStore((state) => state.prescription);
+  const setPrescription = useCartStore((state) => state.setPrescription);
   const hasPrescriptionItems = useCartStore((state) =>
     state.items.some((item) => item.medicine.isPrescription)
   );
   const totalAmount = items.reduce((sum, item) => sum + lineTotal(item), 0);
   const pendingOrder = useCartStore((state) => state.pendingOrder);
   const reservationUntil = useCartStore((state) => state.reservationUntil);
+  const checkoutHoldUntil = useCartStore((state) => state.checkoutHoldUntil);
+  const ensureCheckoutHold = useCartStore((state) => state.ensureCheckoutHold);
+  const paymentMethod = useCartStore((state) => state.paymentMethod);
+  const setPaymentMethod = useCartStore((state) => state.setPaymentMethod);
+  const address = useCartStore((state) => state.savedAddress) || {
+    street: "",
+    apartment: "",
+    floor: "",
+    intercom: "",
+    lat: null,
+    lng: null,
+  };
+  const setSavedAddress = useCartStore((state) => state.setSavedAddress);
   const startReservation = useCartStore((state) => state.startReservation);
   const clearReservation = useCartStore((state) => state.clearReservation);
 
-  const [form, setForm] = useState(emptyForm);
-  const [rxOpen, setRxOpen] = useState(false);
+  const [phone, setPhone] = useState("");
+  const [fullName, setFullName] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [paying, setPaying] = useState(false);
   const [error, setError] = useState("");
@@ -58,25 +75,98 @@ export default function CartPage() {
   }, []);
 
   useEffect(() => {
+    if (items.length > 0) ensureCheckoutHold();
+  }, [items.length, ensureCheckoutHold]);
+
+  useEffect(() => {
     if (!user) return;
-    setForm((current) => ({
-      phone: current.phone || user.phone || "",
-      fullName: current.fullName || user.name || "",
-      deliveryAddress: current.deliveryAddress,
-    }));
+    setPhone((current) => current || user.phone || "");
+    setFullName((current) => current || user.name || "");
+    if (!address.street && user.lastStreet) {
+      setSavedAddress({
+        street: user.lastStreet,
+        apartment: user.lastApartment || "",
+        floor: user.lastFloor || "",
+        intercom: user.lastIntercom || "",
+        lat: user.lastLat,
+        lng: user.lastLng,
+      });
+    }
   }, [user]);
 
-  const remaining = reservationUntil ? reservationUntil - now : 0;
-  const expired = Boolean(reservationUntil) && remaining <= 0;
+  useEffect(() => {
+    const normalized = phone.replace(/\s/g, "");
+    if (!/^\+998\d{9}$/.test(normalized) || address.street) return undefined;
+    let active = true;
+    fetchSavedAddress(normalized).then((saved) => {
+      if (!active || !saved?.street) return;
+      setSavedAddress({
+        street: saved.street,
+        apartment: saved.apartment || "",
+        floor: saved.floor || "",
+        intercom: saved.intercom || "",
+        lat: saved.lat,
+        lng: saved.lng,
+      });
+      if (saved.fullName) setFullName((current) => current || saved.fullName);
+    });
+    return () => {
+      active = false;
+    };
+  }, [phone]);
+
+  useEffect(() => {
+    const normalized = phone.replace(/\s/g, "");
+    if (!address.street || !/^\+998\d{9}$/.test(normalized)) return undefined;
+    const timer = setTimeout(() => {
+      saveCustomerAddress({
+        phone: normalized,
+        fullName,
+        street: address.street,
+        apartment: address.apartment,
+        floor: address.floor,
+        intercom: address.intercom,
+        lat: address.lat,
+        lng: address.lng,
+      });
+    }, 700);
+    return () => clearTimeout(timer);
+  }, [address, phone, fullName]);
+
+  const holdUntil = reservationUntil || checkoutHoldUntil;
+  const remaining = holdUntil ? holdUntil - now : 0;
+  const expired = Boolean(holdUntil) && remaining <= 0;
   const timerLabel = formatReservation(remaining);
+
+  const composedAddress = [
+    address.street.trim(),
+    address.apartment && `kv. ${address.apartment}`,
+    address.floor && `${address.floor}-qavat`,
+    address.intercom && `domofon ${address.intercom}`,
+  ]
+    .filter(Boolean)
+    .join(", ");
 
   const canCheckout =
     items.length > 0 &&
     branch &&
-    /^\+998\d{9}$/.test(form.phone.replace(/\s/g, "")) &&
-    form.fullName.trim() &&
-    form.deliveryAddress.trim() &&
+    /^\+998\d{9}$/.test(phone.replace(/\s/g, "")) &&
+    fullName.trim() &&
+    address.street.trim() &&
     (!hasPrescriptionItems || Boolean(prescription?.fileUrl));
+
+  const readRxFile = (file) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      setPrescription({
+        fileName: file.name,
+        fileUrl: String(reader.result),
+        status: "PENDING",
+      });
+    };
+    reader.readAsDataURL(file);
+  };
 
   const handleOrder = async (event) => {
     event.preventDefault();
@@ -86,9 +176,15 @@ export default function CartPage() {
 
     try {
       const result = await createOrder({
-        phone: form.phone.replace(/\s/g, "").trim(),
-        fullName: form.fullName.trim(),
-        deliveryAddress: form.deliveryAddress.trim(),
+        phone: phone.replace(/\s/g, "").trim(),
+        fullName: fullName.trim(),
+        deliveryAddress: composedAddress,
+        lat: address.lat,
+        lng: address.lng,
+        street: address.street,
+        apartment: address.apartment,
+        floor: address.floor,
+        intercom: address.intercom,
         branchId: branch.id,
         items: items.map((item) => ({
           medicineId: item.medicine.id,
@@ -97,6 +193,7 @@ export default function CartPage() {
           isPrescription: item.medicine.isPrescription,
           name: item.medicine.name,
         })),
+        paymentMethod,
         prescriptionUrl: hasPrescriptionItems ? prescription?.fileUrl : undefined,
         prescription: hasPrescriptionItems ? prescription : null,
       });
@@ -127,15 +224,22 @@ export default function CartPage() {
 
   if (pendingOrder) {
     const paid = pendingOrder.status === "PAID";
-    const canPay = pendingOrder.status === "WAITING_PAYMENT" && !expired;
-    const awaitingReview = ["PENDING_PRESCRIPTION", "PENDING_BRANCH"].includes(
-      pendingOrder.status
-    );
+    const canPay =
+      ["WAITING_PAYMENT", "PENDING_BRANCH"].includes(pendingOrder.status) && !expired;
+    const awaitingReview = ["PENDING_PRESCRIPTION", "PENDING_BRANCH"].includes(pendingOrder.status);
 
     return (
-      <section className="mx-auto max-w-xl rounded-2xl border border-slate-100 bg-white p-6 shadow-sm">
+      <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+        <button
+          type="button"
+          onClick={() => navigate(-1)}
+          className="mb-3 inline-flex items-center gap-1 text-sm font-semibold text-slate-600"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Orqaga
+        </button>
         <p className="text-xs font-bold uppercase tracking-wide text-brand">Buyurtma holati</p>
-        <h1 className="mt-1 text-3xl font-extrabold text-slate-900">{pendingOrder.orderNumber}</h1>
+        <h1 className="mt-1 text-2xl font-extrabold text-slate-900">{pendingOrder.orderNumber}</h1>
         {user && (
           <p className="mt-2 flex items-center gap-2 text-sm text-slate-500">
             <User className="h-4 w-4 text-brand" />
@@ -146,60 +250,41 @@ export default function CartPage() {
           {paid ? <CheckCircle2 className="h-4 w-4" /> : <Clock className="h-4 w-4" />}
           {STATUS_LABELS[pendingOrder.status] || pendingOrder.status}
         </p>
-
         {!paid && (
           <div
-            className={`mt-4 flex items-center gap-2 rounded-2xl px-3 py-2 text-sm ${
-              expired ? "bg-red-50 text-red-700" : "bg-brand-soft text-brand"
+            className={`mt-4 flex items-center gap-2 rounded-2xl border px-3 py-2 text-sm ${
+              expired
+                ? "border-red-200 bg-red-50 text-red-700"
+                : "border-amber-200 bg-amber-50 text-amber-900"
             }`}
           >
             {expired ? <AlertCircle className="h-4 w-4" /> : <Clock className="h-4 w-4" />}
-            {expired ? "Zaxira muddati tugadi. Qoldiqni yangilang." : `Zaxira: ${timerLabel}`}
+            {expired ? "Zaxira muddati tugadi." : `Dorilar ${timerLabel} gacha zaxirada saqlanadi`}
           </div>
         )}
-
         {awaitingReview && (
-          <p className="mt-3 flex items-start gap-2 text-sm text-slate-500">
-            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-            Farmatsevt tasdiqlamaguncha to'lov ochilmaydi.
-          </p>
+          <p className="mt-3 text-sm text-slate-500">Farmatsevt tasdiqlamaguncha to'lov ochilmaydi.</p>
         )}
-
-        {error && (
-          <p className="mt-3 flex items-center gap-2 text-sm text-red-600">
-            <AlertCircle className="h-4 w-4" />
-            {error}
-          </p>
-        )}
-
-        <div className="mt-6 flex flex-wrap gap-3">
+        {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+        <div className="mt-5 grid gap-2">
           {!paid && (
             <button
               type="button"
               disabled={!canPay || paying}
               onClick={handleMockPay}
-              className="inline-flex h-11 items-center gap-2 rounded-xl bg-brand px-4 font-bold text-white hover:bg-brand-hover disabled:opacity-50"
+              className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-brand font-bold text-white hover:bg-brand-dark disabled:opacity-50"
             >
               <CreditCard className="h-4 w-4" />
               {paying ? "To'lov..." : "Test to'lovi"}
             </button>
           )}
-          {paid && (
-            <p className="inline-flex h-11 items-center gap-2 font-semibold text-brand">
-              <CheckCircle2 className="h-5 w-5" />
-              To'lov qabul qilindi
-            </p>
-          )}
           <button
             type="button"
             onClick={clearReservation}
-            className="h-11 rounded-xl bg-slate-100 px-4 font-bold text-slate-800"
+            className="h-11 rounded-xl bg-slate-100 font-bold text-slate-800"
           >
             Yangi buyurtma
           </button>
-          <Link to="/" className="inline-flex h-11 items-center rounded-xl px-4 font-bold text-brand">
-            Katalogga qaytish
-          </Link>
         </div>
       </section>
     );
@@ -207,12 +292,12 @@ export default function CartPage() {
 
   if (items.length === 0) {
     return (
-      <section className="mx-auto max-w-xl rounded-2xl border border-slate-100 bg-white p-8 text-center shadow-sm">
-        <h1 className="text-3xl font-extrabold text-slate-900">Savatcha bo'sh</h1>
-        <p className="mt-2 text-slate-500">Kerakli dorilarni katalogdan qo'shing.</p>
+      <section className="rounded-2xl border border-slate-100 bg-white p-8 text-center shadow-sm">
+        <h1 className="text-2xl font-extrabold text-slate-900">Savatcha bo'sh</h1>
+        <p className="mt-2 text-sm text-slate-500">Kerakli dorilarni katalogdan qo'shing.</p>
         <Link
           to="/"
-          className="mt-6 inline-flex h-11 items-center rounded-xl bg-brand px-5 font-bold text-white hover:bg-brand-hover"
+          className="mt-6 inline-flex h-12 items-center rounded-xl bg-brand px-5 font-bold text-white hover:bg-brand-dark md:h-11"
         >
           Dorilarni ko'rish
         </Link>
@@ -220,183 +305,202 @@ export default function CartPage() {
     );
   }
 
+  const payButton = (
+    <button
+      type="submit"
+      disabled={!canCheckout || submitting || expired}
+      className="h-12 w-full rounded-xl bg-[#087B51] text-sm font-bold text-white shadow-lg hover:bg-[#1A6840] disabled:opacity-50"
+    >
+      {submitting ? "Yuborilmoqda..." : `${formatSom(totalAmount)} to'lash`}
+    </button>
+  );
+
   return (
-    <div className="grid items-start gap-6 lg:grid-cols-[1.3fr_0.7fr]">
-      <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
-        <h1 className="text-3xl font-extrabold text-slate-900">Savatcha</h1>
-
-        {hasPrescriptionItems && (
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-red-200 bg-red-50 p-4">
-            <div>
-              <strong className="flex items-center gap-2 text-red-700">
-                <AlertCircle className="h-4 w-4" />
-                Retsept suratini yuklang
-              </strong>
-              <p className="mt-1 text-sm text-red-600">
-                {prescription?.fileName
-                  ? `Yuklangan: ${prescription.fileName}`
-                  : "Retseptli dori bor. Fayl yuklanmaguncha buyurtma yuborilmaydi."}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setRxOpen(true)}
-              className="h-11 rounded-xl bg-white px-4 text-sm font-bold text-red-700"
-            >
-              {prescription ? "Almashtirish" : "Retsept yuklash"}
-            </button>
-          </div>
-        )}
-
-        <div className="mt-4 divide-y divide-slate-100">
-          {items.map((item) => (
-            <article
-              key={`${item.medicine.id}-${item.selectedUnit}`}
-              className="flex flex-wrap items-center gap-3 py-4"
-            >
-              <div className="grid h-12 w-12 place-items-center rounded-xl bg-brand-soft text-brand">
-                <Pill className="h-5 w-5" />
-              </div>
-              <div className="min-w-40 flex-1">
-                <h3 className="font-bold text-slate-900">
-                  {item.medicine.name}
-                  {item.medicine.isPrescription && (
-                    <span className="ml-2 rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-600">
-                      Retseptli
-                    </span>
-                  )}
-                </h3>
-                <p className="text-sm text-slate-500">
-                  {item.selectedUnit === "pachka" ? "pachka" : "dona"} ·{" "}
-                  {formatSom(item.medicine.price)}
-                </p>
-              </div>
-              <div className="inline-flex items-center gap-2 rounded-full bg-brand-soft p-1">
-                <button
-                  type="button"
-                  onClick={() =>
-                    updateQuantity(item.medicine.id, item.selectedUnit, item.quantity - 1)
-                  }
-                  className="grid h-8 w-8 place-items-center rounded-full bg-white"
-                >
-                  <Minus className="h-4 w-4" />
-                </button>
-                <span className="min-w-6 text-center text-sm font-bold">{item.quantity}</span>
-                <button
-                  type="button"
-                  onClick={() =>
-                    updateQuantity(item.medicine.id, item.selectedUnit, item.quantity + 1)
-                  }
-                  className="grid h-8 w-8 place-items-center rounded-full bg-white"
-                >
-                  <Plus className="h-4 w-4" />
-                </button>
-              </div>
-              <strong className="tabular-nums text-slate-900">{formatSom(lineTotal(item))}</strong>
-              <button
-                type="button"
-                onClick={() => removeFromCart(item.medicine.id, item.selectedUnit)}
-                className="text-red-600"
-                aria-label="O'chirish"
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
-            </article>
-          ))}
-        </div>
-      </section>
-
-      <form
-        className="sticky top-24 grid gap-4 rounded-2xl border border-slate-100 bg-white p-5 shadow-sm"
-        onSubmit={handleOrder}
-      >
-        <div>
-          <h2 className="text-xl font-extrabold text-slate-900">Buyurtmani rasmiylashtirish</h2>
-          <p className="mt-1 text-sm text-slate-500">
-            Login yoki ro'yxatdan o'tish shart emas. Telefon raqamingiz buyurtma bilan
-            avtomatik birikadi.
-          </p>
-          {branch && (
-            <p className="mt-2 flex items-center gap-2 text-sm text-brand">
-              <MapPin className="h-4 w-4" />
-              {branch.name}
-            </p>
-          )}
-        </div>
-
-        <label className="grid gap-1 text-sm font-semibold text-slate-700">
-          Telefon raqami
-          <span className="relative">
-            <Phone className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              required
-              type="tel"
-              value={form.phone}
-              onChange={(event) => setForm({ ...form, phone: event.target.value })}
-              placeholder="+998901234567"
-              className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-3 font-normal outline-none ring-brand/30 focus:ring-2"
-            />
-          </span>
-        </label>
-
-        <label className="grid gap-1 text-sm font-semibold text-slate-700">
-          Ism-familiya
-          <span className="relative">
-            <User className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              required
-              value={form.fullName}
-              onChange={(event) => setForm({ ...form, fullName: event.target.value })}
-              placeholder="Ali Valiyev"
-              className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-3 font-normal outline-none ring-brand/30 focus:ring-2"
-            />
-          </span>
-        </label>
-
-        <label className="grid gap-1 text-sm font-semibold text-slate-700">
-          Yetkazib berish manzili
-          <span className="relative">
-            <MapPin className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-slate-400" />
-            <textarea
-              required
-              rows={3}
-              value={form.deliveryAddress}
-              onChange={(event) => setForm({ ...form, deliveryAddress: event.target.value })}
-              placeholder="Toshkent, Chilonzor, 12-kvartal, 5-uy"
-              className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-3 font-normal outline-none ring-brand/30 focus:ring-2"
-            />
-          </span>
-        </label>
-
-        {hasPrescriptionItems && !prescription?.fileUrl && (
-          <p className="flex items-start gap-2 rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-            Retsept yuklanmaguncha buyurtma yuborilmaydi.
-          </p>
-        )}
-
-        <div className="flex items-center justify-between pt-1">
-          <span className="text-slate-500">Jami</span>
-          <strong className="text-lg tabular-nums text-slate-900">{formatSom(totalAmount)}</strong>
-        </div>
-
-        {error && (
-          <p className="flex items-center gap-2 text-sm text-red-600">
-            <AlertCircle className="h-4 w-4" />
-            {error}
-          </p>
-        )}
-
+    <form className="pb-28 lg:pb-0" onSubmit={handleOrder}>
+      <div className="mb-4 flex items-center gap-2">
         <button
-          type="submit"
-          disabled={!canCheckout || submitting}
-          className="h-12 rounded-xl bg-brand font-bold text-white hover:bg-brand-hover disabled:opacity-50"
+          type="button"
+          onClick={() => navigate(-1)}
+          className="grid h-10 w-10 place-items-center rounded-xl bg-white text-slate-700 shadow-sm lg:h-12 lg:w-12"
+          aria-label="Orqaga"
         >
-          {submitting ? "Yuborilmoqda..." : "Buyurtma berish"}
+          <ArrowLeft className="h-5 w-5" />
         </button>
-      </form>
+        <h1 className="text-lg font-extrabold leading-tight text-slate-900 md:text-2xl">
+          Yetkazib berish manzili va rasmiylashtirish
+        </h1>
+      </div>
 
-      <PrescriptionModal open={rxOpen} onClose={() => setRxOpen(false)} />
-    </div>
+      <div className="lg:grid lg:grid-cols-12 lg:items-start lg:gap-8">
+        <div className="grid gap-3 lg:col-span-7">
+          <section className="rounded-2xl border border-slate-100 bg-white p-3 shadow-sm md:p-5">
+            {items.map((item) => (
+              <article
+                key={`${item.medicine.id}-${item.selectedUnit}`}
+                className="flex items-center gap-2.5 border-b border-slate-100 py-3 last:border-0 last:pb-0 first:pt-0"
+              >
+                <div className="grid h-12 w-12 place-items-center rounded-xl bg-slate-50 text-brand">
+                  <Pill className="h-5 w-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h3 className="truncate text-sm font-bold text-slate-900">{item.medicine.name}</h3>
+                  <p className="text-xs font-bold tabular-nums text-slate-900">
+                    {formatSom(lineTotal(item))}
+                  </p>
+                </div>
+                <div className="inline-flex items-center gap-1 rounded-full bg-brand-soft p-0.5">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      updateQuantity(item.medicine.id, item.selectedUnit, item.quantity - 1)
+                    }
+                    className="grid h-7 w-7 place-items-center rounded-full bg-white"
+                  >
+                    <Minus className="h-3.5 w-3.5" />
+                  </button>
+                  <span className="min-w-4 text-center text-xs font-bold">{item.quantity}</span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      updateQuantity(item.medicine.id, item.selectedUnit, item.quantity + 1)
+                    }
+                    className="grid h-7 w-7 place-items-center rounded-full bg-white"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => removeFromCart(item.medicine.id, item.selectedUnit)}
+                  className="text-red-500"
+                  aria-label="O'chirish"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </article>
+            ))}
+          </section>
+
+          <MapCheckoutSection
+            street={address.street}
+            apartment={address.apartment}
+            floor={address.floor}
+            intercom={address.intercom}
+            lat={address.lat}
+            lng={address.lng}
+            onChange={(next) => setSavedAddress(next)}
+          />
+
+          {hasPrescriptionItems && (
+            <label className="grid cursor-pointer place-items-center gap-2 rounded-2xl border-2 border-dashed border-red-200 bg-red-50 p-4 text-center">
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp,application/pdf"
+                hidden
+                onChange={(event) => readRxFile(event.target.files?.[0])}
+              />
+              <UploadCloud className="h-7 w-7 text-red-500" />
+              <strong className="text-sm text-red-700">Retsept suratini yuklang</strong>
+              <span className="text-xs text-red-600">
+                {prescription?.fileName ? `Yuklangan: ${prescription.fileName}` : "JPG, PNG yoki PDF"}
+              </span>
+            </label>
+          )}
+
+          <section className="grid gap-2 rounded-2xl border border-slate-100 bg-white p-3 shadow-sm md:p-5">
+            <label className="grid gap-1 text-xs font-semibold text-slate-600">
+              Telefon
+              <span className="relative">
+                <Phone className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <input
+                  required
+                  type="tel"
+                  value={phone}
+                  onChange={(event) => setPhone(event.target.value)}
+                  placeholder="+998901234567"
+                  className="h-12 w-full rounded-xl border border-slate-200 pl-10 pr-3 text-sm font-normal outline-none ring-brand/30 focus:ring-2"
+                />
+              </span>
+            </label>
+            <label className="grid gap-1 text-xs font-semibold text-slate-600">
+              Ism-familiya
+              <span className="relative">
+                <User className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <input
+                  required
+                  value={fullName}
+                  onChange={(event) => setFullName(event.target.value)}
+                  placeholder="Ali Valiyev"
+                  className="h-12 w-full rounded-xl border border-slate-200 pl-10 pr-3 text-sm font-normal outline-none ring-brand/30 focus:ring-2"
+                />
+              </span>
+            </label>
+          </section>
+        </div>
+
+        <aside className="mt-3 grid gap-3 lg:col-span-5 lg:mt-0 lg:sticky lg:top-24">
+          <div className="flex items-start gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-900">
+            <Clock className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>
+              {expired
+                ? "Zaxira muddati tugadi. Savatni yangilang."
+                : `Dorilar ${timerLabel} gacha zaxirada saqlanadi`}
+            </span>
+          </div>
+
+          <section className="rounded-2xl border border-slate-100 bg-white p-3 shadow-sm md:p-5">
+            <p className="mb-2 text-sm font-bold text-slate-900">To'lov turi</p>
+            <div className="grid gap-2">
+              {PAYMENT_OPTIONS.map((option) => (
+                <label
+                  key={option.id}
+                  className={`flex h-12 items-center gap-3 rounded-xl border px-3 ${
+                    paymentMethod === option.id ? "border-brand bg-brand-soft" : "border-slate-100"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="payment"
+                    checked={paymentMethod === option.id}
+                    onChange={() => setPaymentMethod(option.id)}
+                    className="accent-brand"
+                  />
+                  {option.id === "cash" ? (
+                    <Wallet className="h-4 w-4 text-brand" />
+                  ) : (
+                    <CreditCard className="h-4 w-4 text-brand" />
+                  )}
+                  <span className="text-sm font-semibold text-slate-800">{option.label}</span>
+                </label>
+              ))}
+            </div>
+          </section>
+
+          <section className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-slate-500">Mahsulotlar</span>
+              <strong className="tabular-nums text-slate-900">{formatSom(totalAmount)}</strong>
+            </div>
+            <div className="mt-2 flex items-center justify-between border-t border-slate-100 pt-2">
+              <span className="font-semibold text-slate-700">Jami</span>
+              <strong className="text-lg font-bold tabular-nums text-slate-900">
+                {formatSom(totalAmount)}
+              </strong>
+            </div>
+            {error && (
+              <p className="mt-3 flex items-center gap-2 text-sm text-red-600">
+                <AlertCircle className="h-4 w-4" />
+                {error}
+              </p>
+            )}
+            <div className="mt-4 hidden lg:block">{payButton}</div>
+          </section>
+        </aside>
+      </div>
+
+      <div className="fixed inset-x-0 bottom-[calc(4rem+var(--tg-safe-bottom,env(safe-area-inset-bottom)))] z-20 px-3 lg:hidden">
+        {payButton}
+      </div>
+    </form>
   );
 }

@@ -16,6 +16,12 @@ export const useAuthStore = create(
                 phone: user.phone,
                 role: user.role || "CUSTOMER",
                 createdAt: user.createdAt,
+                lastStreet: user.lastStreet || "",
+                lastApartment: user.lastApartment || "",
+                lastFloor: user.lastFloor || "",
+                lastIntercom: user.lastIntercom || "",
+                lastLat: user.lastLat ?? null,
+                lastLng: user.lastLng ?? null,
               }
             : null,
           isAuthenticated: Boolean(user?.id),

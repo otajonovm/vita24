@@ -62,14 +62,14 @@ export default function BranchAdminPage() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-xs font-bold uppercase tracking-wide text-brand">Farmatsevt paneli</p>
-          <h1 className="text-3xl font-extrabold">{branch ? branch.name : "Filial tanlanmagan"}</h1>
+          <h1 className="text-xl font-extrabold md:text-3xl">{branch ? branch.name : "Filial tanlanmagan"}</h1>
           <p className="text-sm text-slate-500">Navbatda {pending.length} ta buyurtma.</p>
         </div>
-        <div className="flex gap-2">
-          <button type="button" onClick={openModal} className="h-11 rounded-xl bg-brand-soft px-4 font-bold text-brand">
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+          <button type="button" onClick={openModal} className="h-12 rounded-xl bg-brand-soft px-4 font-bold text-brand sm:h-11">
             Filialni almashtirish
           </button>
-          <button type="button" onClick={load} className="h-11 rounded-xl bg-brand px-4 font-bold text-white">
+          <button type="button" onClick={load} className="h-12 rounded-xl bg-brand px-4 font-bold text-white sm:h-11">
             Yangilash
           </button>
         </div>
@@ -127,7 +127,7 @@ export default function BranchAdminPage() {
                       type="button"
                       disabled={busyId === order.id}
                       onClick={() => handleStatus(order.id, "WAITING_PAYMENT")}
-                      className="inline-flex h-10 items-center gap-1 rounded-xl bg-brand px-3 text-sm font-bold text-white"
+                      className="inline-flex h-12 items-center gap-1 rounded-xl bg-brand px-3 text-sm font-bold text-white md:h-10"
                     >
                       <CheckCircle2 className="h-4 w-4" />
                       Tasdiqlash
@@ -136,7 +136,7 @@ export default function BranchAdminPage() {
                       type="button"
                       disabled={busyId === order.id}
                       onClick={() => setRejectId(order.id)}
-                      className="inline-flex h-10 items-center gap-1 rounded-xl bg-red-50 px-3 text-sm font-bold text-red-600"
+                      className="inline-flex h-12 items-center gap-1 rounded-xl bg-red-50 px-3 text-sm font-bold text-red-600 md:h-10"
                     >
                       <XCircle className="h-4 w-4" />
                       Rad etish

@@ -9,6 +9,7 @@ export const MOCK_BRANCHES = [
     phone: "+998 71 200 24 01",
     isActive: true,
     district: "Chilonzor",
+    shortLabel: "Chilonzor-9",
     city: "Toshkent",
     workingHours: "24/7",
   },
@@ -21,6 +22,7 @@ export const MOCK_BRANCHES = [
     phone: "+998 71 200 24 02",
     isActive: true,
     district: "Yunusobod",
+    shortLabel: "Yunusobod-4",
     city: "Toshkent",
     workingHours: "08:00-23:00",
   },
@@ -33,6 +35,7 @@ export const MOCK_BRANCHES = [
     phone: "+998 71 200 24 03",
     isActive: true,
     district: "Mirzo Ulug'bek",
+    shortLabel: "Mirzo Ulug'bek",
     city: "Toshkent",
     workingHours: "24/7",
   },
@@ -45,6 +48,7 @@ export const MOCK_BRANCHES = [
     phone: "+998 71 200 24 04",
     isActive: true,
     district: "Sergeli",
+    shortLabel: "Sergeli-2",
     city: "Toshkent",
     workingHours: "08:00-22:00",
   },
@@ -52,12 +56,13 @@ export const MOCK_BRANCHES = [
 
 /** @type {import("../types/pharmacy.js").Category[]} */
 export const MOCK_CATEGORIES = [
-  { id: "cat-flu", name: "Shamollash va gripp", slug: "shamollash", iconName: "thermometer" },
-  { id: "cat-stomach", name: "Oshqozon", slug: "oshqozon", iconName: "utensils" },
-  { id: "cat-allergy", name: "Allergiya", slug: "allergiya", iconName: "flower" },
-  { id: "cat-pain", name: "Og'riq qoldiruvchi", slug: "ogriq", iconName: "pill" },
-  { id: "cat-vitamin", name: "Vitaminlar", slug: "vitaminlar", iconName: "leaf" },
-  { id: "cat-cardio", name: "Yurak-qon tomir", slug: "yurak", iconName: "heart" },
+  { id: "cat-flu", name: "Shamollash", slug: "shamollash", iconName: "thermometer" },
+  { id: "cat-cardio", name: "Yurak", slug: "yurak", iconName: "heart" },
+  { id: "cat-pain", name: "Og'riq qoldiruvchi", slug: "ogriq", iconName: "zap" },
+  { id: "cat-vitamin", name: "Vitaminlar", slug: "vitaminlar", iconName: "sparkles" },
+  { id: "cat-kids", name: "Bolalar", slug: "bolalar", iconName: "baby" },
+  { id: "cat-allergy", name: "Allergiya", slug: "allergiya", iconName: "leaf" },
+  { id: "cat-stomach", name: "Oshqozon", slug: "oshqozon", iconName: "zap" },
 ];
 
 /** @type {Array<import("../types/pharmacy.js").Medicine & { manufacturer?: string }>} */

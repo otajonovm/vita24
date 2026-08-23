@@ -44,12 +44,12 @@ export default function BranchModal() {
 
   return (
     <div
-      className="fixed inset-0 z-40 grid place-items-center bg-slate-900/45 p-5"
+      className="fixed inset-0 z-40 flex items-end justify-center bg-slate-900/45 p-0 md:items-center md:p-5"
       onClick={closeModal}
       role="presentation"
     >
       <div
-        className="w-full max-w-3xl rounded-2xl border border-slate-100 bg-white p-6 shadow-sm"
+        className="max-h-[92dvh] w-full max-w-3xl overflow-y-auto rounded-t-2xl border border-slate-100 bg-white p-4 shadow-sm md:rounded-2xl md:p-6"
         onClick={(event) => event.stopPropagation()}
         role="dialog"
         aria-labelledby="branch-modal-title"
@@ -57,7 +57,7 @@ export default function BranchModal() {
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
             <p className="text-xs font-bold uppercase tracking-wide text-brand">Filialni tanlang</p>
-            <h2 id="branch-modal-title" className="mt-1 text-2xl font-extrabold text-slate-900">
+            <h2 id="branch-modal-title" className="mt-1 text-xl font-extrabold text-slate-900 md:text-2xl">
               Qaysi dorixonadan olasiz?
             </h2>
           </div>
@@ -83,7 +83,7 @@ export default function BranchModal() {
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Filial yoki tuman bo'yicha qidirish"
-            className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-3 text-sm outline-none ring-brand/30 focus:ring-2"
+            className="h-12 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-3 text-sm outline-none ring-brand/30 focus:ring-2"
           />
         </div>
 

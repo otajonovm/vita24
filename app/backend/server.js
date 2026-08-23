@@ -33,6 +33,7 @@ app.get("/api/health", async (_req, res) => {
 app.use("/api/branches", branchRoutes);
 app.use("/api/medicines", medicineRoutes);
 app.use("/api/orders", orderRoutes);
+app.use("/api/customers", require("./src/routes/customers"));
 
 const clickController = require("./src/controllers/clickController");
 app.post("/api/payments/click/prepare", clickController.prepare);

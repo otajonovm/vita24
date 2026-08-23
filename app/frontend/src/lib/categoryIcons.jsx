@@ -1,28 +1,27 @@
-import {
-  Flower2,
-  HeartPulse,
-  Leaf,
-  Pill,
-  Thermometer,
-  Utensils,
-} from "lucide-react";
+import { Baby, HeartPulse, Leaf, Pill, Sparkles, Thermometer, Zap } from "lucide-react";
 
 export const CATEGORY_ICON_MAP = {
   thermometer: Thermometer,
-  utensils: Utensils,
-  flower: Flower2,
-  pill: Pill,
-  leaf: Leaf,
   heart: HeartPulse,
+  zap: Zap,
+  sparkles: Sparkles,
+  baby: Baby,
+  leaf: Leaf,
   shamollash: Thermometer,
-  oshqozon: Utensils,
-  allergiya: Flower2,
-  ogriq: Pill,
-  vitaminlar: Leaf,
   yurak: HeartPulse,
+  ogriq: Zap,
+  vitaminlar: Sparkles,
+  bolalar: Baby,
+  allergiya: Leaf,
 };
 
 export function CategoryIcon({ name, className = "h-5 w-5" }) {
   const Icon = CATEGORY_ICON_MAP[name] || Pill;
   return <Icon className={className} strokeWidth={1.8} />;
+}
+
+export function branchShortLabel(branch) {
+  if (!branch) return "Manzilni tanlang";
+  const place = branch.shortLabel || branch.district || branch.name;
+  return `${branch.city || "Toshkent"}, ${place}`;
 }

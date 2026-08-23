@@ -39,7 +39,7 @@ export default function SuperAdminPage() {
     <section className="grid gap-6">
       <div>
         <p className="text-xs font-bold uppercase tracking-wide text-brand">Super admin</p>
-        <h1 className="text-3xl font-extrabold">Vita24 boshqaruv paneli</h1>
+        <h1 className="text-xl font-extrabold md:text-3xl">Vita24 boshqaruv paneli</h1>
         <p className="text-sm text-slate-500">Umumiy statistika, filiallar va dori katalogi.</p>
       </div>
 
