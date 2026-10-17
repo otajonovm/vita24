@@ -1,12 +1,12 @@
 require("dotenv").config();
 
-const path = require("path");
 const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
 const morgan = require("morgan");
 const prisma = require("./src/lib/prisma");
 const { assertRuntimeSecrets, encryptSecret } = require("./src/lib/secrets");
+const { dataPath } = require("./src/lib/dataDir");
 const branchRoutes = require("./src/routes/branches");
 const medicineRoutes = require("./src/routes/medicines");
 const orderRoutes = require("./src/routes/orders");
@@ -37,7 +37,7 @@ app.use(
 );
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true, limit: "1mb" }));
-app.use("/uploads", express.static(path.join(__dirname, "public/uploads")));
+app.use("/uploads", express.static(dataPath("public", "uploads")));
 
 app.get("/api/health", async (_req, res) => {
   try {

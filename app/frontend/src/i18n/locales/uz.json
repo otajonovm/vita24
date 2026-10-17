@@ -342,9 +342,11 @@
       "address": "Yetkazib berish manzilini tanlang",
       "rx": "Retsept suratini yuklang",
       "expired": "Zaxira muddati tugagan",
-      "auth": "Buyurtma uchun telefonni tasdiqlang"
+      "auth": "Buyurtma uchun telefonni tasdiqlang",
+      "branch": "Avval filial tanlang",
+      "payment": "Hozir to'lov usuli mavjud emas"
     },
-    "fileType": "Faqat JPG, PNG yoki PDF, 5 MB gacha",
+    "fileType": "Faqat JPG, PNG, WEBP yoki PDF, 5 MB gacha",
     "needAuth": "Avval telefon raqamingizni tasdiqlang",
     "failed": "Buyurtma yuborilmadi",
     "blocked": "Hisobingiz bloklangan. Buyurtma berib bo'lmaydi",

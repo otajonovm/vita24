@@ -240,15 +240,18 @@ export default function OrderDetailPage() {
       let added = 0;
       for (const item of order.items || []) {
         const medicine = catalog.find((entry) => entry.id === item.medicineId);
-        const available = Number(medicine?.available ?? 0);
+        const available = Number(medicine?.available ?? medicine?.stockCount ?? 0);
         const want = Number(item.quantity) || 0;
-        if (!medicine || available < 1) {
+        const qty = Math.min(want, Math.max(0, available));
+        if (!medicine || qty < 1) {
           missing.push(item.name || item.medicineId);
           continue;
         }
-        const qty = Math.min(want, available);
-        for (let index = 0; index < qty; index += 1) {
-          addToCart(medicine, branch.id, medicine.dosageUnit || "tabletka");
+        const unit = medicine.dosageUnit || "tabletka";
+        const ok = addToCart(medicine, branch.id, unit, qty);
+        if (!ok) {
+          missing.push(item.name || item.medicineId);
+          continue;
         }
         added += qty;
         if (qty < want) missing.push(item.name || item.medicineId);

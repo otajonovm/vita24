@@ -18,13 +18,18 @@ export function ConfirmProvider({ children }) {
 
   function confirm(options) {
     return new Promise((resolve) => {
-      setState({ ...options, resolve });
+      setState((current) => {
+        if (current?.resolve) current.resolve(false);
+        return { ...options, resolve };
+      });
     });
   }
 
   function close(accepted) {
-    state?.resolve(accepted);
-    setState(null);
+    setState((current) => {
+      current?.resolve(accepted);
+      return null;
+    });
   }
 
   return (

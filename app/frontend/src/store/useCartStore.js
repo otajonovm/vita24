@@ -126,6 +126,9 @@ export const useCartStore = create(
         set({
           items: [],
           prescription: null,
+          pendingOrder: null,
+          reservationUntil: null,
+          checkoutHoldUntil: null,
         }),
 
       clearSession: () =>

@@ -211,10 +211,11 @@ export default function Header() {
           signal: controller.signal,
         });
         if (!searchGate.current.isLatest(requestId)) return;
-        setResults((data || []).slice(0, 6));
-        setSuggestion(data.suggestion || "");
-        setPopular(data.popular || []);
-        setSearchCategories(data.categories || []);
+        const rows = data || [];
+        setResults(rows.slice(0, 6));
+        setSuggestion(rows.suggestion || "");
+        setPopular(rows.popular || []);
+        setSearchCategories(rows.categories || []);
         setOpenResults(true);
       } catch (error) {
         if (isCanceled(error) || !searchGate.current.isLatest(requestId)) return;

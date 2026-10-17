@@ -161,7 +161,11 @@ export default function SuperAdminPage() {
     return (
       <PasswordChangeForm
         audience="admin"
-        onChanged={() => useAdminAuth.getState().setSession({ ...user, mustChangePassword: false })}
+        onChanged={(session) =>
+          useAdminAuth.getState().setSession(session?.user || { ...user, mustChangePassword: false }, session?.token, {
+            refreshToken: session?.refreshToken,
+          })
+        }
       />
     );
   }

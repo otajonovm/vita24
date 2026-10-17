@@ -385,7 +385,23 @@ async function main() {
   await prisma.shopSetting.upsert({
     where: { id: "default" },
     update: {},
-    create: { id: "default", ...DEFAULTS },
+    create: {
+      id: "default",
+      deliveryFee: DEFAULTS.deliveryFee,
+      freeDeliveryFrom: DEFAULTS.freeDeliveryFrom,
+      reviewWindowMinutes: DEFAULTS.reviewWindowMinutes,
+      paymentWindowMinutes: DEFAULTS.paymentWindowMinutes,
+      paymeEnabled: DEFAULTS.paymeEnabled,
+      clickEnabled: DEFAULTS.clickEnabled,
+      cashEnabled: DEFAULTS.cashEnabled,
+      pickupEnabled: DEFAULTS.pickupEnabled,
+      contactPhone: DEFAULTS.contactPhone,
+      contactPhoneAlt: DEFAULTS.contactPhoneAlt,
+      footerAbout: DEFAULTS.footerAbout,
+      footerLicensed: DEFAULTS.footerLicensed,
+      footerShort: DEFAULTS.footerShort,
+      messageTemplates: DEFAULTS.messageTemplates,
+    },
   });
 
   const rxCount = medicines.filter((item) => item.isPrescription).length;

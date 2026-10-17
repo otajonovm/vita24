@@ -71,8 +71,6 @@ export default function CartPage() {
   const [rxPreview, setRxPreview] = useState("");
   const pendingOrder = useCartStore((state) => state.pendingOrder);
   const reservationUntil = useCartStore((state) => state.reservationUntil);
-  const checkoutHoldUntil = useCartStore((state) => state.checkoutHoldUntil);
-  const ensureCheckoutHold = useCartStore((state) => state.ensureCheckoutHold);
   const paymentMethod = useCartStore((state) => state.paymentMethod);
   const setPaymentMethod = useCartStore((state) => state.setPaymentMethod);
   const deliveryType = useCartStore((state) => state.deliveryType || "DELIVERY");
@@ -88,15 +86,17 @@ export default function CartPage() {
     freeFrom: shop.freeDeliveryFrom,
   });
   const paymentOptions = PAYMENT_OPTIONS.filter((option) => shop[option.flag] !== false);
+  const paymentOptionsKey = paymentOptions.map((option) => option.id).join(",");
   useEffect(() => {
     loadPublicSettings().then(setShop).catch(() => {});
   }, []);
   useEffect(() => {
     if (deliveryType === "PICKUP" && shop.pickupEnabled === false) setDeliveryType("DELIVERY");
-    if (paymentOptions.length && !paymentOptions.some((option) => option.id === paymentMethod)) {
-      setPaymentMethod(paymentOptions[0].id);
+    const options = PAYMENT_OPTIONS.filter((option) => shop[option.flag] !== false);
+    if (options.length && !options.some((option) => option.id === paymentMethod)) {
+      setPaymentMethod(options[0].id);
     }
-  }, [shop, deliveryType, paymentMethod, paymentOptions, setDeliveryType, setPaymentMethod]);
+  }, [shop, deliveryType, paymentMethod, paymentOptionsKey, setDeliveryType, setPaymentMethod]);
   const address = useCartStore((state) => state.savedAddress) || {
     street: "",
     apartment: "",
@@ -257,11 +257,13 @@ export default function CartPage() {
   const normalizedPhone = normalizePhoneInput(phone);
   const phoneValid = isValidUzbekPhone(normalizedPhone);
   const nameValid = Boolean(displayName(fullName));
-  const addressValid = deliveryType === "PICKUP" || Boolean(address.street.trim());
+  const streetText = String(address.street || "").trim();
+  const addressValid = deliveryType === "PICKUP" || Boolean(streetText);
   const prescriptionValid = !hasPrescriptionItems || Boolean(prescription?.file || prescription?.fileKey);
+  const paymentsAvailable = paymentOptions.length > 0;
 
   const composedAddress = [
-    address.street.trim(),
+    streetText,
     address.apartment && `kv. ${address.apartment}`,
     address.floor && `${address.floor}-qavat`,
     address.entrance && `podyezd ${address.entrance}`,
@@ -278,10 +280,13 @@ export default function CartPage() {
     nameValid &&
     addressValid &&
     prescriptionValid &&
+    paymentsAvailable &&
     !expired;
   const canCheckout = readyForAuth && Boolean(token);
 
   const checkoutHints = [
+    !branch && t("cart.hint.branch"),
+    !paymentsAvailable && t("cart.hint.payment"),
     !phoneValid && t("cart.hint.phone"),
     !nameValid && t("cart.hint.name"),
     !addressValid && t("cart.hint.address"),
@@ -291,8 +296,12 @@ export default function CartPage() {
 
   const readRxFile = (file) => {
     if (!file) return;
-    const allowed = ["image/jpeg", "image/png", "application/pdf"];
-    if (!allowed.includes(file.type) || file.size > 5 * 1024 * 1024) {
+    const allowed = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
+    const mime = String(file.type || "").toLowerCase();
+    const ext = String(file.name || "").toLowerCase().match(/\.([a-z0-9]+)$/)?.[1] || "";
+    const byExt = { jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", webp: "image/webp", pdf: "application/pdf" };
+    const resolved = allowed.includes(mime) ? mime : byExt[ext] || "";
+    if (!allowed.includes(resolved) || file.size > 5 * 1024 * 1024) {
       setError(t("cart.fileType"));
       return;
     }
@@ -305,7 +314,7 @@ export default function CartPage() {
   };
 
   const fieldProblems = {
-    address: deliveryType !== "PICKUP" && !address.street.trim() ? t("cart.hint.address") : "",
+    address: deliveryType !== "PICKUP" && !streetText ? t("cart.hint.address") : "",
     rx: hasPrescriptionItems && !prescriptionValid ? t("cart.hint.rx") : "",
     phone: !phoneValid ? t("cart.hint.phone") : "",
     name: !nameValid ? t("cart.hint.name") : "",
@@ -338,6 +347,15 @@ export default function CartPage() {
     }
     if (user?.status === "SUSPENDED") {
       setError(user.blockReason ? t("cart.blockedReason", { reason: user.blockReason }) : t("cart.blocked"));
+      return;
+    }
+    if (!branch) {
+      setError(t("cart.hint.branch"));
+      openModal();
+      return;
+    }
+    if (!paymentsAvailable) {
+      setError(t("cart.hint.payment"));
       return;
     }
     if (first || stockBlocked || !canCheckout) {
@@ -405,9 +423,13 @@ export default function CartPage() {
 
       if (result.user) setSession(result.user);
       const orderId = result.order?.id;
+      if (!orderId) {
+        setError(t("cart.failed"));
+        return;
+      }
       setLeaving(true);
-      navigate(`/orders/${orderId}`);
       clearCart();
+      navigate(`/orders/${orderId}`);
     } catch (err) {
       setError(userError(err, t, "cart.failed"));
     } finally {

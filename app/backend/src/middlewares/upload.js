@@ -2,8 +2,9 @@ const path = require("path");
 const fs = require("fs");
 const multer = require("multer");
 const { AppError } = require("../lib/response");
+const { dataPath } = require("../lib/dataDir");
 
-const MEDICINE_UPLOAD_DIR = path.join(__dirname, "../../public/uploads/medicines");
+const MEDICINE_UPLOAD_DIR = dataPath("public", "uploads", "medicines");
 const MEDICINE_UPLOAD_URL = "/uploads/medicines";
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 

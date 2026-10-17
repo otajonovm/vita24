@@ -411,7 +411,19 @@ const changePassword = asyncHandler(async (req, res) => {
   }
   const user = await prisma.user.findUnique({
     where: { id: req.user.id },
-    select: { id: true, passwordHash: true, role: true },
+    select: {
+      id: true,
+      name: true,
+      phone: true,
+      role: true,
+      branchId: true,
+      passwordHash: true,
+      createdAt: true,
+      totpEnabled: true,
+      status: true,
+      mustChangePassword: true,
+      tokenVersion: true,
+    },
   });
   const matches = await bcrypt.compare(String(req.body.currentPassword || ""), user?.passwordHash || "");
   if (!matches) {
@@ -420,15 +432,33 @@ const changePassword = asyncHandler(async (req, res) => {
   if (req.body.currentPassword === nextPassword) {
     throw new AppError("Yangi parol joriy paroldan farq qilishi kerak", 400, "VALIDATION_ERROR");
   }
-  await prisma.user.update({
+  const updated = await prisma.user.update({
     where: { id: user.id },
     data: {
       passwordHash: await bcrypt.hash(nextPassword, BCRYPT_ROUNDS),
       mustChangePassword: false,
       tokenVersion: { increment: 1 },
     },
+    select: {
+      id: true,
+      name: true,
+      phone: true,
+      role: true,
+      branchId: true,
+      createdAt: true,
+      totpEnabled: true,
+      status: true,
+      mustChangePassword: true,
+      tokenVersion: true,
+    },
   });
   await revokeAllAdminSessions(user.id);
+  const issued = usesAdminSession(updated.role)
+    ? await createAdminSession(updated, req)
+    : {
+        token: signAccessToken(updated),
+        expiresIn: accessExpiresIn(updated.role),
+      };
   await writeAudit(prisma, {
     req,
     action: "PASSWORD_CHANGED",
@@ -438,7 +468,18 @@ const changePassword = asyncHandler(async (req, res) => {
     before: { passwordChanged: false },
     after: { passwordChanged: true },
   });
-  return sendSuccess(res, { mustChangePassword: false }, "Parol yangilandi");
+  return sendSuccess(
+    res,
+    {
+      mustChangePassword: false,
+      token: issued.token,
+      ...(issued.refreshToken ? { refreshToken: issued.refreshToken } : {}),
+      tokenType: "Bearer",
+      expiresIn: issued.expiresIn,
+      user: serializeAuthUser(updated),
+    },
+    "Parol yangilandi"
+  );
 });
 
 module.exports = {

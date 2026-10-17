@@ -1,8 +1,9 @@
 const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
+const { dataPath } = require("./dataDir");
 
-const PRESCRIPTION_DIR = path.join(__dirname, "../../private/prescriptions");
+const PRESCRIPTION_DIR = dataPath("private", "prescriptions");
 const MAX_BYTES = 5 * 1024 * 1024;
 const ALLOWED = {
   "image/jpeg": ".jpg",

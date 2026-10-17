@@ -206,6 +206,7 @@ async function saveShopSettings(body) {
 }
 
 module.exports = {
+  DEFAULTS,
   DEFAULT_TEMPLATES,
   TEMPLATE_KEYS,
   renderTemplate,

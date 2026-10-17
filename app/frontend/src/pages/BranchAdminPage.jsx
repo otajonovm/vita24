@@ -110,7 +110,8 @@ export default function BranchAdminPage() {
     async function stream() {
       controller = new AbortController();
       try {
-        const response = await fetch(`/api/branch-admin/events?branchId=${encodeURIComponent(branchId)}`, {
+        const apiBase = String(import.meta.env.VITE_API_URL || "/api").replace(/\/$/, "");
+        const response = await fetch(`${apiBase}/branch-admin/events?branchId=${encodeURIComponent(branchId)}`, {
           headers: { Authorization: `Bearer ${token}`, Accept: "text/event-stream" },
           signal: controller.signal,
         });
@@ -225,7 +226,11 @@ export default function BranchAdminPage() {
     return (
       <PasswordChangeForm
         audience="pharmacist"
-        onChanged={() => usePharmacistAuth.getState().setSession({ ...user, mustChangePassword: false })}
+        onChanged={(session) =>
+          usePharmacistAuth.getState().setSession(session?.user || { ...user, mustChangePassword: false }, session?.token, {
+            refreshToken: session?.refreshToken,
+          })
+        }
       />
     );
   }

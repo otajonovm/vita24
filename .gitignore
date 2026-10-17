@@ -18,3 +18,8 @@ app/backend/private
 app/backend/public/uploads
 app/frontend/package-lock.json
 app/package-lock.json
+.vercel
+.env*
+!.env.example
+!**/.env.example
+app/backend/.seed-credentials.local

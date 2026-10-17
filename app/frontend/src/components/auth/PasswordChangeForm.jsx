@@ -24,8 +24,8 @@ export default function PasswordChangeForm({ audience, onChanged }) {
     setError("");
     setField("");
     try {
-      await changeOwnPassword({ currentPassword, newPassword }, audience);
-      onChanged();
+      const result = await changeOwnPassword({ currentPassword, newPassword }, audience);
+      onChanged(result);
     } catch (err) {
       setError(err.response?.data?.error?.message || t("admin.loginFailed"));
     } finally {

@@ -194,6 +194,9 @@ export function CatalogManager() {
     } catch (err) {
       push(errorText(err, t("admin.errorTitle")), "error");
       setProgress(0);
+      setPreviewUrl(draft.imageUrl ? resolveMediaUrl(draft.imageUrl) : "");
+    } finally {
+      URL.revokeObjectURL(local);
     }
   }
 
@@ -443,7 +446,7 @@ export function CatalogManager() {
             </ul>
             <div className="mt-4 flex justify-end gap-2">
               <button type="button" onClick={() => setImportRows(null)} className="h-10 rounded-xl px-3 text-sm font-bold text-slate-600">{t("admin.cancel")}</button>
-              <button type="button" disabled={importing || !importRows.createCount && !importRows.updateCount} onClick={confirmImport} className="h-10 rounded-xl bg-brand px-3 text-sm font-bold text-white disabled:opacity-50">
+              <button type="button" disabled={importing || (!importRows.createCount && !importRows.updateCount)} onClick={confirmImport} className="h-10 rounded-xl bg-brand px-3 text-sm font-bold text-white disabled:opacity-50">
                 {importing ? t("admin.saving") : t("admin.importConfirm")}
               </button>
             </div>
