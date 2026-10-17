@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router-dom";
 import {
   AlertCircle,
@@ -16,27 +17,49 @@ import {
   Wallet,
 } from "lucide-react";
 import MapCheckoutSection from "../components/checkout/MapCheckoutSection";
-import { formatReservation, formatSom, STATUS_LABELS } from "../lib/format";
-import { lineTotal } from "../lib/mockData";
-import { createOrder, fetchSavedAddress, mockPay, saveCustomerAddress } from "../services/api";
+import AuthLoginModal from "../components/modals/AuthLoginModal";
+import { checkPromo, createOrder, fetchCartAvailability, fetchSavedAddress, mockPay, saveCustomerAddress, uploadPrescription } from "../services/api";
+import { getCustomerOrderView } from "../lib/customerOrderView";
+import { formatDateTime, formatGrouped, formatReservation, formatSom, isValidUzbekPhone, normalizePhoneInput } from "../lib/format";
+import { DELIVERY_CITY, DELIVERY_ETA, quoteTotals } from "../lib/pricing";
+import { loadPublicSettings, peekPublicSettings } from "../lib/publicSettings";
+import { userError } from "../lib/userError";
+import { lineTotal, unitMultiplier } from "../lib/mockData";
+import { displayName } from "../lib/personName";
 import { useAuthStore } from "../store/useAuthStore";
 import { useBranchStore } from "../store/useBranchStore";
 import { useCartStore } from "../store/useCartStore";
+import { useToastStore } from "../store/useToastStore";
+
+function lineStock(item) {
+  const pack = unitMultiplier(item.selectedUnit);
+  const available = Number(item.medicine.available ?? item.medicine.stockCount ?? 0);
+  const pieces = item.quantity * pack;
+  if (available <= 0) return { kind: "missing", available };
+  if (pieces > available) return { kind: "short", available };
+  if (pieces + pack > available) return { kind: "max", available };
+  return { kind: "", available };
+}
 
 const PAYMENT_OPTIONS = [
-  { id: "payme", label: "Payme" },
-  { id: "click", label: "Click" },
-  { id: "cash", label: "Naqd pul" },
+  { id: "payme", label: "Payme", flag: "paymeEnabled" },
+  { id: "click", label: "Click", flag: "clickEnabled" },
+  { id: "cash", labelKey: "cart.cash", flag: "cashEnabled" },
 ];
 
 export default function CartPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const branch = useBranchStore((state) => state.branch);
+  const openModal = useBranchStore((state) => state.openModal);
+  const pushToast = useToastStore((state) => state.push);
   const user = useAuthStore((state) => state.user);
+  const token = useAuthStore((state) => state.token);
   const setSession = useAuthStore((state) => state.setSession);
   const items = useCartStore((state) => state.items);
   const updateQuantity = useCartStore((state) => state.updateQuantity);
   const removeFromCart = useCartStore((state) => state.removeFromCart);
+  const restoreLine = useCartStore((state) => state.restoreLine);
   const clearCart = useCartStore((state) => state.clearCart);
   const prescription = useCartStore((state) => state.prescription);
   const setPrescription = useCartStore((state) => state.setPrescription);
@@ -44,17 +67,43 @@ export default function CartPage() {
     state.items.some((item) => item.medicine.isPrescription)
   );
   const totalAmount = items.reduce((sum, item) => sum + lineTotal(item), 0);
+  const [leaving, setLeaving] = useState(false);
+  const [rxPreview, setRxPreview] = useState("");
   const pendingOrder = useCartStore((state) => state.pendingOrder);
   const reservationUntil = useCartStore((state) => state.reservationUntil);
   const checkoutHoldUntil = useCartStore((state) => state.checkoutHoldUntil);
   const ensureCheckoutHold = useCartStore((state) => state.ensureCheckoutHold);
   const paymentMethod = useCartStore((state) => state.paymentMethod);
   const setPaymentMethod = useCartStore((state) => state.setPaymentMethod);
+  const deliveryType = useCartStore((state) => state.deliveryType || "DELIVERY");
+  const setDeliveryType = useCartStore((state) => state.setDeliveryType);
+  const promo = useCartStore((state) => state.promo);
+  const setPromo = useCartStore((state) => state.setPromo);
+  const applyBranchStock = useCartStore((state) => state.applyBranchStock);
+  const [shop, setShop] = useState(() => peekPublicSettings());
+  const totals = quoteTotals(totalAmount, {
+    deliveryType,
+    discount: promo?.discount || 0,
+    deliveryFee: shop.deliveryFee,
+    freeFrom: shop.freeDeliveryFrom,
+  });
+  const paymentOptions = PAYMENT_OPTIONS.filter((option) => shop[option.flag] !== false);
+  useEffect(() => {
+    loadPublicSettings().then(setShop).catch(() => {});
+  }, []);
+  useEffect(() => {
+    if (deliveryType === "PICKUP" && shop.pickupEnabled === false) setDeliveryType("DELIVERY");
+    if (paymentOptions.length && !paymentOptions.some((option) => option.id === paymentMethod)) {
+      setPaymentMethod(paymentOptions[0].id);
+    }
+  }, [shop, deliveryType, paymentMethod, paymentOptions, setDeliveryType, setPaymentMethod]);
   const address = useCartStore((state) => state.savedAddress) || {
     street: "",
     apartment: "",
     floor: "",
     intercom: "",
+    entrance: "",
+    landmark: "",
     lat: null,
     lng: null,
   };
@@ -68,6 +117,46 @@ export default function CartPage() {
   const [paying, setPaying] = useState(false);
   const [error, setError] = useState("");
   const [now, setNow] = useState(Date.now());
+  const [loginOpen, setLoginOpen] = useState(false);
+  const [attempted, setAttempted] = useState(false);
+  const [touched, setTouched] = useState({});
+  const [confirmClear, setConfirmClear] = useState(false);
+  const [promoInput, setPromoInput] = useState("");
+  const [promoError, setPromoError] = useState("");
+  const [promoBusy, setPromoBusy] = useState(false);
+  const addressRef = useRef(null);
+  const rxRef = useRef(null);
+  const phoneRef = useRef(null);
+  const nameRef = useRef(null);
+
+  useEffect(() => {
+    if (!promo?.code || !token) return undefined;
+    if (totalAmount <= 0) {
+      setPromo(null);
+      return undefined;
+    }
+    let active = true;
+    const timer = window.setTimeout(() => {
+      checkPromo(promo.code, totalAmount, branch?.id)
+        .then((result) => {
+          if (!active) return;
+          if (Number(result.discount) !== Number(promo.discount)) {
+            setPromo({ code: result.code, discount: result.discount });
+          }
+          setPromoError("");
+        })
+        .catch((err) => {
+          if (!active) return;
+          if (err.response?.data?.error?.code === "RATE_LIMIT") return;
+          setPromo(null);
+          setPromoError(userError(err, t, "cart.promoInvalid"));
+        });
+    }, 400);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [totalAmount, promo?.code, promo?.discount, branch?.id, token, setPromo, t]);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
@@ -75,13 +164,13 @@ export default function CartPage() {
   }, []);
 
   useEffect(() => {
-    if (items.length > 0) ensureCheckoutHold();
-  }, [items.length, ensureCheckoutHold]);
-
-  useEffect(() => {
-    if (!user) return;
+    if (!user) {
+      setPhone("");
+      setFullName("");
+      return;
+    }
     setPhone((current) => current || user.phone || "");
-    setFullName((current) => current || user.name || "");
+    setFullName((current) => displayName(current) || displayName(user.name));
     if (!address.street && user.lastStreet) {
       setSavedAddress({
         street: user.lastStreet,
@@ -95,29 +184,43 @@ export default function CartPage() {
   }, [user]);
 
   useEffect(() => {
-    const normalized = phone.replace(/\s/g, "");
-    if (!/^\+998\d{9}$/.test(normalized) || address.street) return undefined;
+    if (!prescription?.file || !String(prescription.file.type || "").startsWith("image/")) {
+      setRxPreview("");
+      return undefined;
+    }
+    const url = URL.createObjectURL(prescription.file);
+    setRxPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [prescription]);
+
+  useEffect(() => {
+    if (!token) return undefined;
+    const normalized = normalizePhoneInput(phone);
+    if (!isValidUzbekPhone(normalized) || address.street) return undefined;
     let active = true;
-    fetchSavedAddress(normalized).then((saved) => {
-      if (!active || !saved?.street) return;
-      setSavedAddress({
-        street: saved.street,
-        apartment: saved.apartment || "",
-        floor: saved.floor || "",
-        intercom: saved.intercom || "",
-        lat: saved.lat,
-        lng: saved.lng,
-      });
-      if (saved.fullName) setFullName((current) => current || saved.fullName);
-    });
+    fetchSavedAddress(normalized)
+      .then((saved) => {
+        if (!active || !saved?.street) return;
+        setSavedAddress({
+          street: saved.street,
+          apartment: saved.apartment || "",
+          floor: saved.floor || "",
+          intercom: saved.intercom || "",
+          lat: saved.lat,
+          lng: saved.lng,
+        });
+        if (displayName(saved.fullName)) setFullName((current) => displayName(current) || displayName(saved.fullName));
+      })
+      .catch(() => {});
     return () => {
       active = false;
     };
-  }, [phone]);
+  }, [phone, token]);
 
   useEffect(() => {
-    const normalized = phone.replace(/\s/g, "");
-    if (!address.street || !/^\+998\d{9}$/.test(normalized)) return undefined;
+    if (!token) return undefined;
+    const normalized = normalizePhoneInput(phone);
+    if (deliveryType === "PICKUP" || !address.street || !isValidUzbekPhone(normalized)) return undefined;
     const timer = setTimeout(() => {
       saveCustomerAddress({
         phone: normalized,
@@ -128,60 +231,162 @@ export default function CartPage() {
         intercom: address.intercom,
         lat: address.lat,
         lng: address.lng,
-      });
+      }).catch(() => {});
     }, 700);
     return () => clearTimeout(timer);
-  }, [address, phone, fullName]);
+  }, [address, phone, fullName, token, deliveryType]);
 
-  const holdUntil = reservationUntil || checkoutHoldUntil;
+  const cartIds = items.map((item) => item.medicine.id).join(",");
+  useEffect(() => {
+    if (!branch?.id || !cartIds) return undefined;
+    let active = true;
+    fetchCartAvailability(branch.id, cartIds.split(","))
+      .then((rows) => {
+        if (active) applyBranchStock(branch.id, rows || []);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [branch?.id, cartIds, applyBranchStock]);
+
+  const holdUntil = pendingOrder ? reservationUntil : null;
   const remaining = holdUntil ? holdUntil - now : 0;
   const expired = Boolean(holdUntil) && remaining <= 0;
   const timerLabel = formatReservation(remaining);
+  const normalizedPhone = normalizePhoneInput(phone);
+  const phoneValid = isValidUzbekPhone(normalizedPhone);
+  const nameValid = Boolean(displayName(fullName));
+  const addressValid = deliveryType === "PICKUP" || Boolean(address.street.trim());
+  const prescriptionValid = !hasPrescriptionItems || Boolean(prescription?.file || prescription?.fileKey);
 
   const composedAddress = [
     address.street.trim(),
     address.apartment && `kv. ${address.apartment}`,
     address.floor && `${address.floor}-qavat`,
+    address.entrance && `podyezd ${address.entrance}`,
     address.intercom && `domofon ${address.intercom}`,
+    address.landmark && `mo'ljal ${address.landmark}`,
   ]
     .filter(Boolean)
     .join(", ");
 
-  const canCheckout =
+  const readyForAuth =
     items.length > 0 &&
     branch &&
-    /^\+998\d{9}$/.test(phone.replace(/\s/g, "")) &&
-    fullName.trim() &&
-    address.street.trim() &&
-    (!hasPrescriptionItems || Boolean(prescription?.fileUrl));
+    phoneValid &&
+    nameValid &&
+    addressValid &&
+    prescriptionValid &&
+    !expired;
+  const canCheckout = readyForAuth && Boolean(token);
+
+  const checkoutHints = [
+    !phoneValid && t("cart.hint.phone"),
+    !nameValid && t("cart.hint.name"),
+    !addressValid && t("cart.hint.address"),
+    hasPrescriptionItems && !prescriptionValid && t("cart.hint.rx"),
+    expired && t("cart.hint.expired"),
+  ].filter(Boolean);
 
   const readRxFile = (file) => {
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      setPrescription({
-        fileName: file.name,
-        fileUrl: String(reader.result),
-        status: "PENDING",
-      });
-    };
-    reader.readAsDataURL(file);
+    const allowed = ["image/jpeg", "image/png", "application/pdf"];
+    if (!allowed.includes(file.type) || file.size > 5 * 1024 * 1024) {
+      setError(t("cart.fileType"));
+      return;
+    }
+    setError("");
+    setPrescription({
+      file,
+      fileName: file.name,
+      status: "PENDING",
+    });
   };
+
+  const fieldProblems = {
+    address: deliveryType !== "PICKUP" && !address.street.trim() ? t("cart.hint.address") : "",
+    rx: hasPrescriptionItems && !prescriptionValid ? t("cart.hint.rx") : "",
+    phone: !phoneValid ? t("cart.hint.phone") : "",
+    name: !nameValid ? t("cart.hint.name") : "",
+  };
+  const stockBlocked = items.some((item) => ["missing", "short"].includes(lineStock(item).kind));
+  const showProblem = (key) => Boolean((attempted || touched[key]) && fieldProblems[key]);
+  const rxNames = items.filter((item) => item.medicine.isPrescription).map((item) => item.medicine.name);
+  const holdKey = hasPrescriptionItems
+    ? "cart.holdReview"
+    : paymentMethod === "cash"
+      ? deliveryType === "PICKUP"
+        ? "cart.holdCashPickup"
+        : "cart.holdCash"
+      : "cart.hold";
+  const holdMinutes = hasPrescriptionItems ? shop.reviewWindowMinutes : shop.paymentWindowMinutes;
 
   const handleOrder = async (event) => {
     event.preventDefault();
-    if (!canCheckout) return;
+    setAttempted(true);
+    const first = ["address", "rx", "phone", "name"].find((key) => fieldProblems[key]);
+    if (first) {
+      const node = { address: addressRef, rx: rxRef, phone: phoneRef, name: nameRef }[first].current;
+      node?.scrollIntoView({ behavior: "smooth", block: "center" });
+      node?.focus();
+    }
+    if (!token) {
+      setLoginOpen(true);
+      setError(t("cart.needAuth"));
+      return;
+    }
+    if (user?.status === "SUSPENDED") {
+      setError(user.blockReason ? t("cart.blockedReason", { reason: user.blockReason }) : t("cart.blocked"));
+      return;
+    }
+    if (first || stockBlocked || !canCheckout) {
+      if (stockBlocked) setError(t("cart.stockBlock"));
+      return;
+    }
     setSubmitting(true);
     setError("");
 
     try {
+      if (promo?.code) {
+        try {
+          const quoted = await checkPromo(promo.code, totalAmount, branch?.id);
+          if (Number(quoted.discount) !== Number(promo.discount || 0)) {
+            setPromo({ code: quoted.code, discount: quoted.discount });
+            setSubmitting(false);
+            return;
+          }
+        } catch (err) {
+          if (err.response?.data?.error?.code !== "RATE_LIMIT") {
+            setPromo(null);
+            setPromoError(userError(err, t, "cart.promoInvalid"));
+            setSubmitting(false);
+            return;
+          }
+        }
+      }
+      let prescriptionFileKey;
+      let prescriptionFileName;
+      if (hasPrescriptionItems) {
+        if (prescription?.fileKey) {
+          prescriptionFileKey = prescription.fileKey;
+          prescriptionFileName = prescription.fileName;
+        } else if (prescription?.file) {
+          const uploaded = await uploadPrescription(prescription.file);
+          prescriptionFileKey = uploaded.fileKey;
+          prescriptionFileName = uploaded.fileName || prescription.fileName;
+        }
+      }
+
       const result = await createOrder({
-        phone: phone.replace(/\s/g, "").trim(),
+        phone: normalizedPhone,
         fullName: fullName.trim(),
-        deliveryAddress: composedAddress,
-        lat: address.lat,
-        lng: address.lng,
-        street: address.street,
+        deliveryType,
+        promoCode: promo?.code || null,
+        deliveryAddress: deliveryType === "PICKUP" ? branch.address : composedAddress,
+        lat: deliveryType === "PICKUP" ? null : address.lat,
+        lng: deliveryType === "PICKUP" ? null : address.lng,
+        street: deliveryType === "PICKUP" ? "" : address.street,
         apartment: address.apartment,
         floor: address.floor,
         intercom: address.intercom,
@@ -194,15 +399,17 @@ export default function CartPage() {
           name: item.medicine.name,
         })),
         paymentMethod,
-        prescriptionUrl: hasPrescriptionItems ? prescription?.fileUrl : undefined,
-        prescription: hasPrescriptionItems ? prescription : null,
+        prescriptionFileKey,
+        prescriptionFileName,
       });
 
       if (result.user) setSession(result.user);
-      startReservation(result.order);
+      const orderId = result.order?.id;
+      setLeaving(true);
+      navigate(`/orders/${orderId}`);
       clearCart();
     } catch (err) {
-      setError(err.response?.data?.error?.message || err.message || "Buyurtma yuborilmadi");
+      setError(userError(err, t, "cart.failed"));
     } finally {
       setSubmitting(false);
     }
@@ -216,7 +423,7 @@ export default function CartPage() {
       const paid = await mockPay(pendingOrder.id);
       startReservation(paid);
     } catch (err) {
-      setError(err.response?.data?.error?.message || err.message || "To'lov bajarilmadi");
+      setError(userError(err, t, "cart.payFailed"));
     } finally {
       setPaying(false);
     }
@@ -224,9 +431,8 @@ export default function CartPage() {
 
   if (pendingOrder) {
     const paid = pendingOrder.status === "PAID";
-    const canPay =
-      ["WAITING_PAYMENT", "PENDING_BRANCH"].includes(pendingOrder.status) && !expired;
-    const awaitingReview = ["PENDING_PRESCRIPTION", "PENDING_BRANCH"].includes(pendingOrder.status);
+    const pendingView = getCustomerOrderView(pendingOrder);
+    const canPay = pendingView.showPay && !expired;
 
     return (
       <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
@@ -236,21 +442,24 @@ export default function CartPage() {
           className="mb-3 inline-flex items-center gap-1 text-sm font-semibold text-slate-600"
         >
           <ArrowLeft className="h-4 w-4" />
-          Orqaga
+          {t("common.back")}
         </button>
-        <p className="text-xs font-bold uppercase tracking-wide text-brand">Buyurtma holati</p>
+        <p className="text-xs font-bold uppercase tracking-wide text-brand">{t("cart.status")}</p>
         <h1 className="mt-1 text-2xl font-extrabold text-slate-900">{pendingOrder.orderNumber}</h1>
         {user && (
           <p className="mt-2 flex items-center gap-2 text-sm text-slate-500">
             <User className="h-4 w-4 text-brand" />
-            {user.name} · {user.phone}
+            {(displayName(user.name) || t("profile.enterName"))} · {user.phone}
           </p>
         )}
         <p className="mt-3 inline-flex items-center gap-2 rounded-full bg-brand-soft px-3 py-1 text-sm font-semibold text-brand">
           {paid ? <CheckCircle2 className="h-4 w-4" /> : <Clock className="h-4 w-4" />}
-          {STATUS_LABELS[pendingOrder.status] || pendingOrder.status}
+          {t(pendingView.titleKey)}
         </p>
-        {!paid && (
+        {pendingView.reservationKey && (
+          <p className="mt-3 text-sm text-slate-600">{t(pendingView.reservationKey)}</p>
+        )}
+        {!paid && pendingView.showPayTimer && (
           <div
             className={`mt-4 flex items-center gap-2 rounded-2xl border px-3 py-2 text-sm ${
               expired
@@ -259,15 +468,14 @@ export default function CartPage() {
             }`}
           >
             {expired ? <AlertCircle className="h-4 w-4" /> : <Clock className="h-4 w-4" />}
-            {expired ? "Zaxira muddati tugadi." : `Dorilar ${timerLabel} gacha zaxirada saqlanadi`}
+            {expired
+              ? t("cart.expired")
+              : t("cart.left", { time: timerLabel, until: formatDateTime(holdUntil) })}
           </div>
-        )}
-        {awaitingReview && (
-          <p className="mt-3 text-sm text-slate-500">Farmatsevt tasdiqlamaguncha to'lov ochilmaydi.</p>
         )}
         {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
         <div className="mt-5 grid gap-2">
-          {!paid && (
+          {pendingView.showPay && (
             <button
               type="button"
               disabled={!canPay || paying}
@@ -275,7 +483,7 @@ export default function CartPage() {
               className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-brand font-bold text-white hover:bg-brand-dark disabled:opacity-50"
             >
               <CreditCard className="h-4 w-4" />
-              {paying ? "To'lov..." : "Test to'lovi"}
+              {paying ? t("cart.paying") : t("cart.payTest")}
             </button>
           )}
           <button
@@ -283,51 +491,60 @@ export default function CartPage() {
             onClick={clearReservation}
             className="h-11 rounded-xl bg-slate-100 font-bold text-slate-800"
           >
-            Yangi buyurtma
+            {t("cart.newOrder")}
           </button>
         </div>
       </section>
     );
   }
 
+  if (leaving) return null;
+
   if (items.length === 0) {
     return (
       <section className="rounded-2xl border border-slate-100 bg-white p-8 text-center shadow-sm">
-        <h1 className="text-2xl font-extrabold text-slate-900">Savatcha bo'sh</h1>
-        <p className="mt-2 text-sm text-slate-500">Kerakli dorilarni katalogdan qo'shing.</p>
+        <h1 className="text-2xl font-extrabold text-slate-900">{t("cart.empty")}</h1>
+        <p className="mt-2 text-sm text-slate-500">{t("cart.emptyHint")}</p>
         <Link
           to="/"
           className="mt-6 inline-flex h-12 items-center rounded-xl bg-brand px-5 font-bold text-white hover:bg-brand-dark md:h-11"
         >
-          Dorilarni ko'rish
+          {t("cart.browse")}
         </Link>
       </section>
     );
   }
 
+  const submitLabel = hasPrescriptionItems
+    ? t("cart.submitRx")
+    : paymentMethod === "cash"
+      ? t("cart.submit")
+      : t("cart.pay", { amount: formatSom(totals.totalAmount) });
+
   const payButton = (
     <button
       type="submit"
-      disabled={!canCheckout || submitting || expired}
+      disabled={submitting}
       className="h-12 w-full rounded-xl bg-[#087B51] text-sm font-bold text-white shadow-lg hover:bg-[#1A6840] disabled:opacity-50"
     >
-      {submitting ? "Yuborilmoqda..." : `${formatSom(totalAmount)} to'lash`}
+      {submitting ? t("cart.sending") : submitLabel}
     </button>
   );
 
   return (
-    <form className="pb-28 lg:pb-0" onSubmit={handleOrder}>
+    <>
+    <form className="pb-[calc(14rem+env(safe-area-inset-bottom))] md:pb-56 lg:pb-0" onSubmit={handleOrder}>
       <div className="mb-4 flex items-center gap-2">
         <button
           type="button"
           onClick={() => navigate(-1)}
           className="grid h-10 w-10 place-items-center rounded-xl bg-white text-slate-700 shadow-sm lg:h-12 lg:w-12"
-          aria-label="Orqaga"
+          aria-label={t("common.back")}
         >
           <ArrowLeft className="h-5 w-5" />
         </button>
         <h1 className="text-lg font-extrabold leading-tight text-slate-900 md:text-2xl">
-          Yetkazib berish manzili va rasmiylashtirish
+          {t("cart.title")}
         </h1>
       </div>
 
@@ -344,9 +561,21 @@ export default function CartPage() {
                 </div>
                 <div className="min-w-0 flex-1">
                   <h3 className="truncate text-sm font-bold text-slate-900">{item.medicine.name}</h3>
+                  {item.medicine.isPrescription && (
+                    <p className="text-[11px] font-bold text-red-600">{t("cart.rxBadge")}</p>
+                  )}
                   <p className="text-xs font-bold tabular-nums text-slate-900">
-                    {formatSom(lineTotal(item))}
+                    {item.quantity > 1
+                      ? `${formatGrouped(Number(item.medicine.price) * unitMultiplier(item.selectedUnit))} × ${item.quantity} = ${formatSom(lineTotal(item))}`
+                      : formatSom(lineTotal(item))}
                   </p>
+                  {(() => {
+                    const stock = lineStock(item);
+                    if (stock.kind === "missing") return <p className="text-xs font-semibold text-red-600">{t("cart.missingHere")}</p>;
+                    if (stock.kind === "short" || stock.kind === "max") return <p className="text-xs font-semibold text-amber-700">{t("cart.onlyLeft", { count: stock.available })}</p>;
+                    if (stock.available > 0 && stock.available <= 5) return <p className="text-xs font-semibold text-amber-700">{t("cart.lowStock")}</p>;
+                    return null;
+                  })()}
                 </div>
                 <div className="inline-flex items-center gap-1 rounded-full bg-brand-soft p-0.5">
                   <button
@@ -355,85 +584,233 @@ export default function CartPage() {
                       updateQuantity(item.medicine.id, item.selectedUnit, item.quantity - 1)
                     }
                     className="grid h-7 w-7 place-items-center rounded-full bg-white"
+                    aria-label={t("cart.decrease")}
                   >
-                    <Minus className="h-3.5 w-3.5" />
+                    <Minus className="h-3.5 w-3.5" aria-hidden />
                   </button>
                   <span className="min-w-4 text-center text-xs font-bold">{item.quantity}</span>
                   <button
                     type="button"
+                    disabled={Boolean(lineStock(item).kind)}
+                    title={lineStock(item).kind ? t("cart.onlyLeft", { count: lineStock(item).available }) : undefined}
                     onClick={() =>
                       updateQuantity(item.medicine.id, item.selectedUnit, item.quantity + 1)
                     }
-                    className="grid h-7 w-7 place-items-center rounded-full bg-white"
+                    className="grid h-7 w-7 place-items-center rounded-full bg-white disabled:cursor-not-allowed disabled:opacity-40"
+                    aria-label={t("cart.increase")}
                   >
-                    <Plus className="h-3.5 w-3.5" />
+                    <Plus className="h-3.5 w-3.5" aria-hidden />
                   </button>
                 </div>
                 <button
                   type="button"
-                  onClick={() => removeFromCart(item.medicine.id, item.selectedUnit)}
+                  onClick={() => {
+                    const removed = removeFromCart(item.medicine.id, item.selectedUnit);
+                    if (!removed) return;
+                    pushToast(t("cart.removed"), "info", {
+                      duration: 5000,
+                      action: { label: t("cart.undo"), onClick: () => restoreLine(removed) },
+                    });
+                  }}
                   className="text-red-500"
-                  aria-label="O'chirish"
+                  aria-label={t("cart.remove")}
                 >
                   <Trash2 className="h-4 w-4" />
                 </button>
               </article>
             ))}
+            <button type="button" onClick={() => setConfirmClear(true)} className="mt-2 text-left text-sm font-bold text-red-600">
+              {t("cart.clear")}
+            </button>
           </section>
 
-          <MapCheckoutSection
-            street={address.street}
-            apartment={address.apartment}
-            floor={address.floor}
-            intercom={address.intercom}
-            lat={address.lat}
-            lng={address.lng}
-            onChange={(next) => setSavedAddress(next)}
-          />
+          <h2 className="px-1 text-base font-extrabold text-slate-900">{t("cart.checkout")}</h2>
+          <button
+            type="button"
+            onClick={openModal}
+            title={branch ? `${branch.name}. ${t("header.branchHint")}` : t("branch.pick")}
+            className="rounded-2xl border border-slate-100 bg-white p-4 text-left shadow-sm"
+          >
+            <span className="text-[11px] font-bold uppercase tracking-wide text-[#087B51]">{t("header.branch")}</span>
+            <strong className="mt-1 block text-sm text-slate-900">{branch?.name || t("branch.pick")}</strong>
+            <span className="mt-1 block text-xs text-slate-500">{t("header.branchHint")}</span>
+          </button>
+
+          <div className="grid grid-cols-2 gap-2">
+            {[
+              ["DELIVERY", "cart.deliveryMode"],
+              ["PICKUP", "cart.pickupMode"],
+            ].filter(([id]) => id === "DELIVERY" || shop.pickupEnabled !== false).map(([id, key]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setDeliveryType(id)}
+                className={`h-11 rounded-xl border text-sm font-bold ${deliveryType === id ? "border-brand bg-brand-soft text-brand" : "border-slate-200 bg-white text-slate-700"}`}
+              >
+                {t(key)}
+              </button>
+            ))}
+          </div>
+          {deliveryType === "PICKUP" ? (
+            <section className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
+              <p className="text-sm font-bold text-slate-900">{branch?.name}</p>
+              <p className="mt-1 text-sm text-slate-600">{branch?.address}</p>
+              <p className="mt-2 text-xs font-semibold text-slate-500">{t("cart.branchHours")}: {branch?.workingHours || "—"}</p>
+              <p className="mt-2 text-xs text-emerald-700">{t("cart.pickupHint")}</p>
+            </section>
+          ) : (
+            <>
+              <MapCheckoutSection
+                street={address.street}
+                apartment={address.apartment}
+                floor={address.floor}
+                intercom={address.intercom}
+                lat={address.lat}
+                lng={address.lng}
+                city={branch?.city || DELIVERY_CITY}
+                inputRef={addressRef}
+                entrance={address.entrance || ""}
+                landmark={address.landmark || ""}
+                invalid={showProblem("address")}
+                onBlur={() => setTouched((current) => ({ ...current, address: true }))}
+                onChange={(next) => setSavedAddress(next)}
+              />
+              {showProblem("address") && <p className="text-xs font-medium text-red-600">{fieldProblems.address}</p>}
+            </>
+          )}
 
           {hasPrescriptionItems && (
-            <label className="grid cursor-pointer place-items-center gap-2 rounded-2xl border-2 border-dashed border-red-200 bg-red-50 p-4 text-center">
-              <input
-                type="file"
-                accept="image/jpeg,image/png,image/webp,application/pdf"
-                hidden
-                onChange={(event) => readRxFile(event.target.files?.[0])}
-              />
-              <UploadCloud className="h-7 w-7 text-red-500" />
-              <strong className="text-sm text-red-700">Retsept suratini yuklang</strong>
-              <span className="text-xs text-red-600">
-                {prescription?.fileName ? `Yuklangan: ${prescription.fileName}` : "JPG, PNG yoki PDF"}
-              </span>
-            </label>
+            prescription?.fileName ? (
+              <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-3">
+                {rxPreview ? (
+                  <img src={rxPreview} alt="" className="h-14 w-14 rounded-xl object-cover" />
+                ) : (
+                  <span className="grid h-14 w-14 place-items-center rounded-xl bg-white text-emerald-700">
+                    <CheckCircle2 className="h-5 w-5" aria-hidden />
+                  </span>
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="flex items-center gap-1 text-sm font-bold text-emerald-800">
+                    <CheckCircle2 className="h-4 w-4" aria-hidden />
+                    {t("cart.rxUploaded")}
+                  </p>
+                  <p className="truncate text-xs text-emerald-700">{prescription.fileName}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPrescription(null)}
+                  className="h-10 rounded-xl px-3 text-sm font-bold text-red-600"
+                >
+                  {t("cart.remove")}
+                </button>
+              </div>
+            ) : (
+              <label ref={rxRef} tabIndex={-1} className={`grid cursor-pointer place-items-center gap-2 rounded-2xl border-2 border-dashed p-4 text-center outline-none ${showProblem("rx") ? "border-red-500 bg-red-50" : "border-red-200 bg-red-50"}`}>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,application/pdf"
+                  hidden
+                  onChange={(event) => readRxFile(event.target.files?.[0])}
+                />
+                <UploadCloud className="h-7 w-7 text-red-500" />
+                <strong className="text-sm text-red-700">{t("cart.rxTitle")}</strong>
+                {rxNames.length > 0 && <span className="text-xs font-semibold text-red-700">{t("cart.rxFor", { names: rxNames.join(", ") })}</span>}
+                <span className="text-xs text-red-600">{t("cart.rxHint")}</span>
+                {showProblem("rx") && <span className="text-xs font-medium text-red-600">{fieldProblems.rx}</span>}
+              </label>
+            )
           )}
 
           <section className="grid gap-2 rounded-2xl border border-slate-100 bg-white p-3 shadow-sm md:p-5">
             <label className="grid gap-1 text-xs font-semibold text-slate-600">
-              Telefon
+              {t("cart.phone")}
               <span className="relative">
                 <Phone className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <input
-                  required
+                  ref={phoneRef}
                   type="tel"
                   value={phone}
                   onChange={(event) => setPhone(event.target.value)}
-                  placeholder="+998901234567"
-                  className="h-12 w-full rounded-xl border border-slate-200 pl-10 pr-3 text-sm font-normal outline-none ring-brand/30 focus:ring-2"
+                  onBlur={() => {
+                    setTouched((current) => ({ ...current, phone: true }));
+                    const next = normalizePhoneInput(phone);
+                    if (next) setPhone(next);
+                  }}
+                  placeholder="+998 90 123 45 67"
+                  className={`h-12 w-full scroll-mb-40 rounded-xl border pl-10 pr-3 text-sm font-normal outline-none ring-brand/30 focus:ring-2 ${
+                    showProblem("phone") ? "border-red-500 bg-red-50" : "border-slate-200"
+                  }`}
                 />
               </span>
+              {showProblem("phone") ? (
+                <span className="text-xs font-medium text-red-600">
+                  {phone && !phoneValid ? t("cart.phoneFormat") : fieldProblems.phone}
+                </span>
+              ) : null}
+              {!token && (
+                <span className="mt-1 flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-600">
+                  {t("cart.hint.auth")}
+                  <button type="button" onClick={() => setLoginOpen(true)} className="h-8 rounded-lg bg-[#087B51] px-3 text-xs font-bold text-white">
+                    {t("common.login")}
+                  </button>
+                </span>
+              )}
             </label>
             <label className="grid gap-1 text-xs font-semibold text-slate-600">
-              Ism-familiya
+              {t("cart.name")}
               <span className="relative">
                 <User className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <input
-                  required
+                  ref={nameRef}
                   value={fullName}
                   onChange={(event) => setFullName(event.target.value)}
-                  placeholder="Ali Valiyev"
-                  className="h-12 w-full rounded-xl border border-slate-200 pl-10 pr-3 text-sm font-normal outline-none ring-brand/30 focus:ring-2"
+                  onBlur={() => setTouched((current) => ({ ...current, name: true }))}
+                  placeholder={t("profile.enterName")}
+                  className={`h-12 w-full scroll-mb-40 rounded-xl border pl-10 pr-3 text-sm font-normal outline-none ring-brand/30 focus:ring-2 ${showProblem("name") ? "border-red-500" : "border-slate-200"}`}
                 />
               </span>
+              {showProblem("name") && <span className="text-xs font-medium text-red-600">{fieldProblems.name}</span>}
+            </label>
+            <label className="grid gap-1 text-xs font-semibold text-slate-600">
+              {t("cart.promo")}
+              {!token ? (
+                <span className="flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-600">
+                  {t("cart.promoLogin")}
+                  <button type="button" onClick={() => setLoginOpen(true)} className="h-8 rounded-lg bg-[#087B51] px-3 text-xs font-bold text-white">
+                    {t("common.login")}
+                  </button>
+                </span>
+              ) : (
+              <span className="flex gap-2">
+                <input
+                  value={promoInput}
+                  onChange={(event) => setPromoInput(event.target.value.toUpperCase())}
+                  className="h-12 min-w-0 flex-1 rounded-xl border border-slate-200 px-3 text-sm font-normal uppercase outline-none ring-brand/30 focus:ring-2"
+                />
+                <button
+                  type="button"
+                  disabled={promoBusy || !promoInput.trim()}
+                  onClick={async () => {
+                    setPromoBusy(true);
+                    setPromoError("");
+                    try {
+                      const result = await checkPromo(promoInput.trim(), totalAmount, branch?.id);
+                      setPromo({ code: result.code, discount: result.discount });
+                    } catch (err) {
+                      setPromo(null);
+                      setPromoError(userError(err, t, "cart.promoInvalid"));
+                    } finally {
+                      setPromoBusy(false);
+                    }
+                  }}
+                  className="h-12 rounded-xl bg-slate-900 px-3 text-sm font-bold text-white disabled:opacity-50"
+                >
+                  {t("cart.promoApply")}
+                </button>
+              </span>
+              )}
+              {promo?.code && <span className="text-xs font-medium text-emerald-700">{t("cart.promoOk", { code: promo.code })}</span>}
+              {promoError && <span className="text-xs font-medium text-red-600">{promoError}</span>}
             </label>
           </section>
         </div>
@@ -442,16 +819,18 @@ export default function CartPage() {
           <div className="flex items-start gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-900">
             <Clock className="mt-0.5 h-4 w-4 shrink-0" />
             <span>
-              {expired
-                ? "Zaxira muddati tugadi. Savatni yangilang."
-                : `Dorilar ${timerLabel} gacha zaxirada saqlanadi`}
+              {pendingOrder
+                ? expired
+                  ? t("cart.holdExpired")
+                  : t("cart.holdLeft", { time: timerLabel })
+                : t(holdKey, { minutes: holdMinutes })}
             </span>
           </div>
 
           <section className="rounded-2xl border border-slate-100 bg-white p-3 shadow-sm md:p-5">
-            <p className="mb-2 text-sm font-bold text-slate-900">To'lov turi</p>
+            <p className="mb-2 text-sm font-bold text-slate-900">{t("cart.payment")}</p>
             <div className="grid gap-2">
-              {PAYMENT_OPTIONS.map((option) => (
+              {paymentOptions.map((option) => (
                 <label
                   key={option.id}
                   className={`flex h-12 items-center gap-3 rounded-xl border px-3 ${
@@ -470,7 +849,7 @@ export default function CartPage() {
                   ) : (
                     <CreditCard className="h-4 w-4 text-brand" />
                   )}
-                  <span className="text-sm font-semibold text-slate-800">{option.label}</span>
+                  <span className="text-sm font-semibold text-slate-800">{option.labelKey ? t(option.labelKey) : option.label}</span>
                 </label>
               ))}
             </div>
@@ -478,13 +857,45 @@ export default function CartPage() {
 
           <section className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
             <div className="flex items-center justify-between text-sm">
-              <span className="text-slate-500">Mahsulotlar</span>
+              <span className="text-slate-500">{t("cart.products")}</span>
               <strong className="tabular-nums text-slate-900">{formatSom(totalAmount)}</strong>
             </div>
+            {deliveryType === "DELIVERY" && (
+              <div className="mt-3">
+                <p className="text-xs text-slate-600">
+                  {totalAmount >= shop.freeDeliveryFrom
+                    ? t("cart.freeNow")
+                    : t("cart.freeLeft", { amount: formatSom(shop.freeDeliveryFrom - totalAmount) })}
+                </p>
+                <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-100">
+                  <div className="h-full bg-brand" style={{ width: `${Math.min(100, (totalAmount / shop.freeDeliveryFrom) * 100)}%` }} />
+                </div>
+                <p className="mt-1 text-xs text-slate-500">{t("cart.zone", { city: branch?.city || DELIVERY_CITY, eta: DELIVERY_ETA })}</p>
+              </div>
+            )}
+            {deliveryType === "PICKUP" ? (
+              <div className="mt-2 text-sm">
+                <span className="font-semibold text-slate-800">{t("cart.pickupFree")}</span>
+                {paymentMethod === "cash" && hasPrescriptionItems && (
+                  <p className="mt-1 text-xs font-normal text-slate-600">{t("cart.holdCashPickup")}</p>
+                )}
+              </div>
+            ) : (
+              <div className="mt-2 flex items-center justify-between text-sm">
+                <span className="text-slate-500">{t("cart.delivery")}</span>
+                <strong className="text-slate-900">{totals.deliveryFee === 0 ? t("cart.freeNow") : t("cart.deliveryValue", { fee: formatSom(totals.deliveryFee) })}</strong>
+              </div>
+            )}
+            {totals.discount > 0 && (
+              <div className="mt-2 flex items-center justify-between text-sm">
+                <span className="text-slate-500">{t("order.amount.discount")}</span>
+                <strong className="tabular-nums text-emerald-700">−{formatSom(totals.discount)}</strong>
+              </div>
+            )}
             <div className="mt-2 flex items-center justify-between border-t border-slate-100 pt-2">
-              <span className="font-semibold text-slate-700">Jami</span>
+              <span className="font-semibold text-slate-700">{t("cart.total")}</span>
               <strong className="text-lg font-bold tabular-nums text-slate-900">
-                {formatSom(totalAmount)}
+                {formatSom(totals.totalAmount)}
               </strong>
             </div>
             {error && (
@@ -493,14 +904,60 @@ export default function CartPage() {
                 {error}
               </p>
             )}
+            {attempted && !canCheckout && checkoutHints.length > 0 && (
+              <ul className="mt-3 space-y-1 text-xs text-amber-800">
+                {checkoutHints.map((hint) => (
+                  <li key={hint} className="flex items-start gap-1.5">
+                    <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    {hint}
+                  </li>
+                ))}
+              </ul>
+            )}
             <div className="mt-4 hidden lg:block">{payButton}</div>
           </section>
         </aside>
       </div>
 
-      <div className="fixed inset-x-0 bottom-[calc(4rem+var(--tg-safe-bottom,env(safe-area-inset-bottom)))] z-20 px-3 lg:hidden">
-        {payButton}
+      <div className="fixed inset-x-0 bottom-[calc(4rem+var(--tg-safe-bottom,env(safe-area-inset-bottom)))] z-20 border-t border-slate-200 bg-white px-3 py-2 shadow-[0_-8px_24px_rgba(15,23,42,0.06)] lg:hidden">
+        <div className="mx-auto flex max-w-lg items-center gap-3">
+          <div className="min-w-0">
+            <p className="truncate text-[11px] font-semibold text-slate-500">
+              {(paymentOptions.find((option) => option.id === paymentMethod)?.labelKey
+                ? t(paymentOptions.find((option) => option.id === paymentMethod).labelKey)
+                : paymentOptions.find((option) => option.id === paymentMethod)?.label) || t("cart.payment")}
+              {" · "}
+              {deliveryType === "PICKUP" ? t("cart.pickupFree") : totals.deliveryFee === 0 ? t("cart.freeNow") : formatSom(totals.deliveryFee)}
+            </p>
+            <p className="text-sm font-extrabold tabular-nums text-slate-900">{t("cart.total")}: {formatSom(totals.totalAmount)}</p>
+          </div>
+          <div className="min-w-0 flex-1">{payButton}</div>
+        </div>
       </div>
     </form>
+    {confirmClear && (
+      <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4" onClick={() => setConfirmClear(false)}>
+        <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-sm" onClick={(event) => event.stopPropagation()}>
+          <p className="text-sm font-semibold text-slate-800">{t("cart.clearConfirm")}</p>
+          <div className="mt-4 flex gap-2">
+            <button type="button" onClick={() => setConfirmClear(false)} className="h-11 flex-1 rounded-xl border border-slate-200 text-sm font-bold text-slate-700">
+              {t("common.cancel")}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                clearCart();
+                setConfirmClear(false);
+              }}
+              className="h-11 flex-1 rounded-xl bg-red-600 text-sm font-bold text-white"
+            >
+              {t("cart.clear")}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    <AuthLoginModal open={loginOpen} onClose={() => setLoginOpen(false)} />
+    </>
   );
 }

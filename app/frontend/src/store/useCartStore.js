@@ -2,7 +2,14 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { lineTotal, unitMultiplier } from "../lib/mockData";
 
-const RESERVATION_MS = 10 * 1000;
+const RESERVATION_MS = 15 * 60 * 1000;
+
+function reservationTimestamp(order) {
+  const raw = order?.reservedUntil || order?.reservationUntil;
+  if (!raw) return Date.now() + RESERVATION_MS;
+  const parsed = new Date(raw).getTime();
+  return Number.isFinite(parsed) ? parsed : Date.now() + RESERVATION_MS;
+}
 
 function sameLine(item, medicineId, selectedUnit) {
   return item.medicine.id === medicineId && item.selectedUnit === selectedUnit;
@@ -17,15 +24,21 @@ export const useCartStore = create(
       reservationUntil: null,
       checkoutHoldUntil: null,
       paymentMethod: "payme",
+      deliveryType: "DELIVERY",
+      promo: null,
       savedAddress: {
         street: "",
         apartment: "",
         floor: "",
         intercom: "",
+        entrance: "",
+        landmark: "",
         lat: null,
         lng: null,
       },
       setPaymentMethod: (paymentMethod) => set({ paymentMethod }),
+      setDeliveryType: (deliveryType) => set({ deliveryType }),
+      setPromo: (promo) => set({ promo }),
       setSavedAddress: (patch) =>
         set({
           savedAddress: {
@@ -41,23 +54,24 @@ export const useCartStore = create(
         }
       },
 
-      addToCart: (medicine, branchId, selectedUnit = medicine.dosageUnit || "tabletka") => {
+      addToCart: (medicine, branchId, selectedUnit = medicine.dosageUnit || "tabletka", addQty = 1) => {
         const items = get().items;
         const existing = items.find((item) => sameLine(item, medicine.id, selectedUnit));
         const packSize = unitMultiplier(selectedUnit);
-        const nextQty = (existing?.quantity || 0) + 1;
+        const count = Math.max(1, Math.floor(Number(addQty) || 1));
+        const nextQty = (existing?.quantity || 0) + count;
 
-        if (nextQty * packSize > medicine.stockCount) return;
+        if (nextQty * packSize > medicine.stockCount) return false;
 
         if (existing) {
           set({
             items: items.map((item) =>
               sameLine(item, medicine.id, selectedUnit)
-                ? { ...item, quantity: item.quantity + 1, medicine }
+                ? { ...item, quantity: item.quantity + count, medicine }
                 : item
             ),
           });
-          return;
+          return true;
         }
 
         set({
@@ -65,18 +79,29 @@ export const useCartStore = create(
             ...items,
             {
               medicine,
-              quantity: 1,
+              quantity: count,
               branchId,
               selectedUnit,
             },
           ],
         });
+        return true;
       },
 
       removeFromCart: (medicineId, selectedUnit) => {
+        const current = get().items;
+        const removed = current.find((item) => sameLine(item, medicineId, selectedUnit)) || null;
         set({
-          items: get().items.filter((item) => !sameLine(item, medicineId, selectedUnit)),
+          items: current.filter((item) => !sameLine(item, medicineId, selectedUnit)),
         });
+        return removed;
+      },
+
+      restoreLine: (line) => {
+        if (!line?.medicine?.id) return;
+        const items = get().items;
+        if (items.some((item) => sameLine(item, line.medicine.id, line.selectedUnit))) return;
+        set({ items: [...items, line] });
       },
 
       updateQuantity: (medicineId, selectedUnit, quantity) => {
@@ -103,20 +128,57 @@ export const useCartStore = create(
           prescription: null,
         }),
 
+      clearSession: () =>
+        set({
+          items: [],
+          prescription: null,
+          pendingOrder: null,
+          reservationUntil: null,
+          checkoutHoldUntil: null,
+          promo: null,
+          savedAddress: {
+            street: "",
+            apartment: "",
+            floor: "",
+            intercom: "",
+            entrance: "",
+            landmark: "",
+            lat: null,
+            lng: null,
+          },
+        }),
+
+      applyBranchStock: (branchId, rows) =>
+        set({
+          items: get().items.map((item) => {
+            const row = (rows || []).find((entry) => entry.id === item.medicine.id);
+            const available = row ? Number(row.available) || 0 : 0;
+            return {
+              ...item,
+              branchId,
+              medicine: {
+                ...item.medicine,
+                stockCount: available,
+                available,
+                price: row && row.price != null ? Number(row.price) : item.medicine.price,
+              },
+            };
+          }),
+        }),
+
       setPrescription: (prescription) => set({ prescription }),
       clearPrescription: () => set({ prescription: null }),
 
       startReservation: (order) => {
-        const until = order?.reservedUntil
-          ? new Date(order.reservedUntil).getTime()
-          : Date.now() + RESERVATION_MS;
         set({
           pendingOrder: order,
-          reservationUntil: until,
+          reservationUntil: reservationTimestamp(order),
+          checkoutHoldUntil: null,
         });
       },
 
-      clearReservation: () => set({ pendingOrder: null, reservationUntil: null }),
+      clearReservation: () =>
+        set({ pendingOrder: null, reservationUntil: null, checkoutHoldUntil: null }),
 
       hasPrescriptionItems: () =>
         get().items.some((item) => item.medicine.isPrescription),
@@ -130,27 +192,36 @@ export const useCartStore = create(
     }),
     {
       name: "vita24-cart",
-      version: 3,
+      version: 6,
       migrate: (persisted) => {
         const cap = Date.now() + RESERVATION_MS;
+        const now = Date.now();
+        const hasItems = Array.isArray(persisted.items) && persisted.items.length > 0;
+        const pending = persisted.pendingOrder;
+
         return {
           ...persisted,
-          savedAddress: persisted.savedAddress || {
+          deliveryType: persisted.deliveryType === "PICKUP" ? "PICKUP" : "DELIVERY",
+          promo: persisted.promo || null,
+          savedAddress: {
             street: "",
             apartment: "",
             floor: "",
             intercom: "",
+            entrance: "",
+            landmark: "",
             lat: null,
             lng: null,
+            ...(persisted.savedAddress || {}),
           },
-          checkoutHoldUntil:
-            persisted.checkoutHoldUntil && persisted.checkoutHoldUntil > cap
+          reservationUntil: pending ? reservationTimestamp(pending) : null,
+          checkoutHoldUntil: pending
+            ? null
+            : hasItems && (!persisted.checkoutHoldUntil || persisted.checkoutHoldUntil <= now)
               ? cap
-              : persisted.checkoutHoldUntil,
-          reservationUntil:
-            persisted.reservationUntil && persisted.reservationUntil > cap
-              ? cap
-              : persisted.reservationUntil,
+              : persisted.checkoutHoldUntil && persisted.checkoutHoldUntil > cap
+                ? cap
+                : persisted.checkoutHoldUntil,
         };
       },
       partialize: (state) => ({
@@ -160,6 +231,8 @@ export const useCartStore = create(
         reservationUntil: state.reservationUntil,
         checkoutHoldUntil: state.checkoutHoldUntil,
         paymentMethod: state.paymentMethod,
+        deliveryType: state.deliveryType,
+        promo: state.promo,
         savedAddress: state.savedAddress,
       }),
     }

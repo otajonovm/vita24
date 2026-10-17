@@ -1,10 +1,12 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { FileCheck, UploadCloud, XCircle } from "lucide-react";
 import { useCartStore } from "../../store/useCartStore";
 
 const ACCEPT = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
 
 export default function PrescriptionModal({ open, onClose }) {
+  const { t } = useTranslation();
   const setPrescription = useCartStore((state) => state.setPrescription);
   const prescription = useCartStore((state) => state.prescription);
   const [isDragging, setIsDragging] = useState(false);
@@ -15,25 +17,21 @@ export default function PrescriptionModal({ open, onClose }) {
   const readFile = (file) => {
     if (!file) return;
     if (!ACCEPT.includes(file.type)) {
-      setError("Faqat JPG, PNG, WEBP yoki PDF qabul qilinadi");
+      setError(t("rx.type"));
       return;
     }
     if (file.size > 6 * 1024 * 1024) {
-      setError("Fayl hajmi 6 MB dan oshmasin");
+      setError(t("rx.size"));
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      setPrescription({
-        fileName: file.name,
-        fileUrl: String(reader.result),
-        status: "PENDING",
-      });
-      setError("");
-      onClose();
-    };
-    reader.readAsDataURL(file);
+    setPrescription({
+      file,
+      fileName: file.name,
+      status: "PENDING",
+    });
+    setError("");
+    onClose();
   };
 
   return (
@@ -50,14 +48,14 @@ export default function PrescriptionModal({ open, onClose }) {
       >
         <div className="mb-4 flex items-start justify-between">
           <div>
-            <p className="text-xs font-bold uppercase tracking-wide text-brand">Retsept</p>
+            <p className="text-xs font-bold uppercase tracking-wide text-brand">{t("common.rx")}</p>
             <h2 id="rx-modal-title" className="mt-1 text-2xl font-extrabold">
-              Retseptni yuklang
+              {t("rx.title")}
             </h2>
           </div>
           <button
             type="button"
-            aria-label="Yopish"
+            aria-label={t("common.close")}
             onClick={onClose}
             className="grid h-9 w-9 place-items-center rounded-full bg-slate-50"
           >
@@ -66,8 +64,8 @@ export default function PrescriptionModal({ open, onClose }) {
         </div>
 
         <p className="mb-4 text-sm text-slate-500">
-          Retseptli dorilar uchun shifokor retseptining surati yoki PDF nusxasi kerak.
-          Farmatsevt 15 daqiqa ichida tekshiradi.
+          {t("rx.need")}{" "}
+          {t("rx.reviewHint")}
         </p>
 
         <label
@@ -96,10 +94,10 @@ export default function PrescriptionModal({ open, onClose }) {
           ) : (
             <UploadCloud className="h-8 w-8 text-brand" />
           )}
-          <strong>Faylni shu yerga tashlang</strong>
-          <span className="text-sm text-slate-500">yoki bosib tanlang</span>
+          <strong>{t("rx.drop")}</strong>
+          <span className="text-sm text-slate-500">{t("rx.orPick")}</span>
           {prescription?.fileName && (
-            <em className="text-sm not-italic text-brand">Yuklangan: {prescription.fileName}</em>
+            <em className="text-sm not-italic text-brand">{t("rx.uploaded", { name: prescription.fileName })}</em>
           )}
         </label>
 

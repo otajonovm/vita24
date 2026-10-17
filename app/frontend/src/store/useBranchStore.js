@@ -6,12 +6,11 @@ export const useBranchStore = create(
     (set, get) => ({
       branch: null,
       isModalOpen: false,
+      hydrated: false,
 
       setBranch: (branch) => set({ branch, isModalOpen: false }),
       openModal: () => set({ isModalOpen: true }),
-      closeModal: () => {
-        if (get().branch) set({ isModalOpen: false });
-      },
+      closeModal: () => set({ isModalOpen: false }),
       requireBranch: () => {
         if (!get().branch) {
           set({ isModalOpen: true });
@@ -23,6 +22,9 @@ export const useBranchStore = create(
     {
       name: "vita24-branch",
       partialize: (state) => ({ branch: state.branch }),
+      onRehydrateStorage: () => () => {
+        useBranchStore.setState({ hydrated: true });
+      },
     }
   )
 );

@@ -12,5 +12,9 @@ backend/prisma/dev.db
 backend/prisma/dev.db-journal
 app/backend/prisma/dev.db
 app/backend/prisma/dev.db-journal
+app/backend/generated
+app/backend/.postgres
+app/backend/private
+app/backend/public/uploads
 app/frontend/package-lock.json
 app/package-lock.json

@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: vita24-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: vita24
+      POSTGRES_PASSWORD: vita24
+      POSTGRES_DB: vita24_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - vita24_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vita24 -d vita24_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  vita24_pgdata:

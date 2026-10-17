@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /branch-admin
+Sitemap: /sitemap.xml

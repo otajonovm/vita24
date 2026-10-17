@@ -1,29 +1,20 @@
-import {
-  LiaBoltSolid,
-  LiaCapsulesSolid,
-  LiaChildSolid,
-  LiaHeartbeatSolid,
-  LiaLeafSolid,
-  LiaPillsSolid,
-  LiaShieldAltSolid,
-  LiaTemperatureHighSolid,
-} from "react-icons/lia";
+import { Baby, HeartPulse, Leaf, Pill, Sparkles, Thermometer, Zap } from "lucide-react";
 
 export const CATEGORY_ICON_MAP = {
-  thermometer: LiaTemperatureHighSolid,
-  heart: LiaHeartbeatSolid,
-  zap: LiaBoltSolid,
-  sparkles: LiaShieldAltSolid,
-  baby: LiaChildSolid,
-  leaf: LiaLeafSolid,
-  shamollash: LiaTemperatureHighSolid,
-  yurak: LiaHeartbeatSolid,
-  ogriq: LiaBoltSolid,
-  vitaminlar: LiaShieldAltSolid,
-  bolalar: LiaChildSolid,
-  allergiya: LiaLeafSolid,
-  oshqozon: LiaCapsulesSolid,
-  antibiotiklar: LiaPillsSolid,
+  thermometer: Thermometer,
+  heart: HeartPulse,
+  zap: Zap,
+  sparkles: Sparkles,
+  baby: Baby,
+  leaf: Leaf,
+  shamollash: Thermometer,
+  yurak: HeartPulse,
+  ogriq: Zap,
+  vitaminlar: Sparkles,
+  bolalar: Baby,
+  allergiya: Leaf,
+  oshqozon: Pill,
+  antibiotiklar: Pill,
 };
 
 export const CATEGORY_COLOR_MAP = {
@@ -43,7 +34,7 @@ export const CATEGORY_COLOR_MAP = {
 };
 
 export function CategoryIcon({ name, className = "h-5 w-5", style }) {
-  const Icon = CATEGORY_ICON_MAP[name] || LiaPillsSolid;
+  const Icon = CATEGORY_ICON_MAP[name] || Pill;
   const color = CATEGORY_COLOR_MAP[name] || "#087b51";
   return <Icon className={className} style={{ color, ...style }} aria-hidden />;
 }

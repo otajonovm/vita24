@@ -1,3 +1,4 @@
+const crypto = require("crypto");
 const { sendError } = require("../lib/response");
 
 function notFoundHandler(req, res) {
@@ -14,6 +15,10 @@ function errorHandler(err, req, res, next) {
     return next(err);
   }
 
+  if (err.code === "LIMIT_FILE_SIZE") {
+    return sendError(res, 400, "FILE_TOO_LARGE", "Fayl hajmi ruxsat etilgan chegaradan oshdi");
+  }
+
   if (err.code === "P2025") {
     return sendError(res, 404, "NOT_FOUND", "Yozuv topilmadi");
   }
@@ -23,17 +28,22 @@ function errorHandler(err, req, res, next) {
   }
 
   const statusCode = err.statusCode || err.status || 500;
+  if (statusCode >= 500) {
+    const requestId = req.id || crypto.randomUUID();
+    console.error(`[${requestId}] ${req.method || ""} ${req.originalUrl || ""}`, err);
+    return sendError(res, 500, "INTERNAL_ERROR", "Serverda xatolik", { requestId });
+  }
+
   const code = err.code && typeof err.code === "string" && !err.code.startsWith("P")
     ? err.code
-    : statusCode >= 500
-      ? "INTERNAL_ERROR"
-      : "BAD_REQUEST";
+    : "BAD_REQUEST";
 
   return sendError(
     res,
     statusCode,
     code,
-    err.message || "Ichki server xatoligi"
+    err.message || "So'rov bajarilmadi",
+    err.details && typeof err.details === "object" ? err.details : undefined
   );
 }
 

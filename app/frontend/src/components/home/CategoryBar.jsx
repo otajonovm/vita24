@@ -1,13 +1,5 @@
-import {
-  LiaBoltSolid,
-  LiaCapsulesSolid,
-  LiaChildSolid,
-  LiaHeartbeatSolid,
-  LiaLeafSolid,
-  LiaPillsSolid,
-  LiaShieldAltSolid,
-  LiaTemperatureHighSolid,
-} from "react-icons/lia";
+import { useTranslation } from "react-i18next";
+import { Baby, HeartPulse, Leaf, Pill, ShieldCheck, Thermometer, Zap } from "lucide-react";
 
 const PRESETS = [
   {
@@ -15,7 +7,7 @@ const PRESETS = [
     name: "Shamollash va gripp",
     shortName: "Shamollash",
     slugs: ["shamollash"],
-    Icon: LiaTemperatureHighSolid,
+    Icon: Thermometer,
     color: "#ef4444",
   },
   {
@@ -23,7 +15,7 @@ const PRESETS = [
     name: "Oshqozon muammolari",
     shortName: "Oshqozon",
     slugs: ["oshqozon"],
-    Icon: LiaCapsulesSolid,
+    Icon: Pill,
     color: "#f59e0b",
   },
   {
@@ -31,7 +23,7 @@ const PRESETS = [
     name: "Yurak va qon bosimi",
     shortName: "Yurak",
     slugs: ["yurak"],
-    Icon: LiaHeartbeatSolid,
+    Icon: HeartPulse,
     color: "#dc2626",
   },
   {
@@ -39,7 +31,7 @@ const PRESETS = [
     name: "Og'riq qoldiruvchi",
     shortName: "Og'riq",
     slugs: ["ogriq"],
-    Icon: LiaBoltSolid,
+    Icon: Zap,
     color: "#8b5cf6",
   },
   {
@@ -47,7 +39,7 @@ const PRESETS = [
     name: "Vitaminlar va immunitet",
     shortName: "Vitamin",
     slugs: ["vitaminlar"],
-    Icon: LiaShieldAltSolid,
+    Icon: ShieldCheck,
     color: "#10b981",
   },
   {
@@ -55,7 +47,7 @@ const PRESETS = [
     name: "Allergiya vositalari",
     shortName: "Allergiya",
     slugs: ["allergiya"],
-    Icon: LiaLeafSolid,
+    Icon: Leaf,
     color: "#059669",
   },
   {
@@ -63,7 +55,7 @@ const PRESETS = [
     name: "Antibiotiklar",
     shortName: "Antibiotik",
     slugs: ["antibiotiklar"],
-    Icon: LiaPillsSolid,
+    Icon: Pill,
     color: "#087b51",
   },
   {
@@ -71,20 +63,12 @@ const PRESETS = [
     name: "Bolalar",
     shortName: "Bolalar",
     slugs: ["bolalar"],
-    Icon: LiaChildSolid,
+    Icon: Baby,
     color: "#0d9488",
   },
 ];
 
-const DEFAULT_PRESETS = PRESETS.filter(
-  (item) => !["cat-antibiotic", "cat-kids"].includes(item.id)
-);
-
 function resolveItems(categories = []) {
-  if (!Array.isArray(categories) || categories.length === 0) {
-    return DEFAULT_PRESETS;
-  }
-
   return categories.map((category) => {
     const slug = String(category.slug || "").toLowerCase();
     const name = String(category.name || "").toLowerCase();
@@ -96,9 +80,10 @@ function resolveItems(categories = []) {
 
     return {
       id: category.id,
-      name: category.name || preset?.name || "Toifa",
-      shortName: preset?.shortName || category.name || "Toifa",
-      Icon: preset?.Icon || LiaPillsSolid,
+      presetId: preset?.id || "",
+      name: category.name || preset?.name || "",
+      shortName: preset?.shortName || category.name || "",
+      Icon: preset?.Icon || Pill,
       color: preset?.color || "#087b51",
     };
   });
@@ -137,7 +122,19 @@ function CategoryCard({ category, active, onSelect, compact = false }) {
 }
 
 export default function CategoryBar({ categories = [], activeId, onSelect }) {
-  const items = resolveItems(categories);
+  const { t } = useTranslation();
+  const items = resolveItems(categories).map((item) => {
+    if (!item.presetId) {
+      return {
+        ...item,
+        name: item.name || t("category.other"),
+        shortName: item.shortName || t("category.other"),
+      };
+    }
+    const label = t(`category.${item.presetId}`);
+    return { ...item, name: label, shortName: label };
+  });
+  if (!items.length) return null;
 
   return (
     <section className="min-w-0">

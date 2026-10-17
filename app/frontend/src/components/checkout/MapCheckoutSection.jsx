@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { LoaderCircle, LocateFixed, MapPin } from "lucide-react";
 import { geocodePlace, getAccurateLocation, reverseGeocode, searchPlaces } from "../../lib/geocode";
 
@@ -14,11 +15,19 @@ export default function MapCheckoutSection({
   apartment,
   floor,
   intercom,
+  entrance = "",
+  landmark = "",
   lat,
   lng,
   onChange,
+  onBlur,
+  inputRef,
+  invalid,
+  city = "Toshkent",
 }) {
-  const skipSuggestRef = useRef(Boolean(street));
+  const { t } = useTranslation();
+  const typedRef = useRef(false);
+  const [draft, setDraft] = useState(street || "");
   const [center, setCenter] = useState(() => ({
     lat: Number.isFinite(lat) ? lat : DEFAULT_CENTER.lat,
     lng: Number.isFinite(lng) ? lng : DEFAULT_CENTER.lng,
@@ -35,9 +44,14 @@ export default function MapCheckoutSection({
     }
   }, [lat, lng]);
 
+  useEffect(() => {
+    if (!typedRef.current) setDraft(street || "");
+  }, [street]);
+
   const applyPlace = (place) => {
     if (!place?.lat || !place?.lng) return;
-    skipSuggestRef.current = true;
+    typedRef.current = false;
+    setDraft(place.title || "");
     setCenter({ lat: place.lat, lng: place.lng });
     onChange({
       street: place.title,
@@ -50,11 +64,8 @@ export default function MapCheckoutSection({
   };
 
   useEffect(() => {
-    if (skipSuggestRef.current) {
-      skipSuggestRef.current = false;
-      return undefined;
-    }
-    const needle = street.trim();
+    if (!typedRef.current) return undefined;
+    const needle = draft.trim();
     if (needle.length < 3) {
       setSuggestions([]);
       setOpenSuggest(false);
@@ -62,8 +73,10 @@ export default function MapCheckoutSection({
     }
 
     const timer = setTimeout(async () => {
+      if (!typedRef.current) return;
       try {
-        const rows = await searchPlaces(needle, center);
+        const rows = await searchPlaces(needle, center, city);
+        if (!typedRef.current) return;
         setSuggestions(rows);
         setOpenSuggest(rows.length > 0);
       } catch {
@@ -72,7 +85,7 @@ export default function MapCheckoutSection({
     }, 400);
 
     return () => clearTimeout(timer);
-  }, [street]);
+  }, [draft, city]);
 
   const handleLocate = async () => {
     setLocating(true);
@@ -87,7 +100,7 @@ export default function MapCheckoutSection({
       const title = await reverseGeocode(gps.lat, gps.lng);
       applyPlace({ title, lat: gps.lat, lng: gps.lng });
     } catch (error) {
-      setStatus(error.message || "Joylashuv aniqlanmadi");
+      setStatus(error?.code === "DENIED" ? t("branch.geoDenied") : error?.code === "TIMEOUT" ? t("branch.geoTimeout") : t("address.gpsFailed"));
     } finally {
       setLocating(false);
     }
@@ -102,50 +115,86 @@ export default function MapCheckoutSection({
     if (place) applyPlace(place);
   };
 
+  const suggestRef = useRef(null);
+
+  useEffect(() => {
+    if (!openSuggest) return undefined;
+    const onPointer = (event) => {
+      if (!suggestRef.current?.contains(event.target)) setOpenSuggest(false);
+    };
+    const onKey = (event) => {
+      if (event.key === "Escape") setOpenSuggest(false);
+    };
+    document.addEventListener("mousedown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [openSuggest]);
+
   const handleEnter = async (event) => {
+    if (event.key === "Escape") {
+      setOpenSuggest(false);
+      return;
+    }
     if (event.key !== "Enter") return;
     event.preventDefault();
     if (suggestions[0]) {
       handlePick(suggestions[0]);
       return;
     }
-    const place = await geocodePlace(street);
+    const place = await geocodePlace(draft);
     if (place) applyPlace(place);
-    else setStatus("Manzil topilmadi");
+    else setStatus(t("address.notFound"));
   };
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
-      <div className="relative h-40 overflow-hidden bg-slate-100 md:h-56 lg:h-72">
+    <section className={`overflow-hidden rounded-2xl border bg-white shadow-sm ${invalid ? "border-red-500" : "border-slate-100"}`}>
+      <div className="osm-frame relative bg-slate-100">
         <iframe
           key={`${center.lat.toFixed(5)}-${center.lng.toFixed(5)}`}
-          title="Yetkazib berish xaritasi"
+          title={t("address.map")}
           src={mapSrc(center.lat, center.lng)}
-          className="h-full w-full border-0"
           loading="lazy"
         />
       </div>
+      <p className="px-3 pt-1 text-[10px] leading-tight text-slate-400">
+        <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer" className="text-slate-400">
+          {t("address.mapCredit")}
+        </a>
+      </p>
 
       <div className="grid gap-3 p-3">
         <label className="grid gap-1 text-xs font-semibold text-slate-600">
-          Yetkazish manzili
-          <span className="relative">
+          {t("address.label")}
+          <span className="relative" ref={suggestRef}>
             <MapPin className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
-              required
-              value={street}
-              onChange={(event) => onChange({ street: event.target.value })}
-              onFocus={() => suggestions.length > 0 && setOpenSuggest(true)}
-              onBlur={() => setTimeout(() => setOpenSuggest(false), 180)}
+              ref={inputRef}
+              value={draft}
+              autoComplete="off"
+              aria-invalid={invalid || undefined}
+              onChange={(event) => {
+                typedRef.current = true;
+                const value = event.target.value;
+                setDraft(value);
+                onChange({ street: value, lat: null, lng: null });
+              }}
+              onFocus={() => typedRef.current && suggestions.length > 0 && setOpenSuggest(true)}
+              onBlur={() => {
+                setTimeout(() => setOpenSuggest(false), 180);
+                onBlur?.();
+              }}
               onKeyDown={handleEnter}
-              placeholder="Manzilni yozing yoki GPS ni bosing"
-              className="h-12 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-14 text-sm font-normal outline-none ring-brand/30 focus:ring-2"
+              placeholder={t("address.placeholder")}
+              className={`h-12 w-full scroll-mb-40 rounded-xl border bg-white pl-10 pr-14 text-sm font-normal outline-none ring-brand/30 focus:ring-2 ${invalid ? "border-red-500" : "border-slate-200"}`}
             />
             <button
               type="button"
               onClick={handleLocate}
               disabled={locating}
-              aria-label="Mening joyim"
+              aria-label={t("address.mine")}
               className="absolute right-1.5 top-1/2 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-lg bg-brand text-white hover:bg-brand-dark disabled:opacity-60"
             >
               {locating ? (
@@ -173,40 +222,58 @@ export default function MapCheckoutSection({
         </label>
         {locating && (
           <p className="text-xs text-brand">
-            GPS aniqlanmoqda{accuracy ? ` (${accuracy} m)` : ""}...
+            {t("address.gps", { extra: accuracy ? ` (${accuracy} m)` : "" })}
           </p>
         )}
         {status && <p className="text-xs text-red-600">{status}</p>}
 
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <label className="grid gap-1 text-xs font-semibold text-slate-600">
-            Kvartira
+            {t("address.apt")}
             <input
               value={apartment}
               onChange={(event) => onChange({ apartment: event.target.value })}
-              placeholder="12"
+              placeholder={t("address.aptPh")}
               className="h-12 rounded-xl border border-slate-200 px-3 text-sm font-normal outline-none ring-brand/30 focus:ring-2"
             />
           </label>
           <label className="grid gap-1 text-xs font-semibold text-slate-600">
-            Qavat
+            {t("address.entrance")}
+            <input
+              value={entrance}
+              onChange={(event) => onChange({ entrance: event.target.value })}
+              placeholder={t("address.entrancePh")}
+              className="h-12 rounded-xl border border-slate-200 px-3 text-sm font-normal outline-none ring-brand/30 focus:ring-2"
+            />
+          </label>
+          <label className="grid gap-1 text-xs font-semibold text-slate-600">
+            {t("address.floor")}
             <input
               value={floor}
               onChange={(event) => onChange({ floor: event.target.value })}
-              placeholder="4"
+              placeholder={t("address.floorPh")}
               className="h-12 rounded-xl border border-slate-200 px-3 text-sm font-normal outline-none ring-brand/30 focus:ring-2"
             />
           </label>
           <label className="grid gap-1 text-xs font-semibold text-slate-600">
-            Domofon
+            {t("address.intercom")}
             <input
               value={intercom}
               onChange={(event) => onChange({ intercom: event.target.value })}
-              placeholder="12K"
+              placeholder={t("address.intercomPh")}
               className="h-12 rounded-xl border border-slate-200 px-3 text-sm font-normal outline-none ring-brand/30 focus:ring-2"
             />
           </label>
         </div>
+        <label className="grid gap-1 text-xs font-semibold text-slate-600">
+          {t("address.landmark")}
+          <input
+            value={landmark}
+            onChange={(event) => onChange({ landmark: event.target.value })}
+            placeholder={t("address.landmarkPh")}
+            className="h-12 rounded-xl border border-slate-200 px-3 text-sm font-normal outline-none ring-brand/30 focus:ring-2"
+          />
+        </label>
       </div>
     </section>
   );

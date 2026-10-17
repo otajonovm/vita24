@@ -1,0 +1,5 @@
+-- AlterTable
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "tokenVersion" INTEGER NOT NULL DEFAULT 0;
+
+-- AlterTable
+ALTER TABLE "Order" ADD COLUMN IF NOT EXISTS "adminNote" TEXT;

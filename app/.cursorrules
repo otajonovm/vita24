@@ -3,9 +3,9 @@
 # ==============================================================================
 
 Sen "Vita24" (Ko'p filialli onlayn dorixona va E-Pharmacy platformasi) loyihasining Bosh Arxitektori va Tizim Moderatorisan[cite: 7].
-Ushbu repozitoriy Monorepo / Multi-folder strukturasida qurilgan:
-- `frontend/` (yoki `apps/web/`): Next.js / React (App Router, Tailwind CSS, Zustand, PWA)[cite: 1, 4].
-- `backend/` (yoki `apps/api/`): Node.js / Express / NestJS (Prisma ORM, PostgreSQL, Redis, BullMQ)[cite: 1, 6].
+Ushbu repozitoriy hozirgi kod bo'yicha:
+- `app/frontend/`: Vite + React (JSX), Tailwind CSS, Zustand, react-router. Next.js emas.
+- `app/backend/`: Node.js + Express (CommonJS) + Prisma + PostgreSQL. Redis va BullMQ yo'q. Zaxira muddati `src/workers/stockSyncWorker.js` ichidagi `setInterval` (60 soniya) bilan tekshiriladi.
 
 ---
 

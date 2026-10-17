@@ -1,14 +1,119 @@
 import axios from "axios";
 import {
   getMockCategories,
-  getMockMedicines,
   MOCK_BRANCHES,
 } from "../lib/mockData";
+import { useAdminAuth, useAuthStore, usePharmacistAuth } from "../store/useAuthStore";
 
 const client = axios.create({
-  baseURL: "http://localhost:5000/api",
-  timeout: 5000,
+  baseURL: import.meta.env.VITE_API_URL || "/api",
+  timeout: 20000,
 });
+
+function readStoredToken(key) {
+  try {
+    const raw =
+      localStorage.getItem(key) ||
+      (key === "vita24-pharmacist" ? sessionStorage.getItem(key) : null);
+    const parsed = raw ? JSON.parse(raw) : null;
+    return parsed?.state?.token || null;
+  } catch {
+    return null;
+  }
+}
+
+client.interceptors.request.use((config) => {
+  const url = String(config.url || "");
+  const audience =
+    config.audience ||
+    (url.includes("branch-admin") ? "pharmacist" : url.startsWith("/admin") ? "admin" : "customer");
+  const key =
+    audience === "admin"
+      ? "vita24-admin"
+      : audience === "pharmacist"
+        ? "vita24-pharmacist"
+        : "vita24-customer";
+  const store =
+    audience === "admin" ? useAdminAuth : audience === "pharmacist" ? usePharmacistAuth : useAuthStore;
+  let token = store.getState().token || readStoredToken(key);
+  if (
+    !token &&
+    (audience === "pharmacist" || url.includes("branch-admin")) &&
+    useAdminAuth.getState().user?.role === "SUPER_ADMIN"
+  ) {
+    token = useAdminAuth.getState().token || readStoredToken("vita24-admin");
+  }
+  if (token) {
+    config.headers = config.headers || {};
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+let adminRefresh = null;
+
+function refreshAdminToken() {
+  const refreshToken = useAdminAuth.getState().refreshToken;
+  if (!refreshToken) {
+    useAdminAuth.getState().logout();
+    return Promise.resolve(null);
+  }
+  if (!adminRefresh) {
+    adminRefresh = axios
+      .post(`${import.meta.env.VITE_API_URL || "/api"}/auth/refresh`, { refreshToken })
+      .then((response) => {
+        const data = response.data?.data || {};
+        if (!data.token || !data.refreshToken) throw new Error("refresh");
+        const current = useAdminAuth.getState();
+        current.setSession(data.user || current.user, data.token, { refreshToken: data.refreshToken });
+        return data.token;
+      })
+      .catch(() => {
+        useAdminAuth.getState().logout();
+        return null;
+      })
+      .finally(() => {
+        adminRefresh = null;
+      });
+  }
+  return adminRefresh;
+}
+
+client.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const url = String(error.config?.url || "");
+    const status = error.response?.status;
+    const audience = error.config?.audience;
+    const adminCall =
+      audience === "admin" ||
+      (url.startsWith("/admin") && audience !== "pharmacist" && audience !== "customer");
+    if (
+      status === 401 &&
+      adminCall &&
+      !error.config?._retry &&
+      !url.includes("/auth/refresh") &&
+      !url.includes("/auth/login")
+    ) {
+      error.config._retry = true;
+      const token = await refreshAdminToken();
+      if (token) {
+        error.config.headers = error.config.headers || {};
+        error.config.headers.Authorization = `Bearer ${token}`;
+        return client(error.config);
+      }
+    }
+    if (error.response?.data?.error?.code === "PASSWORD_CHANGE_REQUIRED") {
+      const store = adminCall ? useAdminAuth : usePharmacistAuth;
+      const current = store.getState().user;
+      if (current) store.getState().setSession({ ...current, mustChangePassword: true });
+    }
+    if (status === 401 && audience !== "admin" && (audience === "pharmacist" || url.includes("branch-admin"))) {
+      usePharmacistAuth.getState().logout();
+    }
+    return Promise.reject(error);
+  }
+);
 
 const mockOrders = [];
 
@@ -20,15 +125,23 @@ function normalizeMedicine(raw, branchId) {
   const dosageMatch = String(raw.name || "").match(/(\d+\s?(mg|ml|iu|IU)?)/i);
   return {
     id: raw.id,
+    slug: raw.slug || "",
     name: raw.name,
     description: raw.description || "",
     dosage: raw.dosage || raw.dosageForm || dosageMatch?.[0] || "",
     dosageUnit: raw.dosageUnit || "tabletka",
+    manufacturer: raw.manufacturer || "",
+    barcode: raw.barcode || "",
+    ikpuCode: raw.ikpuCode || "",
+    quantityInPack: Number(raw.quantityInPack) || 1,
+    categoryName: raw.category?.name || raw.categoryName || "",
     isPrescription: Boolean(raw.isPrescription ?? raw.requiresPrescription),
     imageUrl: raw.imageUrl || "",
+    showOnHome: Boolean(raw.showOnHome),
     categoryId: raw.categoryId || raw.category?.id || "",
     price: Number(raw.price) || 0,
     stockCount: Number(raw.stockCount ?? raw.available ?? 0),
+    available: Number(raw.available ?? raw.stockCount ?? 0),
     branchId,
   };
 }
@@ -40,8 +153,13 @@ function normalizeOrder(raw) {
     branchId: raw.branchId || raw.branch?.id,
     branch: raw.branch,
     items: raw.items || [],
-    totalAmount: Number(raw.totalAmount ?? raw.subtotal ?? 0),
+    subtotal: Number(raw.subtotal || 0),
+    deliveryFee: Number(raw.deliveryFee || 0),
+    discount: Number(raw.discount || 0),
+    totalAmount: Number(raw.totalAmount ?? (Number(raw.subtotal || 0) + Number(raw.deliveryFee || 0))),
     status: raw.status,
+    deliveryType: raw.deliveryType || "DELIVERY",
+    promoCode: raw.promoCode || null,
     deliveryAddress: raw.deliveryAddress,
     prescriptionUrl: raw.prescription?.fileUrl || raw.prescriptionUrl || null,
     prescription: raw.prescription || null,
@@ -51,10 +169,21 @@ function normalizeOrder(raw) {
     customerName: raw.customerName,
     customerPhone: raw.customerPhone,
     payment: raw.payment,
+    notes: raw.notes || "",
+    pharmacistNote: raw.pharmacistNote || "",
+    adminNote: raw.adminNote || "",
+    refundStatus: raw.refundStatus || "NONE",
+    history: raw.history || [],
+    allowedStatuses: raw.allowedStatuses || [],
+    undoUntil: raw.undoUntil || null,
+    statusChangedAt: raw.statusChangedAt || null,
   };
 }
 
+const useMock = import.meta.env.VITE_USE_MOCKS === "true";
+
 async function withFallback(request, fallback, { treatEmptyAsMiss = false } = {}) {
+  if (!useMock) return request();
   try {
     const data = await request();
     if (data == null) return fallback();
@@ -65,35 +194,98 @@ async function withFallback(request, fallback, { treatEmptyAsMiss = false } = {}
   }
 }
 
+function attachBranchCoords(branch) {
+  const mock = MOCK_BRANCHES.find(
+    (item) =>
+      item.id === branch.id ||
+      item.district === branch.district ||
+      item.name === branch.name
+  );
+
+  return {
+    ...branch,
+    latitude: Number(branch.latitude ?? mock?.latitude) || null,
+    longitude: Number(branch.longitude ?? mock?.longitude) || null,
+    shortLabel: branch.shortLabel || mock?.shortLabel || branch.district,
+    city: branch.city || mock?.city || "Toshkent",
+  };
+}
+
 export async function fetchBranches() {
-  return withFallback(
+  const branches = await withFallback(
     async () => unwrap(await client.get("/branches")),
     () => MOCK_BRANCHES.filter((branch) => branch.isActive),
     { treatEmptyAsMiss: true }
   );
+
+  return (branches || []).map(attachBranchCoords);
 }
 
-export async function fetchCategories() {
+export async function fetchCategories(branchId = "") {
   return withFallback(
-    async () => unwrap(await client.get("/medicines/categories")),
-    () => getMockCategories(),
-    { treatEmptyAsMiss: true }
-  );
-}
-
-export async function fetchMedicines({ branchId, search = "", categoryId = "" } = {}) {
-  return withFallback(
-    async () => {
-      const data = unwrap(
-        await client.get("/medicines", {
-          params: { branchId, search, categoryId },
+    async () =>
+      unwrap(
+        await client.get("/medicines/categories", {
+          params: branchId ? { branchId } : {},
         })
-      );
-      return (data || []).map((item) => normalizeMedicine(item, branchId));
-    },
-    () => getMockMedicines(branchId, search, categoryId),
-    { treatEmptyAsMiss: true }
+      ),
+    () => getMockCategories()
   );
+}
+
+export async function getMedicines({
+  branchId,
+  search = "",
+  categoryId = "",
+  inStockOnly = false,
+  featured = false,
+  page = 1,
+  limit = 5000,
+  sort = "default",
+  signal,
+} = {}) {
+  const data = unwrap(
+    await client.get("/medicines", {
+      params: {
+        ...(branchId ? { branchId } : {}),
+        search,
+        categoryId,
+        page,
+        limit,
+        sort,
+        inStockOnly: inStockOnly ? "true" : "false",
+        ...(featured ? { featured: "true" } : {}),
+      },
+      timeout: 20000,
+      signal,
+    })
+  );
+  const rows = Array.isArray(data) ? data : data?.items || [];
+  const resolvedBranchId = branchId || data?.branchId || "";
+  const items = rows.map((item) => normalizeMedicine(item, resolvedBranchId));
+  items.suggestion = typeof data?.suggestion === "string" ? data.suggestion : "";
+  items.popular = Array.isArray(data?.popular)
+    ? data.popular.map((item) => normalizeMedicine(item, resolvedBranchId))
+    : [];
+  items.categories = Array.isArray(data?.categories) ? data.categories : [];
+  return items;
+}
+
+export async function setMedicineHome(medicineId, showOnHome) {
+  const response = await client.patch(`/admin/medicines/${medicineId}/home`, { showOnHome });
+  return unwrap(response);
+}
+
+export async function fetchShowcase(branchId) {
+  return unwrap(await client.get("/admin/medicines/home", { params: branchId ? { branchId } : {} }));
+}
+
+export async function reorderShowcase(ids) {
+  return unwrap(await client.patch("/admin/medicines/home/order", { ids }));
+}
+
+export async function fetchMedicines(params = {}) {
+  return getMedicines(params);
 }
 
 function unwrapOrderResult(data, payload) {
@@ -115,104 +307,56 @@ function unwrapOrderResult(data, payload) {
   };
 }
 
+export async function fetchCartAvailability(branchId, ids) {
+  const data = unwrap(await client.get("/medicines/availability", { params: { branchId, ids: ids.join(",") } }));
+  return Array.isArray(data) ? data : [];
+}
+
+export async function checkPromo(code, subtotal, branchId) {
+  return unwrap(await client.post("/orders/promo", { code, subtotal, branchId: branchId || null }, { audience: "customer" }));
+}
+
+export async function fetchAdminPromos() {
+  return unwrap(await client.get("/admin/promos"));
+}
+
+export async function createAdminPromo(payload) {
+  return unwrap(await client.post("/admin/promos", payload));
+}
+
+export async function updateAdminPromo(id, payload) {
+  return unwrap(await client.patch(`/admin/promos/${id}`, payload));
+}
+
+export async function setAdminPromoActive(id, active) {
+  return unwrap(await client.patch(`/admin/promos/${id}/active`, { active }));
+}
+
+export async function deleteAdminPromo(id) {
+  return unwrap(await client.delete(`/admin/promos/${id}`));
+}
+
 export async function createOrder(payload) {
-  return withFallback(
-    async () => unwrapOrderResult(unwrap(await client.post("/orders", payload)), payload),
-    () => {
-      const hasRx = payload.items.some(
-        (item) => item.isPrescription || item.requiresPrescription
-      );
-      const prescriptionUrl = payload.prescriptionUrl || payload.prescription?.fileUrl;
-      if (hasRx && !prescriptionUrl) {
-        throw new Error("Retseptli dorilar uchun retsept yuklash majburiy");
-      }
-
-      const totalAmount = payload.items.reduce(
-        (sum, item) => sum + (item.unitPrice || 0) * item.quantity,
-        0
-      );
-
-      const user = {
-        id: `user-${String(payload.phone).replace(/\D/g, "")}`,
-        name: payload.fullName,
-        phone: payload.phone,
-        role: "CUSTOMER",
-        createdAt: new Date().toISOString(),
-      };
-
-      const order = normalizeOrder({
-        id: `order-${Date.now()}`,
-        orderNumber: `VT-MOCK-${Date.now().toString(36).toUpperCase()}`,
-        status: hasRx ? "PENDING_PRESCRIPTION" : "WAITING_PAYMENT",
-        customerName: payload.fullName,
-        customerPhone: payload.phone,
-        deliveryAddress: payload.deliveryAddress,
-        lat: payload.lat,
-        lng: payload.lng,
-        street: payload.street,
-        apartment: payload.apartment,
-        floor: payload.floor,
-        intercom: payload.intercom,
-        subtotal: totalAmount,
-        reservedUntil: new Date(Date.now() + 10 * 1000).toISOString(),
-        createdAt: new Date().toISOString(),
-        branchId: payload.branchId,
-        userId: user.id,
-        branch: MOCK_BRANCHES.find((branch) => branch.id === payload.branchId),
-        items: payload.items.map((item, index) => ({
-          id: `item-${index}`,
-          ...item,
-        })),
-        prescription: prescriptionUrl
-          ? { fileUrl: prescriptionUrl, fileName: payload.prescription?.fileName || "retsept" }
-          : null,
-        cancelReason: null,
-        payment: {
-          id: `pay-${Date.now()}`,
-          amount: totalAmount,
-          provider: "MOCK",
-          status: "PENDING",
-        },
-      });
-
-      mockOrders.unshift(order);
-      return { order, user };
-    }
-  );
+  try {
+    return unwrapOrderResult(unwrap(await client.post("/orders", payload, { audience: "customer" })), payload);
+  } catch (error) {
+    const message =
+      error.response?.data?.error?.message || "Buyurtma yaratilmadi. Qayta urinib ko'ring.";
+    const wrapped = new Error(message);
+    wrapped.response = error.response;
+    throw wrapped;
+  }
 }
 
-export async function fetchOrders(branchId) {
-  return withFallback(
-    async () => {
-      const data = unwrap(await client.get("/orders", { params: { branchId } }));
-      return (data || []).map(normalizeOrder);
-    },
-    () =>
-      mockOrders.filter((order) => !branchId || order.branchId === branchId)
-  );
-}
-
-export async function updateOrderStatus(orderId, status, cancelReason = "") {
-  return withFallback(
-    async () =>
-      normalizeOrder(
-        unwrap(
-          await client.patch(`/orders/${orderId}/status`, { status, cancelReason })
-        )
-      ),
-    () => {
-      const order = mockOrders.find((item) => item.id === orderId);
-      if (!order) throw new Error("Buyurtma topilmadi");
-      order.status = status;
-      order.cancelReason = cancelReason || null;
-      if (status === "CANCELLED" && order.prescription) {
-        order.prescription.status = "REJECTED";
-      }
-      if (status === "WAITING_PAYMENT" && order.prescription) {
-        order.prescription.status = "APPROVED";
-      }
-      return { ...order };
-    }
+export async function cancelCustomerOrder(orderId, cancelReason) {
+  return normalizeOrder(
+    unwrap(
+      await client.patch(
+        `/orders/${orderId}/status`,
+        { status: "CANCELLED", cancelReason },
+        { audience: "customer" }
+      )
+    )
   );
 }
 
@@ -230,21 +374,524 @@ export async function saveCustomerAddress(payload) {
   );
 }
 
-export async function mockPay(orderId) {
-  return withFallback(
-    async () => normalizeOrder(unwrap(await client.post(`/orders/${orderId}/mock-pay`))),
-    () => {
-      const order = mockOrders.find((item) => item.id === orderId);
-      if (!order) throw new Error("Buyurtma topilmadi");
-      if (order.status === "PAID") return { ...order };
-      if (!["WAITING_PAYMENT", "PENDING_BRANCH"].includes(order.status)) {
-        throw new Error("To'lov faqat tasdiqlangan buyurtmalar uchun");
-      }
-      order.status = "PAID";
-      if (order.payment) order.payment.status = "COMPLETED";
-      return { ...order };
-    }
+export async function fetchNotifications() {
+  return unwrap(await client.get("/customers/notifications", { audience: "customer" }));
+}
+
+export async function markNotificationsRead(id) {
+  return unwrap(
+    await client.post("/customers/notifications/read", id ? { id } : {}, { audience: "customer" })
   );
+}
+
+export async function fetchCustomerProfile(phone) {
+  const response = await client.get("/customers/profile", { params: { phone } });
+  return unwrap(response);
+}
+
+export async function updateCustomerProfile(payload) {
+  const response = await client.put("/customers/profile", payload);
+  return unwrap(response);
+}
+
+export async function fetchCustomerOrders(phone) {
+  return withFallback(
+    async () => {
+      const data = unwrap(await client.get("/customers/orders", { params: { phone } }));
+      return (data?.orders || []).map((order) => normalizeOrder(order));
+    },
+    () => []
+  );
+}
+
+export async function fetchCustomerPrescriptions(phone) {
+  return withFallback(
+    async () => {
+      const data = unwrap(await client.get("/customers/prescriptions", { params: { phone } }));
+      return data?.prescriptions || [];
+    },
+    () => []
+  );
+}
+
+function cleanParams(params) {
+  return Object.fromEntries(
+    Object.entries(params).filter(([, value]) => value !== "" && value != null)
+  );
+}
+
+export async function fetchBranchAdminOrders(branchId, params = {}) {
+  const data = unwrap(
+    await client.get("/branch-admin/orders", { params: cleanParams({ branchId, ...params }) })
+  );
+  return {
+    branch: data?.branch || null,
+    total: data?.total || 0,
+    page: data?.page || 1,
+    hasMore: Boolean(data?.hasMore),
+    counts: data?.counts || {},
+    orders: (data?.orders || []).map(normalizeOrder),
+  };
+}
+
+export async function fetchBranchOrder(orderId) {
+  return normalizeOrder(unwrap(await client.get(`/branch-admin/orders/${orderId}`)));
+}
+
+export async function updateBranchOrderStatus(orderId, payload) {
+  return normalizeOrder(unwrap(await client.patch(`/branch-admin/orders/${orderId}/status`, payload)));
+}
+
+export async function undoOrderStatus(orderId) {
+  return normalizeOrder(unwrap(await client.post(`/branch-admin/orders/${orderId}/undo`)));
+}
+
+export async function markCashReceived(orderId) {
+  return normalizeOrder(unwrap(await client.patch(`/branch-admin/orders/${orderId}/cash`)));
+}
+
+export async function markRefundDone(orderId, note, extra = {}) {
+  const payload = typeof note === "object" && note ? note : { note, ...extra };
+  const audience = payload.audience;
+  return normalizeOrder(
+    unwrap(
+      await client.patch(
+        `/branch-admin/orders/${orderId}/refund`,
+        { status: "DONE", note: payload.note, transactionId: payload.transactionId },
+        audience ? { audience } : {}
+      )
+    )
+  );
+}
+
+export async function savePharmacistNote(orderId, pharmacistNote, audience) {
+  return normalizeOrder(
+    unwrap(
+      await client.patch(
+        `/branch-admin/orders/${orderId}/note`,
+        { pharmacistNote },
+        audience ? { audience } : {}
+      )
+    )
+  );
+}
+
+export async function saveAdminNote(orderId, adminNote) {
+  return normalizeOrder(
+    unwrap(await client.patch(`/orders/${orderId}/admin-note`, { adminNote }, { audience: "admin" }))
+  );
+}
+
+export async function verifyPrescription(orderId, payload, audience) {
+  return normalizeOrder(
+    unwrap(
+      await client.patch(
+        `/branch-admin/orders/${orderId}/verify-prescription`,
+        payload,
+        audience ? { audience } : {}
+      )
+    )
+  );
+}
+
+export async function fetchAdminBranches() {
+  return unwrap(await client.get("/admin/branches"));
+}
+
+export async function fetchAdminDashboard({ from, to, branchId } = {}) {
+  return unwrap(await client.get("/admin/dashboard", { params: cleanParams({ from, to, branchId }), audience: "admin" }));
+}
+
+export async function downloadAdminReport({ kind, format, from, to, branchId }) {
+  try {
+    const response = await client.get(`/admin/reports/${kind}`, {
+      params: cleanParams({ format, from, to, branchId }),
+      audience: "admin",
+      responseType: "blob",
+    });
+    const blob = response.data;
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const match = /filename="([^"]+)"/.exec(response.headers?.["content-disposition"] || "");
+    link.href = url;
+    link.download = match?.[1] || `vita24-${kind}.${format}`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  } catch (error) {
+    if (error.response?.data instanceof Blob) {
+      const text = await error.response.data.text();
+      try {
+        error.response.data = JSON.parse(text);
+      } catch {
+        /* blob qoladi */
+      }
+    }
+    throw error;
+  }
+}
+
+export async function createAdminBranch(payload) {
+  return unwrap(await client.post("/admin/branches", payload));
+}
+
+export async function updateAdminBranch(branchId, payload) {
+  return unwrap(await client.patch(`/admin/branches/${branchId}`, payload));
+}
+
+export async function toggleAdminBranch(branchId) {
+  return unwrap(await client.patch(`/admin/branches/${branchId}/toggle`));
+}
+
+export async function deleteAdminBranch(branchId) {
+  return unwrap(await client.delete(`/admin/branches/${branchId}`));
+}
+
+export async function archiveAdminBranch(branchId) {
+  return unwrap(await client.post(`/admin/branches/${branchId}/archive`, { confirm: true }));
+}
+
+export async function unarchiveAdminBranch(branchId) {
+  return unwrap(await client.post(`/admin/branches/${branchId}/unarchive`));
+}
+
+export async function fetchPublicSettings() {
+  return unwrap(await client.get("/settings"));
+}
+
+export async function fetchShopSettings() {
+  return unwrap(await client.get("/admin/shop-settings"));
+}
+
+export async function saveShopSettings(payload) {
+  return unwrap(await client.patch("/admin/shop-settings", payload));
+}
+
+export async function fetchLekkoSettings() {
+  return unwrap(await client.get("/admin/lekko/settings"));
+}
+
+export async function saveLekkoSettings(intervalMinutes) {
+  return unwrap(await client.patch("/admin/lekko/settings", { intervalMinutes }));
+}
+
+export async function fetchLekkoLogs(params = {}) {
+  return unwrap(await client.get("/admin/lekko/logs", { params }));
+}
+
+export async function checkAdminLekkoKey(branchId) {
+  return unwrap(await client.post(`/admin/lekko/${branchId}/check`, {}, { timeout: 30000 }));
+}
+
+export async function syncAdminLekko(branchId) {
+  return unwrap(await client.post(`/admin/lekko/${branchId}/sync`, {}, { timeout: 180000 }));
+}
+
+export async function clearAdminLekkoKey(branchId) {
+  return unwrap(await client.delete(`/admin/branches/${branchId}/lekko-key`, { data: { confirm: true } }));
+}
+
+export async function fetchAdminSessions() {
+  return unwrap(await client.get("/auth/sessions", { audience: "admin" }));
+}
+
+export async function revokeAdminSession(sessionId) {
+  return unwrap(await client.delete(`/auth/sessions/${sessionId}`, { audience: "admin" }));
+}
+
+export async function revokeAllAdminSessions() {
+  return unwrap(await client.delete("/auth/sessions", { audience: "admin" }));
+}
+
+export async function logoutAdminSession() {
+  try {
+    await client.post("/auth/logout", {}, { audience: "admin" });
+  } catch {
+    /* local sessiya baribir yopiladi */
+  }
+}
+
+export async function setupAdmin2fa() {
+  return unwrap(await client.post("/auth/2fa/setup", {}, { audience: "admin" }));
+}
+
+export async function enableAdmin2fa(code) {
+  return unwrap(await client.post("/auth/2fa/enable", { code }, { audience: "admin" }));
+}
+
+export async function disableAdmin2fa({ password, code }) {
+  return unwrap(await client.post("/auth/2fa/disable", { password, code }, { audience: "admin" }));
+}
+
+export async function fetchAdminCustomers() {
+  return unwrap(await client.get("/admin/customers"));
+}
+
+export async function fetchAdminCustomer(userId) {
+  return unwrap(await client.get(`/admin/customers/${userId}`));
+}
+
+export async function setCustomerBlock(userId, payload) {
+  return unwrap(await client.patch(`/admin/customers/${userId}/block`, payload));
+}
+
+export async function fetchPharmacists() {
+  return unwrap(await client.get("/admin/pharmacists"));
+}
+
+export async function createPharmacist(payload) {
+  return unwrap(await client.post("/admin/pharmacists", payload));
+}
+
+export async function updatePharmacist(userId, payload) {
+  return unwrap(await client.patch(`/admin/pharmacists/${userId}`, payload));
+}
+
+export async function deletePharmacist(userId) {
+  return unwrap(await client.delete(`/admin/pharmacists/${userId}`));
+}
+
+export async function setPharmacistStatus(userId, status) {
+  return unwrap(await client.patch(`/admin/pharmacists/${userId}/status`, { status }));
+}
+
+export async function changeOwnPassword(payload, audience) {
+  return unwrap(await client.post("/auth/change-password", payload, { audience }));
+}
+
+export async function fetchBranchStock(branchId, params = {}) {
+  const search = typeof params === "string" ? params : params.search || "";
+  const extra = typeof params === "string" ? {} : { ...params };
+  const audience = extra.audience;
+  delete extra.audience;
+  delete extra.search;
+  const data = unwrap(
+    await client.get("/branch-admin/stock", {
+      params: cleanParams({ branchId, search, ...extra }),
+      ...(audience ? { audience } : {}),
+    })
+  );
+  return {
+    branch: data?.branch || null,
+    total: data?.total || 0,
+    page: data?.page || 1,
+    hasMore: Boolean(data?.hasMore),
+    lowStockCount: data?.lowStockCount || 0,
+    outCount: data?.outCount || 0,
+    rxCount: data?.rxCount || 0,
+    stocks: data?.stocks || [],
+  };
+}
+
+export async function updateBranchStock(stockId, payload) {
+  const body = typeof payload === "number" ? { stockCount: payload, reason: "inventarizatsiya" } : payload;
+  return unwrap(await client.patch(`/branch-admin/stock/${stockId}`, body));
+}
+
+export async function bulkUpdateBranchStock(items) {
+  return unwrap(await client.patch("/branch-admin/stock/bulk", { items }));
+}
+
+export async function fetchStockMovements(stockId) {
+  return unwrap(await client.get(`/branch-admin/stock/${stockId}/movements`));
+}
+
+export async function fetchPanelSummary(branchId) {
+  return unwrap(await client.get("/branch-admin/summary", { params: { branchId } }));
+}
+
+export async function fetchPanelStats(branchId, range = "today") {
+  return unwrap(await client.get("/branch-admin/stats", { params: { branchId, range } }));
+}
+
+export async function fetchShiftReport(branchId, since) {
+  return unwrap(await client.get("/branch-admin/shift", { params: { branchId, since } }));
+}
+
+export async function setBranchOpen(branchId, isOpen) {
+  return unwrap(await client.patch("/branch-admin/branch", { branchId, isOpen }));
+}
+
+export async function syncLekkoStock(branchId, { fullSync = false } = {}) {
+  const response = await client.post(
+    "/branch-admin/sync-lekko",
+    { branchId, fullSync },
+    { timeout: 120000 }
+  );
+  const data = unwrap(response) || {};
+  return {
+    ...data,
+    message:
+      response.data?.message ||
+      "Sinxronizatsiya orqa fonda boshlandi. 1-2 daqiqadan so'ng yangilang",
+  };
+}
+
+export async function uploadMedicineImage(medicineId, file, onProgress) {
+  const formData = new FormData();
+  formData.append("image", file);
+  const response = await client.patch(`/admin/medicines/${medicineId}/image`, formData, {
+    timeout: 30000,
+    onUploadProgress: (event) => {
+      if (!onProgress || !event.total) return;
+      onProgress(Math.min(100, Math.round((event.loaded / event.total) * 100)));
+    },
+  });
+  return unwrap(response);
+}
+
+export async function fetchAdminCatalog(params) {
+  return unwrap(await client.get("/admin/medicines", { params }));
+}
+
+export async function createAdminMedicine(payload) {
+  return unwrap(await client.post("/admin/medicines", payload));
+}
+
+export async function updateAdminMedicine(id, payload) {
+  return unwrap(await client.patch(`/admin/medicines/${id}`, payload));
+}
+
+export async function setAdminMedicineActive(id, isActive) {
+  return unwrap(await client.patch(`/admin/medicines/${id}/active`, { isActive }));
+}
+
+export async function fetchAdminCategories() {
+  return unwrap(await client.get("/admin/medicines/categories"));
+}
+
+export async function createAdminCategory(payload) {
+  return unwrap(await client.post("/admin/medicines/categories", payload));
+}
+
+export async function updateAdminCategory(id, payload) {
+  return unwrap(await client.patch(`/admin/medicines/categories/${id}`, payload));
+}
+
+export async function deleteAdminCategory(id) {
+  return unwrap(await client.delete(`/admin/medicines/categories/${id}`));
+}
+
+export async function previewMedicineImport(file) {
+  const formData = new FormData();
+  formData.append("file", file);
+  return unwrap(await client.post("/admin/medicines/import/preview", formData));
+}
+
+export async function confirmMedicineImport(rows) {
+  return unwrap(await client.post("/admin/medicines/import/confirm", { rows }));
+}
+
+export async function downloadMedicineExport(format) {
+  const response = await client.get("/admin/medicines/export", { params: { format }, responseType: "blob" });
+  const url = URL.createObjectURL(response.data);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `dorilar.${format}`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+export async function fetchNetworkStock(params) {
+  return unwrap(await client.get("/admin/stock/network", { params }));
+}
+
+export async function fetchAdminStockMovements(params) {
+  return unwrap(await client.get("/admin/stock/movements", { params }));
+}
+
+export async function mockPay(orderId) {
+  return normalizeOrder(
+    unwrap(await client.post(`/orders/${orderId}/mock-pay`, {}, { audience: "customer" }))
+  );
+}
+
+export async function requestCustomerOtp(phone) {
+  return unwrap(await client.post("/auth/otp/request", { phone }));
+}
+
+export async function verifyCustomerOtp({ phone, code, fullName }) {
+  return unwrap(await client.post("/auth/otp/verify", { phone, code, fullName }));
+}
+
+export async function fetchPrescriptionLink(prescriptionId, audience = "admin") {
+  return unwrap(await client.get(`/prescriptions/${prescriptionId}/link`, { audience }));
+}
+
+export async function loadPrescriptionObjectUrl(prescriptionId, audience = "customer") {
+  const response = await client.get(`/prescriptions/${prescriptionId}/file`, {
+    responseType: "blob",
+    audience,
+  });
+  const blob = response.data;
+  return { url: URL.createObjectURL(blob), type: blob.type || "" };
+}
+
+export async function replaceOrderPrescription(orderId, payload) {
+  return normalizeOrder(
+    unwrap(await client.post(`/orders/${orderId}/prescription`, payload, { audience: "customer" }))
+  );
+}
+
+export async function uploadPrescription(file) {
+  const formData = new FormData();
+  formData.append("file", file);
+  return unwrap(
+    await client.post("/prescriptions/upload", formData, { audience: "customer", timeout: 30000 })
+  );
+}
+
+export async function fetchMedicineBySlug(slug, branchId) {
+  const data = unwrap(
+    await client.get(`/medicines/${encodeURIComponent(slug)}`, {
+      params: branchId ? { branchId } : {},
+    })
+  );
+  return data;
+}
+
+export async function fetchStaffOrders({ audience = "admin", ...query } = {}) {
+  const data = unwrap(await client.get("/orders", { params: cleanParams(query), audience }));
+  const items = Array.isArray(data) ? data : data?.items || [];
+  return {
+    items: items.map(normalizeOrder),
+    total: Array.isArray(data) ? items.length : Number(data?.total || 0),
+    page: Number(data?.page || 1),
+    limit: Number(data?.limit || items.length || 20),
+  };
+}
+
+export async function fetchStaffOrder(orderId) {
+  return normalizeOrder(unwrap(await client.get(`/orders/${orderId}`, { audience: "admin" })));
+}
+
+export async function fetchAdminAudit(params = {}) {
+  return unwrap(await client.get("/admin/audit", { params: { page: 1, limit: 20, ...params }, audience: "admin" }));
+}
+
+export async function staffUpdateOrderStatus(orderId, status, cancelReason = "", audience = "admin") {
+  return normalizeOrder(
+    unwrap(
+      await client.patch(
+        `/orders/${orderId}/status`,
+        { status, reason: cancelReason, cancelReason },
+        { audience }
+      )
+    )
+  );
+}
+
+export async function staffLogin({ phone, password, totp }) {
+  const data = unwrap(await client.post("/auth/login", { phone, password, ...(totp ? { totp } : {}) }));
+  return {
+    token: data?.token || null,
+    refreshToken: data?.refreshToken || null,
+    requires2fa: Boolean(data?.requires2fa),
+    tokenType: data?.tokenType || "Bearer",
+    expiresIn: data?.expiresIn || null,
+    user: data?.user || null,
+  };
 }
 
 export default client;

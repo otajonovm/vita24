@@ -1,215 +1,345 @@
-import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, FileText, XCircle } from "lucide-react";
-import { formatSom, STATUS_LABELS } from "../lib/format";
-import { fetchMedicines, fetchOrders, updateOrderStatus } from "../services/api";
+import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import OrderDetailDrawer from "../components/branch-admin/OrderDetailDrawer";
+import OrdersTab from "../components/branch-admin/OrdersTab";
+import PanelHeader from "../components/branch-admin/PanelHeader";
+import PrescriptionReviewModal from "../components/branch-admin/PrescriptionReviewModal";
+import StaffLogin from "../components/branch-admin/StaffLogin";
+import PasswordChangeForm from "../components/auth/PasswordChangeForm";
+import StatsTab from "../components/branch-admin/StatsTab";
+import StockTab from "../components/branch-admin/StockTab";
+import { PanelToast, apiError, beep } from "../components/branch-admin/panelShared";
+import { fetchBranches, fetchPanelSummary, setBranchOpen, verifyPrescription } from "../services/api";
 import { useBranchStore } from "../store/useBranchStore";
+import { useAdminAuth, usePharmacistAuth } from "../store/useAuthStore";
 
 export default function BranchAdminPage() {
-  const branch = useBranchStore((state) => state.branch);
-  const openModal = useBranchStore((state) => state.openModal);
-  const [orders, setOrders] = useState([]);
-  const [stock, setStock] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [busyId, setBusyId] = useState("");
-  const [error, setError] = useState("");
-  const [rejectId, setRejectId] = useState("");
-  const [rejectReason, setRejectReason] = useState("");
-  const [preview, setPreview] = useState(null);
+  const { t } = useTranslation();
+  const pharmacistUser = usePharmacistAuth((state) => state.user);
+  const pharmacistToken = usePharmacistAuth((state) => state.token);
+  const pharmacistLogout = usePharmacistAuth((state) => state.logout);
+  const adminUser = useAdminAuth((state) => state.user);
+  const adminToken = useAdminAuth((state) => state.token);
+  const adminLogout = useAdminAuth((state) => state.logout);
 
-  const load = async () => {
-    if (!branch) return;
-    setLoading(true);
-    setError("");
-    try {
-      const [orderData, stockData] = await Promise.all([
-        fetchOrders(branch.id),
-        fetchMedicines({ branchId: branch.id }),
-      ]);
-      setOrders(orderData);
-      setStock(stockData);
-    } catch (err) {
-      setError(err.message || "Ma'lumot olinmadi");
-    } finally {
-      setLoading(false);
+  const isPharmacist = pharmacistUser?.role === "BRANCH_ADMIN" && Boolean(pharmacistToken);
+  const isSuperViewer = !isPharmacist && adminUser?.role === "SUPER_ADMIN" && Boolean(adminToken);
+  const user = isPharmacist ? pharmacistUser : isSuperViewer ? adminUser : pharmacistUser;
+  const token = isPharmacist ? pharmacistToken : isSuperViewer ? adminToken : pharmacistToken;
+  const logout = isPharmacist ? pharmacistLogout : isSuperViewer ? adminLogout : pharmacistLogout;
+  const readOnly = Boolean(isSuperViewer);
+
+  const customerBranch = useBranchStore((state) => state.branch);
+  const [tab, setTab] = useState(() => sessionStorage.getItem("vita24-ph-tab") || "orders");
+  const [toast, setToast] = useState("");
+  const [summary, setSummary] = useState(null);
+  const [branch, setBranch] = useState(null);
+  const [branches, setBranches] = useState([]);
+  const [sound, setSound] = useState(() => localStorage.getItem("vita24-pharmacist-sound") !== "0");
+  const [pulse, setPulse] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const [openBusy, setOpenBusy] = useState(false);
+  const [review, setReview] = useState(null);
+  const [reviewOrders, setReviewOrders] = useState([]);
+  const [drawerId, setDrawerId] = useState("");
+  const [busyReview, setBusyReview] = useState(false);
+  const [unseen, setUnseen] = useState(0);
+  const [link, setLink] = useState("retrying");
+  const [focus, setFocus] = useState(null);
+  const [stockFocus, setStockFocus] = useState("");
+  const [confirmClose, setConfirmClose] = useState(false);
+  const toastTimer = useRef(null);
+
+  const branchId = isPharmacist ? user?.branchId : branch?.id;
+
+  function showToast(message) {
+    setToast(message);
+    clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(""), 3500);
+  }
+
+  useEffect(() => () => clearTimeout(toastTimer.current), []);
+  useEffect(() => {
+    sessionStorage.setItem("vita24-ph-tab", tab);
+    setToast("");
+  }, [tab]);
+  useEffect(() => {
+    if (!localStorage.getItem("vita24-shift-start")) {
+      localStorage.setItem("vita24-shift-start", new Date().toISOString());
     }
-  };
+  }, [token]);
+  useEffect(() => {
+    document.title = unseen > 0 ? `(${unseen}) Vita24 Farmatsevt` : "Vita24 Farmatsevt";
+    return () => {
+      document.title = "Vita24";
+    };
+  }, [unseen]);
 
   useEffect(() => {
-    load();
-  }, [branch]);
+    if (!isSuperViewer) return undefined;
+    fetchBranches()
+      .then((list) => {
+        setBranches(list || []);
+        setBranch((current) => current || (list || []).find((item) => item.id === customerBranch?.id) || list?.[0] || null);
+      })
+      .catch(() => {});
+    return undefined;
+  }, [isSuperViewer]);
 
-  const pending = useMemo(
-    () => orders.filter((order) => ["PENDING_PRESCRIPTION", "PENDING_BRANCH"].includes(order.status)),
-    [orders]
-  );
+  useEffect(() => {
+    if (!token || !branchId) return undefined;
+    let active = true;
+    fetchPanelSummary(branchId)
+      .then((data) => {
+        if (!active) return;
+        setSummary(data);
+        if (isPharmacist) setBranch(data.branch);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [token, branchId, pulse, isPharmacist]);
 
-  const handleStatus = async (orderId, status, cancelReason = "") => {
-    setBusyId(orderId);
-    try {
-      const updated = await updateOrderStatus(orderId, status, cancelReason);
-      setOrders((current) => current.map((order) => (order.id === orderId ? { ...order, ...updated } : order)));
-      setRejectId("");
-      setRejectReason("");
-    } catch (err) {
-      setError(err.response?.data?.error?.message || err.message || "Amal bajarilmadi");
-    } finally {
-      setBusyId("");
+  useEffect(() => {
+    if (!token || !branchId) return undefined;
+    let stopped = false;
+    let delay = 1000;
+    let controller = new AbortController();
+    let reconnects = 0;
+    async function stream() {
+      controller = new AbortController();
+      try {
+        const response = await fetch(`/api/branch-admin/events?branchId=${encodeURIComponent(branchId)}`, {
+          headers: { Authorization: `Bearer ${token}`, Accept: "text/event-stream" },
+          signal: controller.signal,
+        });
+        if (!response.ok || !response.body) throw new Error("stream");
+        setLink("live");
+        if (reconnects > 0) setPulse((value) => value + 1);
+        delay = 1000;
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        while (!stopped) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const parts = buffer.split("\n\n");
+          buffer = parts.pop() || "";
+          if (parts.some((part) => /event:\s*(order(?:\.updated)?|branch)/.test(part))) setPulse((value) => value + 1);
+        }
+        if (!stopped) throw new Error("ended");
+      } catch {
+        if (stopped) return;
+        setLink("retrying");
+        reconnects += 1;
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        delay = Math.min(delay * 2, 30000);
+        if (!stopped) stream();
+      }
     }
-  };
+    stream();
+    return () => {
+      stopped = true;
+      controller.abort();
+    };
+  }, [token, branchId]);
+
+  function onNewOrders(orders) {
+    setUnseen((count) => count + orders.length);
+    if (sound) beep();
+    if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+      orders.forEach((order) => {
+        new Notification(t("panel.newOrder", "Yangi buyurtma"), { body: order.orderNumber });
+      });
+    }
+  }
+
+  async function toggleSound() {
+    const next = !sound;
+    setSound(next);
+    localStorage.setItem("vita24-pharmacist-sound", next ? "1" : "0");
+    if (next && typeof Notification !== "undefined" && Notification.permission === "default") {
+      Notification.requestPermission().catch(() => {});
+    }
+  }
+
+  function askToggleOpen() {
+    if (readOnly || !branch) return;
+    if (branch.isOpen !== false) {
+      setConfirmClose(true);
+      return;
+    }
+    toggleOpen();
+  }
+
+  async function toggleOpen() {
+    if (readOnly || !branch) return;
+    setConfirmClose(false);
+    setOpenBusy(true);
+    try {
+      const updated = await setBranchOpen(branch.id, branch.isOpen === false);
+      setBranch(updated);
+      showToast(updated.isOpen ? t("panel.opened", "Filial ochiq") : t("panel.nowClosed", "Filial yopiq"));
+    } catch (error) {
+      showToast(apiError(error, t("panel.actionFailed", "Amal bajarilmadi")));
+    } finally {
+      setOpenBusy(false);
+    }
+  }
+
+  async function approve(order) {
+    if (readOnly) return;
+    setBusyReview(true);
+    try {
+      await verifyPrescription(order.id, { action: "APPROVE" });
+      showToast("Retsept tasdiqlandi");
+      setReview(null);
+      setPulse((value) => value + 1);
+    } catch (error) {
+      showToast(apiError(error, t("panel.actionFailed", "Amal bajarilmadi")));
+    } finally {
+      setBusyReview(false);
+    }
+  }
+
+  async function reject(order, payload) {
+    if (readOnly) return;
+    setBusyReview(true);
+    try {
+      await verifyPrescription(order.id, { action: "REJECT", rejectReasons: payload.rejectReasons, rejectNote: payload.rejectNote });
+      showToast(t("panel.rejected", "Retsept rad etilgan"));
+      setReview(null);
+      setPulse((value) => value + 1);
+    } catch (error) {
+      showToast(apiError(error, t("panel.actionFailed", "Amal bajarilmadi")));
+    } finally {
+      setBusyReview(false);
+    }
+  }
+
+  const isStaff = Boolean(token && (isPharmacist || isSuperViewer));
+  if (!isStaff) return <StaffLogin />;
+  if (isPharmacist && user?.mustChangePassword) {
+    return (
+      <PasswordChangeForm
+        audience="pharmacist"
+        onChanged={() => usePharmacistAuth.getState().setSession({ ...user, mustChangePassword: false })}
+      />
+    );
+  }
 
   return (
-    <section className="grid gap-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-wide text-brand">Farmatsevt paneli</p>
-          <h1 className="text-xl font-extrabold md:text-3xl">{branch ? branch.name : "Filial tanlanmagan"}</h1>
-          <p className="text-sm text-slate-500">Navbatda {pending.length} ta buyurtma.</p>
-        </div>
-        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-          <button type="button" onClick={openModal} className="h-12 rounded-xl bg-brand-soft px-4 font-bold text-brand sm:h-11">
-            Filialni almashtirish
-          </button>
-          <button type="button" onClick={load} className="h-12 rounded-xl bg-brand px-4 font-bold text-white sm:h-11">
-            Yangilash
-          </button>
-        </div>
-      </div>
-
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      {loading && <p className="text-sm text-slate-500">Yuklanmoqda...</p>}
-
-      <div className="grid gap-4">
-        {orders.map((order) => {
-          const active = ["PENDING_PRESCRIPTION", "PENDING_BRANCH"].includes(order.status);
-          const rxUrl = order.prescriptionUrl || order.prescription?.fileUrl;
-          return (
-            <article key={order.id} className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
-              <header className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  <strong>{order.orderNumber}</strong>
-                  <span className="rounded-full bg-brand-soft px-2 py-1 text-xs font-semibold text-brand">
-                    {STATUS_LABELS[order.status] || order.status}
-                  </span>
-                </div>
-                <small className="text-slate-500">
-                  {new Date(order.createdAt || Date.now()).toLocaleString("uz-UZ")}
-                </small>
-              </header>
-              <p className="mt-2 text-sm">
-                {order.customerName} · {order.customerPhone}
-              </p>
-              <p className="text-sm text-slate-500">{order.deliveryAddress}</p>
-              <ul className="mt-3 space-y-1 text-sm">
-                {(order.items || []).map((item) => (
-                  <li key={item.id || item.medicineId}>
-                    {item.name || item.medicineId} × {item.quantity}
-                    {item.isPrescription ? " · retseptli" : ""}
-                  </li>
-                ))}
-              </ul>
-
-              {rxUrl && (
-                <button
-                  type="button"
-                  onClick={() => setPreview(rxUrl)}
-                  className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-brand"
-                >
-                  <FileText className="h-4 w-4" />
-                  Retseptni kattalashtirish
-                </button>
-              )}
-
-              <footer className="mt-4 flex flex-wrap items-center justify-between gap-3">
-                <strong className="tabular-nums">{formatSom(order.totalAmount)}</strong>
-                {active && (
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      disabled={busyId === order.id}
-                      onClick={() => handleStatus(order.id, "WAITING_PAYMENT")}
-                      className="inline-flex h-12 items-center gap-1 rounded-xl bg-brand px-3 text-sm font-bold text-white md:h-10"
-                    >
-                      <CheckCircle2 className="h-4 w-4" />
-                      Tasdiqlash
-                    </button>
-                    <button
-                      type="button"
-                      disabled={busyId === order.id}
-                      onClick={() => setRejectId(order.id)}
-                      className="inline-flex h-12 items-center gap-1 rounded-xl bg-red-50 px-3 text-sm font-bold text-red-600 md:h-10"
-                    >
-                      <XCircle className="h-4 w-4" />
-                      Rad etish
-                    </button>
-                  </div>
-                )}
-              </footer>
-
-              {rejectId === order.id && (
-                <div className="mt-3 grid gap-2 rounded-xl bg-red-50 p-3">
-                  <textarea
-                    rows={2}
-                    value={rejectReason}
-                    onChange={(event) => setRejectReason(event.target.value)}
-                    placeholder="Rad etish izohi"
-                    className="rounded-xl border border-red-200 px-3 py-2 text-sm"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => handleStatus(order.id, "CANCELLED", rejectReason)}
-                    className="h-10 rounded-xl bg-red-600 text-sm font-bold text-white"
-                  >
-                    Izoh bilan rad etish
-                  </button>
-                </div>
-              )}
-            </article>
-          );
-        })}
-        {!loading && orders.length === 0 && (
-          <p className="rounded-2xl border border-dashed border-slate-200 bg-white p-6 text-slate-500">
-            Hozircha buyurtma yo'q.
-          </p>
-        )}
-      </div>
-
-      <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
-        <h2 className="text-xl font-extrabold">Filial ombori</h2>
-        <div className="mt-4 overflow-x-auto">
-          <table className="w-full min-w-[520px] text-left text-sm">
-            <thead className="text-xs uppercase tracking-wide text-slate-500">
-              <tr>
-                <th className="pb-2">Dori</th>
-                <th className="pb-2">Dozasi</th>
-                <th className="pb-2">Narx</th>
-                <th className="pb-2">Qoldiq</th>
-                <th className="pb-2">Retsept</th>
-              </tr>
-            </thead>
-            <tbody>
-              {stock.map((medicine) => (
-                <tr key={medicine.id} className="border-t border-slate-100">
-                  <td className="py-2 font-medium">{medicine.name}</td>
-                  <td>{medicine.dosage}</td>
-                  <td className="tabular-nums">{formatSom(medicine.price)}</td>
-                  <td>{medicine.stockCount}</td>
-                  <td>{medicine.isPrescription ? "Ha" : "Yo'q"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      {preview && (
-        <div
-          className="fixed inset-0 z-40 grid place-items-center bg-slate-900/60 p-6"
-          onClick={() => setPreview(null)}
-          role="presentation"
-        >
-          <img src={preview} alt="Retsept" className="max-h-[80vh] max-w-full rounded-2xl bg-white p-2" />
+    <div className="grid gap-4">
+      {readOnly && (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">
+          Filialni ko'rish (faqat ko'rish)
         </div>
       )}
-    </section>
+      {branch?.isOpen === false && !readOnly && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-red-600 px-4 py-3 text-sm font-semibold text-white">
+          <span>Filial yopiq. Mijozlar buyurtma bera olmaydi.</span>
+          <button type="button" onClick={toggleOpen} disabled={openBusy} className="h-9 rounded-xl bg-white px-3 text-sm font-bold text-red-700">Ochish</button>
+        </div>
+      )}
+      {branch?.isOpen === false && readOnly && (
+        <div className="rounded-2xl bg-red-600 px-4 py-3 text-sm font-semibold text-white">
+          Filial yopiq. Mijozlar buyurtma bera olmaydi.
+        </div>
+      )}
+      <PanelHeader
+        summary={summary}
+        tab={tab}
+        readOnly={readOnly}
+        onTab={(next) => {
+          setTab(next);
+          if (next === "orders") setUnseen(0);
+        }}
+        sound={sound}
+        onSound={toggleSound}
+        refreshing={refreshing}
+        onRefresh={() => {
+          setRefreshing(true);
+          setPulse((value) => value + 1);
+          setTimeout(() => setRefreshing(false), 600);
+        }}
+        onLogout={logout}
+        branch={branch}
+        branches={isSuperViewer ? branches : []}
+        onBranch={(id) => setBranch(branches.find((item) => item.id === id) || null)}
+        onToggleOpen={askToggleOpen}
+        openBusy={openBusy}
+        link={link}
+        onOpenQueue={() => {
+          setTab("orders");
+          setFocus({ status: "review", at: Date.now() });
+        }}
+        onOpenToday={() => {
+          const now = new Date();
+          const day = String(now.getDate()).padStart(2, "0");
+          const month = String(now.getMonth() + 1).padStart(2, "0");
+          const text = `${day}.${month}.${now.getFullYear()}`;
+          setTab("orders");
+          setFocus({ status: "", from: text, to: text, at: Date.now() });
+        }}
+        onOpenLowStock={() => {
+          setTab("stock");
+          setStockFocus(`low-${Date.now()}`);
+        }}
+      />
+      {confirmClose && !readOnly && (
+        <div className="fixed inset-0 z-40 grid place-items-center bg-slate-900/40 p-4" onClick={() => setConfirmClose(false)}>
+          <div className="grid max-w-sm gap-3 rounded-2xl bg-white p-4" onClick={(event) => event.stopPropagation()}>
+            <p className="text-sm">Filialni yopsangiz, mijozlar buyurtma bera olmaydi</p>
+            <div className="flex gap-2">
+              <button type="button" onClick={toggleOpen} className="h-10 rounded-xl bg-red-600 px-3 text-sm font-bold text-white">Yopish</button>
+              <button type="button" onClick={() => setConfirmClose(false)} className="h-10 rounded-xl px-3 text-sm">Bekor</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {tab === "orders" && (
+        <OrdersTab
+          branchId={branchId}
+          pulse={pulse}
+          focus={focus}
+          readOnly={readOnly}
+          onToast={showToast}
+          onNewOrders={onNewOrders}
+          onOrders={setReviewOrders}
+          onReview={(order) => {
+            setReview(order);
+            setUnseen(0);
+          }}
+          onOpen={(order) => setDrawerId(order.id)}
+        />
+      )}
+      {tab === "stock" && (
+        <StockTab
+          branch={branch || summary?.branch}
+          branchId={branchId}
+          focus={stockFocus}
+          readOnly={readOnly}
+          onToast={showToast}
+          onBranch={setBranch}
+        />
+      )}
+      {tab === "stats" && <StatsTab branchId={branchId} onToast={showToast} />}
+      {review && (
+        <PrescriptionReviewModal
+          order={review}
+          orders={reviewOrders.length ? reviewOrders : [review]}
+          busy={busyReview}
+          readOnly={readOnly}
+          onClose={() => setReview(null)}
+          onApprove={approve}
+          onReject={reject}
+          onSelect={setReview}
+        />
+      )}
+      <OrderDetailDrawer orderId={drawerId} readOnly={readOnly} onClose={() => setDrawerId("")} onToast={showToast} />
+      <PanelToast message={toast} />
+    </div>
   );
 }

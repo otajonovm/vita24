@@ -1,4 +1,5 @@
-const { PrismaClient } = require("@prisma/client");
+const { PrismaClient } = require("../generated/prisma");
+const { DEFAULTS } = require("../src/lib/shopSettings");
 
 const prisma = new PrismaClient();
 
@@ -247,6 +248,9 @@ const stockByBranch = {
 async function main() {
   await prisma.orderItem.deleteMany();
   await prisma.paymentTransaction.deleteMany();
+  await prisma.promoRedemption.deleteMany();
+  await prisma.promoBranch.deleteMany();
+  await prisma.promoCode.deleteMany();
   await prisma.prescription.deleteMany();
   await prisma.order.deleteMany();
   await prisma.branchStock.deleteMany();
@@ -259,8 +263,32 @@ async function main() {
     await prisma.category.create({ data: category });
   }
 
+  const details = {
+    "med-paracetamol": { dosage: "500 mg", activeIngredient: "Paracetamol", quantityInPack: 10 },
+    "med-ibuprofen": { dosage: "400 mg", activeIngredient: "Ibuprofen", quantityInPack: 10 },
+    "med-amoxicillin": { dosage: "500 mg", activeIngredient: "Amoksitsillin", quantityInPack: 10 },
+    "med-azithromycin": { dosage: "500 mg", activeIngredient: "Azitromitsin", quantityInPack: 3 },
+    "med-ciprofloxacin": { dosage: "500 mg", activeIngredient: "Tsiprofloksatsin", quantityInPack: 10 },
+    "med-aspirin": { dosage: "100 mg", activeIngredient: "Atsetilsalitsil kislota", quantityInPack: 30 },
+    "med-enalapril": { dosage: "10 mg", activeIngredient: "Enalapril", quantityInPack: 20 },
+    "med-vitaminc": { dosage: "1000 mg", activeIngredient: "Askorbin kislota", quantityInPack: 10 },
+    "med-vitamind": { dosage: "2000 IU", activeIngredient: "Kolekalsiferol", quantityInPack: 30 },
+    "med-nurofen": { dosage: "100 mg/5 ml", activeIngredient: "Ibuprofen", quantityInPack: 1 },
+    "med-panadol": { dosage: "120 mg/5 ml", activeIngredient: "Paracetamol", quantityInPack: 1 },
+    "med-loratadine": { dosage: "10 mg", activeIngredient: "Loratadin", quantityInPack: 10 },
+  };
+  const storageConditions = "Quruq, yorug'likdan himoyalangan joyda, 25°C dan past saqlang";
+
   for (const medicine of medicines) {
-    await prisma.medicine.create({ data: medicine });
+    await prisma.medicine.create({
+      data: {
+        ...medicine,
+        ...details[medicine.id],
+        usage: medicine.description,
+        storageConditions,
+        showOnHome: true,
+      },
+    });
   }
 
   for (const branch of branches) {
@@ -281,9 +309,88 @@ async function main() {
     }
   }
 
+  const bcrypt = require("bcryptjs");
+  const adminPassword = process.env.SEED_ADMIN_PASSWORD;
+  const pharmacistPassword = process.env.SEED_PHARMACIST_PASSWORD;
+  if (!adminPassword || !pharmacistPassword) {
+    throw new Error("SEED_ADMIN_PASSWORD va SEED_PHARMACIST_PASSWORD muhit o'zgaruvchilari kerak");
+  }
+  const passwordHash = await bcrypt.hash(adminPassword, 10);
+  const pharmacistHash = await bcrypt.hash(pharmacistPassword, 10);
+
+  await prisma.user.create({
+    data: {
+      id: "user-super-admin",
+      name: "Vita24 Super Admin",
+      phone: "+998901000001",
+      passwordHash,
+      role: "SUPER_ADMIN",
+    },
+  });
+
+  const pharmacists = [
+    { id: "user-branch-yunusobod", name: "Yunusobod Farmatsevt", phone: "+998901000002", branchId: "branch-yunusobod" },
+    { id: "user-branch-chilonzor", name: "Chilonzor Farmatsevt", phone: "+998901000003", branchId: "branch-chilonzor" },
+    { id: "user-branch-mirzo", name: "Mirzo Ulug'bek Farmatsevt", phone: "+998901000004", branchId: "branch-mirzo-ulugbek" },
+    { id: "user-branch-sergeli", name: "Sergeli Farmatsevt", phone: "+998901000005", branchId: "branch-sergeli" },
+  ];
+
+  for (const pharmacist of pharmacists) {
+    await prisma.user.create({
+      data: {
+        ...pharmacist,
+        passwordHash: pharmacistHash,
+        role: "BRANCH_ADMIN",
+      },
+    });
+  }
+
+  await prisma.user.create({
+    data: {
+      id: "user-manager",
+      name: "Vita24 Menejer",
+      phone: "+998901000006",
+      passwordHash,
+      role: "MANAGER",
+    },
+  });
+
+  await prisma.promoCode.create({
+    data: {
+      code: "VITA10",
+      type: "PERCENT",
+      value: 10,
+      maxDiscount: 20000,
+      minSubtotal: 50000,
+      usageLimit: 100,
+      perUserLimit: 2,
+      allBranches: true,
+      active: true,
+    },
+  });
+  await prisma.promoCode.create({
+    data: {
+      code: "YUNUS5000",
+      type: "AMOUNT",
+      value: 5000,
+      minSubtotal: 20000,
+      usageLimit: 50,
+      perUserLimit: 1,
+      allBranches: false,
+      active: true,
+      branches: { create: [{ branchId: "branch-yunusobod" }] },
+    },
+  });
+
+  await prisma.shopSetting.upsert({
+    where: { id: "default" },
+    update: {},
+    create: { id: "default", ...DEFAULTS },
+  });
+
   const rxCount = medicines.filter((item) => item.isPrescription).length;
   console.log(
-    `Vita24 seed yuklandi: ${branches.length} filial, ${categories.length} toifa, ${medicines.length} dori (${rxCount} retseptli)`
+    `Vita24 seed yuklandi: ${branches.length} filial, ${categories.length} toifa, ${medicines.length} dori (${rxCount} retseptli), 3 rol, 2 promokod, do'kon sozlamalari`
   );
 }
 

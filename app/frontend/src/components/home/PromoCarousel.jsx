@@ -1,31 +1,33 @@
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { ChevronLeft, ChevronRight, FileText, ShieldCheck, Truck } from "lucide-react";
 
 const SLIDES = [
   {
     id: "rx",
-    title: "Retseptingiz bormi?",
-    text: "Suratini yuklang va tez qabul qiling",
-    hint: "JPG, PNG yoki PDF",
+    titleKey: "promo.rxTitle",
+    textKey: "promo.rxText",
+    hintKey: "promo.rxHint",
     Icon: FileText,
   },
   {
     id: "delivery",
-    title: "24/7 tezkor yetkazish",
-    text: "Toshkent bo'ylab 30 daqiqada",
-    hint: "15 daqiqalik zaxira",
+    titleKey: "promo.deliveryTitle",
+    textKey: "promo.deliveryText",
+    hintKey: "promo.paymentHint",
     Icon: Truck,
   },
   {
     id: "care",
-    title: "Farmatsevt nazorati",
-    text: "Har bir buyurtma filialda tekshiriladi",
-    hint: "Litsenziyalangan tarmoq",
+    titleKey: "promo.careTitle",
+    textKey: "promo.careText",
+    hintKey: "promo.careHint",
     Icon: ShieldCheck,
   },
 ];
 
-export default function PromoCarousel() {
+export default function PromoCarousel({ onUpload }) {
+  const { t } = useTranslation();
   const [index, setIndex] = useState(0);
   const startX = useRef(0);
   const deltaX = useRef(0);
@@ -73,7 +75,7 @@ export default function PromoCarousel() {
       />
 
       <div
-        className="relative flex h-36 w-full select-none items-center px-4 md:h-52 md:px-8 lg:h-64 lg:px-14"
+        className="relative flex h-36 w-full select-none items-center px-4 md:h-52 md:px-16 lg:h-64 lg:px-20"
         onTouchStart={(event) => onStart(event.touches[0].clientX)}
         onTouchMove={(event) => onMove(event.touches[0].clientX)}
         onTouchEnd={onEnd}
@@ -85,27 +87,31 @@ export default function PromoCarousel() {
             </span>
             <div className="min-w-0">
               <h1 className="text-base font-extrabold leading-tight md:text-2xl lg:text-3xl">
-                {slide.title}
+                {t(slide.titleKey)}
               </h1>
               <p className="mt-1 line-clamp-2 text-xs text-white/90 md:mt-1.5 md:line-clamp-none md:text-sm lg:text-lg">
-                {slide.text}
+                {t(slide.textKey)}
               </p>
+              {slide.id === "rx" && (
+                <button
+                  type="button"
+                  onClick={onUpload}
+                  className="mt-3 inline-flex h-9 items-center rounded-xl bg-white px-3 text-xs font-bold text-[#087B51]"
+                >
+                  {t("promo.rxAction")}
+                </button>
+              )}
               <p className="mt-2 hidden text-xs font-semibold uppercase tracking-wider text-white/70 md:block">
-                {slide.hint}
+                {t(slide.hintKey)}
               </p>
             </div>
-          </div>
-
-          <div className="hidden shrink-0 rounded-2xl bg-white/12 px-4 py-3 text-right backdrop-blur-sm lg:block">
-            <p className="text-xs font-semibold uppercase tracking-wider text-white/70">Vita24</p>
-            <p className="mt-1 text-sm font-bold leading-snug">{slide.hint}</p>
           </div>
         </div>
       </div>
 
       <button
         type="button"
-        aria-label="Oldingi slayd"
+        aria-label={t("promo.prev")}
         onClick={() => go(-1)}
         className="absolute left-2 top-1/2 hidden h-10 w-10 -translate-y-1/2 place-items-center rounded-full bg-white/90 text-slate-800 shadow-sm md:grid lg:left-3 lg:h-11 lg:w-11"
       >
@@ -113,7 +119,7 @@ export default function PromoCarousel() {
       </button>
       <button
         type="button"
-        aria-label="Keyingi slayd"
+        aria-label={t("promo.next")}
         onClick={() => go(1)}
         className="absolute right-2 top-1/2 hidden h-10 w-10 -translate-y-1/2 place-items-center rounded-full bg-white/90 text-slate-800 shadow-sm md:grid lg:right-3 lg:h-11 lg:w-11"
       >
@@ -125,7 +131,7 @@ export default function PromoCarousel() {
           <button
             key={item.id}
             type="button"
-            aria-label={`${dotIndex + 1}-slayd`}
+            aria-label={t("promo.dot", { n: dotIndex + 1 })}
             onClick={() => setIndex(dotIndex)}
             className={`h-2 rounded-full transition-all ${
               dotIndex === index ? "w-5 bg-white" : "w-2 bg-white/45"

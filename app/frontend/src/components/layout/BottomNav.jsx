@@ -1,22 +1,18 @@
 import { NavLink } from "react-router-dom";
-import {
-  LiaClipboardListSolid,
-  LiaHeartSolid,
-  LiaHomeSolid,
-  LiaShoppingBagSolid,
-  LiaThLargeSolid,
-} from "react-icons/lia";
+import { Heart, Home, LayoutGrid, ShoppingCart, User } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useCartStore } from "../../store/useCartStore";
 
 const TABS = [
-  { to: "/", label: "Asosiy", Icon: LiaHomeSolid, end: true },
-  { to: "/catalog", label: "Katalog", Icon: LiaThLargeSolid },
-  { to: "/cart", label: "Savat", Icon: LiaShoppingBagSolid, cart: true },
-  { to: "/favorites", label: "Sevimli", Icon: LiaHeartSolid },
-  { to: "/orders", label: "Buyurtma", Icon: LiaClipboardListSolid },
+  { to: "/", labelKey: "nav.home", Icon: Home, end: true },
+  { to: "/catalog", labelKey: "nav.catalog", Icon: LayoutGrid },
+  { to: "/cart", labelKey: "nav.cartShort", Icon: ShoppingCart, cart: true },
+  { to: "/favorites", labelKey: "nav.favorites", Icon: Heart },
+  { to: "/profile", labelKey: "nav.profile", Icon: User },
 ];
 
 export default function BottomNav() {
+  const { t } = useTranslation();
   const itemCount = useCartStore((state) =>
     state.items.reduce((sum, item) => sum + item.quantity, 0)
   );
@@ -46,7 +42,7 @@ export default function BottomNav() {
                   )}
                 </span>
                 <span className="w-full truncate text-center text-[10px] font-semibold leading-none tracking-tight">
-                  {tab.label}
+                  {t(tab.labelKey)}
                 </span>
               </>
             )}

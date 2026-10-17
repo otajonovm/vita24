@@ -6,19 +6,24 @@ function sendSuccess(res, data, message = "Amal muvaffaqiyatli bajarildi", statu
   });
 }
 
-function sendError(res, statusCode, code, message) {
+function sendError(res, statusCode, code, message, extra) {
   return res.status(statusCode).json({
     success: false,
-    error: { code, message },
+    error: {
+      code,
+      message,
+      ...(extra && typeof extra === "object" ? extra : {}),
+    },
   });
 }
 
 class AppError extends Error {
-  constructor(message, statusCode = 400, code = "BAD_REQUEST") {
+  constructor(message, statusCode = 400, code = "BAD_REQUEST", details = null) {
     super(message);
     this.name = "AppError";
     this.statusCode = statusCode;
     this.code = code;
+    this.details = details;
   }
 }
 

@@ -1,9 +1,10 @@
 generator client {
   provider = "prisma-client-js"
+  output   = "../generated/prisma"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -11,6 +12,12 @@ enum Role {
   CUSTOMER
   BRANCH_ADMIN
   SUPER_ADMIN
+  MANAGER
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
 }
 
 enum OrderStatus {
@@ -18,9 +25,18 @@ enum OrderStatus {
   PENDING_BRANCH
   WAITING_PAYMENT
   PAID
+  PREPARING
+  READY
   DELIVERING
   COMPLETED
   CANCELLED
+}
+
+enum RefundStatus {
+  NONE
+  PENDING
+  DONE
+  NOT_REQUIRED
 }
 
 enum PrescriptionStatus {
@@ -35,42 +51,163 @@ enum PaymentStatus {
   FAILED
 }
 
+enum DeliveryType {
+  DELIVERY
+  PICKUP
+}
+
+enum PromoType {
+  PERCENT
+  AMOUNT
+}
+
 model User {
-  id            String         @id @default(uuid())
-  name          String
-  phone         String         @unique
-  email         String?        @unique
-  passwordHash  String
-  role          Role           @default(CUSTOMER)
-  branchId      String?
-  branch        Branch?        @relation(fields: [branchId], references: [id])
-  orders        Order[]
-  prescriptions Prescription[]
-  lastStreet    String?
-  lastApartment String?
-  lastFloor     String?
-  lastIntercom  String?
-  lastLat       Float?
-  lastLng       Float?
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  id                  String         @id @default(uuid())
+  name                String
+  phone               String         @unique
+  email               String?        @unique
+  passwordHash        String
+  role                Role           @default(CUSTOMER)
+  status              UserStatus     @default(ACTIVE)
+  blockReason         String?
+  blockedAt           DateTime?
+  lastLoginAt         DateTime?
+  deletedAt           DateTime?
+  mustChangePassword  Boolean        @default(false)
+  branchId            String?
+  branch              Branch?        @relation(fields: [branchId], references: [id])
+  orders              Order[]
+  prescriptions       Prescription[]
+  lastStreet          String?
+  lastApartment       String?
+  lastFloor           String?
+  lastIntercom        String?
+  lastLat             Float?
+  lastLng             Float?
+  additionalAddresses String?
+  notifyOrders        Boolean        @default(true)
+  totpSecretEnc       String?
+  totpEnabled         Boolean        @default(false)
+  tokenVersion        Int            @default(0)
+  notifications       CustomerNotification[]
+  sessions            AuthSession[]
+  blockEvents         CustomerBlockEvent[]
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+}
+
+model CustomerBlockEvent {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  action    String
+  reason    String
+  actorId   String?
+  actorName String?
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
+
+model AuthSession {
+  id               String    @id @default(uuid())
+  userId           String
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshTokenHash String    @unique
+  userAgent        String?
+  ip               String?
+  createdAt        DateTime  @default(now())
+  lastSeenAt       DateTime  @default(now())
+  expiresAt        DateTime
+  revokedAt        DateTime?
+
+  @@index([userId])
+}
+
+model CustomerNotification {
+  id        String    @id @default(uuid())
+  userId    String
+  orderId   String?
+  title     String
+  body      String
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
 }
 
 model Branch {
-  id           String        @id @default(uuid())
-  name         String
-  slug         String        @unique
-  address      String
-  phone        String
-  city         String        @default("Toshkent")
-  district     String
-  workingHours String
-  isActive     Boolean       @default(true)
-  stocks       BranchStock[]
-  orders       Order[]
-  staff        User[]
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  id               String        @id @default(uuid())
+  name             String
+  slug             String        @unique
+  address          String
+  phone            String
+  city             String        @default("Toshkent")
+  district         String
+  workingHours     String
+  lat              Float?
+  lng              Float?
+  deliveryRadiusKm Int           @default(5)
+  lowStockThreshold Int          @default(5)
+  isActive         Boolean       @default(true)
+  isOpen           Boolean       @default(true)
+  archivedAt       DateTime?
+  lekkoApiKey      String?
+  lekkoDrugStoreId Int?
+  lastSyncedAt     DateTime?
+  lekkoLastError   String?
+  lekkoLastErrorAt DateTime?
+  stocks           BranchStock[]
+  orders           Order[]
+  staff            User[]
+  promoBranches    PromoBranch[]
+  lekkoSyncLogs    LekkoSyncLog[]
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+}
+
+model ShopSetting {
+  id                   String   @id @default("default")
+  deliveryFee          Decimal  @default(15000) @db.Decimal(12, 2)
+  freeDeliveryFrom     Decimal  @default(200000) @db.Decimal(12, 2)
+  reviewWindowMinutes  Int      @default(120)
+  paymentWindowMinutes Int      @default(15)
+  paymeEnabled         Boolean  @default(true)
+  clickEnabled         Boolean  @default(true)
+  cashEnabled         Boolean  @default(true)
+  pickupEnabled        Boolean  @default(true)
+  telegramBotToken     String?
+  messageTemplates     Json
+  contactPhone         String   @default("1095")
+  contactPhoneAlt      String   @default("+998 71 200 24 24")
+  footerAbout          String
+  footerLicensed       String
+  footerShort          String
+  updatedAt            DateTime @updatedAt
+}
+
+model SystemSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+model LekkoSyncLog {
+  id           String    @id @default(uuid())
+  branchId     String
+  trigger      String
+  status       String
+  updatedCount Int       @default(0)
+  addedCount   Int       @default(0)
+  errorCount   Int       @default(0)
+  message      String?
+  startedAt    DateTime  @default(now())
+  finishedAt   DateTime?
+  branch       Branch    @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@index([branchId, startedAt])
+  @@index([status, startedAt])
 }
 
 model Category {
@@ -90,25 +227,43 @@ model Medicine {
   manufacturer   String
   dosageForm     String
   isPrescription Boolean       @default(false)
+  showOnHome     Boolean       @default(false)
+  homeSortOrder  Int           @default(0)
   imageEmoji     String
-  externalApiId  String?
-  categoryId     String
+  imageUrl       String?
+  externalApiId  Int?          @unique
+  barcode        String?
+  ikpuCode       String?
+  quantityInPack    Int?    @default(1)
+  dosage            String?
+  activeIngredient  String?
+  usage             String?
+  contraindications String?
+  storageConditions String?
+  basePrice         Decimal       @default(0) @db.Decimal(12, 2)
+  isActive          Boolean       @default(true)
+  categoryId        String
   category       Category      @relation(fields: [categoryId], references: [id])
   stocks         BranchStock[]
   orderItems     OrderItem[]
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
+
+  @@index([barcode])
+  @@index([activeIngredient])
+  @@index([showOnHome, homeSortOrder])
 }
 
 model BranchStock {
   id            String   @id @default(uuid())
   branchId      String
   medicineId    String
-  price         Decimal
+  price         Decimal  @default(0) @db.Decimal(12, 2)
   stockCount    Int      @default(0)
   reservedCount Int      @default(0)
   branch        Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
   medicine      Medicine @relation(fields: [medicineId], references: [id], onDelete: Cascade)
+  movements     StockMovement[]
   updatedAt     DateTime @updatedAt
 
   @@unique([branchId, medicineId])
@@ -116,15 +271,17 @@ model BranchStock {
 }
 
 model Prescription {
-  id        String             @id @default(uuid())
-  userId    String?
-  orderId   String             @unique
-  fileUrl   String
-  fileName  String
-  status    PrescriptionStatus @default(PENDING)
-  user      User?              @relation(fields: [userId], references: [id])
-  order     Order              @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  createdAt DateTime           @default(now())
+  id         String             @id @default(uuid())
+  userId     String?
+  orderId    String             @unique
+  fileUrl    String
+  fileName   String
+  status     PrescriptionStatus @default(PENDING)
+  rejectNote    String?
+  rejectReasons String?
+  user       User?              @relation(fields: [userId], references: [id])
+  order      Order              @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  createdAt  DateTime           @default(now())
 }
 
 model Order {
@@ -138,14 +295,25 @@ model Order {
   deliveryAddress String
   deliveryLat     Float?
   deliveryLng     Float?
+  deliveryType    DeliveryType @default(DELIVERY)
+  deliveryFee     Decimal      @default(15000) @db.Decimal(12, 2)
+  discount        Decimal      @default(0) @db.Decimal(12, 2)
+  promoCode       String?
   notes           String?
-  subtotal        Decimal
+  pharmacistNote  String?
+  adminNote       String?
+  subtotal        Decimal             @db.Decimal(12, 2)
+  checkoutRules   Json?
   reservedUntil   DateTime
+  refundStatus    RefundStatus        @default(NONE)
+  statusChangedAt DateTime            @default(now())
   user            User?               @relation(fields: [userId], references: [id])
   branch          Branch              @relation(fields: [branchId], references: [id])
   items           OrderItem[]
   prescription    Prescription?
   payment         PaymentTransaction?
+  history         OrderStatusHistory[]
+  promoRedemption PromoRedemption?
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
 
@@ -157,16 +325,88 @@ model OrderItem {
   orderId        String
   medicineId     String
   quantity       Int
-  unitPrice      Decimal
+  unitPrice      Decimal  @db.Decimal(12, 2)
   isPrescription Boolean  @default(false)
   order          Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
   medicine       Medicine @relation(fields: [medicineId], references: [id])
 }
 
+model OrderStatusHistory {
+  id         String      @id @default(uuid())
+  orderId    String
+  fromStatus OrderStatus
+  toStatus   OrderStatus
+  userId     String?
+  note       String?
+  kind       String      @default("status")
+  order      Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  createdAt  DateTime    @default(now())
+
+  @@index([orderId, createdAt])
+}
+
+model StockMovement {
+  id            String      @id @default(uuid())
+  branchStockId String
+  userId        String?
+  delta         Int
+  beforeCount   Int?
+  afterCount    Int?
+  reason        String
+  note          String?
+  branchStock   BranchStock @relation(fields: [branchStockId], references: [id], onDelete: Cascade)
+  createdAt     DateTime    @default(now())
+
+  @@index([branchStockId, createdAt])
+}
+
+model PromoCode {
+  id           String            @id @default(uuid())
+  code         String            @unique
+  type         PromoType
+  value        Decimal           @db.Decimal(12, 2)
+  maxDiscount  Decimal?          @db.Decimal(12, 2)
+  minSubtotal  Decimal           @default(0) @db.Decimal(12, 2)
+  usageLimit   Int?
+  perUserLimit Int?
+  usedCount    Int               @default(0)
+  startsAt     DateTime?
+  expiresAt    DateTime?
+  active       Boolean           @default(true)
+  allBranches  Boolean           @default(true)
+  branches     PromoBranch[]
+  redemptions  PromoRedemption[]
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+}
+
+model PromoBranch {
+  promoId  String
+  branchId String
+  promo    PromoCode @relation(fields: [promoId], references: [id], onDelete: Cascade)
+  branch   Branch    @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@id([promoId, branchId])
+}
+
+model PromoRedemption {
+  id         String    @id @default(uuid())
+  promoId    String
+  orderId    String    @unique
+  userId     String?
+  discount   Decimal   @db.Decimal(12, 2)
+  releasedAt DateTime?
+  promo      PromoCode @relation(fields: [promoId], references: [id], onDelete: Cascade)
+  order      Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  createdAt  DateTime  @default(now())
+
+  @@index([promoId, userId])
+}
+
 model PaymentTransaction {
   id         String        @id @default(uuid())
   orderId    String        @unique
-  amount     Decimal
+  amount     Decimal       @db.Decimal(12, 2)
   provider   String        @default("MOCK")
   status     PaymentStatus @default(PENDING)
   externalId String?
@@ -174,4 +414,28 @@ model PaymentTransaction {
   order      Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
   createdAt  DateTime      @default(now())
   updatedAt  DateTime      @updatedAt
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String?
+  actorId    String?
+  actorName  String?
+  role       String?
+  action     String
+  entityType String
+  entityId   String
+  branchId   String?
+  summary    String
+  before     Json?
+  after      Json?
+  ip         String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([entityType, entityId])
+  @@index([userId, createdAt])
+  @@index([action, createdAt])
+  @@index([entityType, createdAt])
 }
