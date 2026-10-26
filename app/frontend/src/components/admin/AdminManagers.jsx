@@ -22,6 +22,7 @@ import {
 import { useToastStore } from "../../store/useToastStore";
 import BranchMap from "./BranchMap";
 import { AdminSkeleton, DataTable, ErrorState, controlClass, useConfirm } from "./ui";
+import { LoadingButton } from "../ui";
 
 const WEEK = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 
@@ -289,8 +290,9 @@ export function BranchManager() {
     try {
       const all = await fetchPharmacists();
       staff = (Array.isArray(all) ? all : all?.items || []).filter((row) => row.branchId === branch.id);
-    } catch {
-      staff = [];
+    } catch (err) {
+      setError(errorText(err, t("admin.errorTitle")));
+      return;
     }
     if (staff.length) {
       const names = staff.map((row) => row.name || row.phone).join(", ");
@@ -558,13 +560,14 @@ export function BranchManager() {
                 onChange={(event) => setDraft({ ...draft, lekkoDrugStoreId: event.target.value.replace(/\D/g, "") })}
               />
             </Field>
-            <button
+            <LoadingButton
               type="submit"
-              disabled={busy}
+              loading={busy}
+              loadingText="Saqlanmoqda..."
               className="h-11 rounded-xl bg-[#087B51] text-sm font-bold text-white hover:bg-[#066341] disabled:opacity-50"
             >
-              {busy ? "Saqlanmoqda..." : "Saqlash"}
-            </button>
+              Saqlash
+            </LoadingButton>
           </form>
         </Modal>
       )}
@@ -839,13 +842,14 @@ export function PharmacistManager({ onSaved } = {}) {
               </select>
             </Field>
             )}
-            <button
+            <LoadingButton
               type="submit"
-              disabled={busy}
+              loading={busy}
+              loadingText="Saqlanmoqda..."
               className="h-11 rounded-xl bg-[#087B51] text-sm font-bold text-white hover:bg-[#066341] disabled:opacity-50"
             >
-              {busy ? "Saqlanmoqda..." : "Saqlash"}
-            </button>
+              Saqlash
+            </LoadingButton>
           </form>
         </Modal>
       )}

@@ -10,6 +10,7 @@ import {
   setupAdmin2fa,
 } from "../../services/api";
 import { useAdminAuth } from "../../store/useAuthStore";
+import { LoadingButton } from "../ui";
 import { AdminSkeleton, EmptyState, ErrorState, useConfirm } from "./ui";
 
 function errorText(error, fallback) {
@@ -32,6 +33,7 @@ export default function AdminSecurity() {
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
+  const [revokeBusy, setRevokeBusy] = useState("");
   const [codeError, setCodeError] = useState("");
   const [passwordError, setPasswordError] = useState("");
 
@@ -54,8 +56,10 @@ export default function AdminSecurity() {
   }, [t]);
 
   async function revoke(session) {
+    if (revokeBusy) return;
     setError("");
     setNotice("");
+    setRevokeBusy(session.id);
     try {
       await revokeAdminSession(session.id);
       if (session.current) {
@@ -65,6 +69,8 @@ export default function AdminSecurity() {
       setSessions((current) => current.filter((item) => item.id !== session.id));
     } catch (err) {
       setError(errorText(err, t("admin.securityLoadFailed")));
+    } finally {
+      setRevokeBusy("");
     }
   }
 
@@ -197,13 +203,15 @@ export default function AdminSecurity() {
                   {session.ip || "—"} · {formatDateTime(session.lastSeenAt)}
                 </p>
               </div>
-              <button
+              <LoadingButton
                 type="button"
+                loading={revokeBusy === session.id}
+                loadingText={t("common.saving")}
                 onClick={() => revoke(session)}
-                className="h-9 rounded-xl border border-slate-200 px-3 text-xs font-bold text-slate-700"
+                className="h-9 rounded-xl border border-slate-200 px-3 text-xs font-bold text-slate-700 disabled:opacity-50"
               >
                 {t("admin.sessionRevoke")}
-              </button>
+              </LoadingButton>
             </li>
           ))}
         </ul>

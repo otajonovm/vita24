@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { formatSom } from "../../lib/format";
+import { LoadingButton } from "../ui";
 
 export default function PanelHeader({
   summary,
@@ -47,21 +48,23 @@ export default function PanelHeader({
             </select>
           )}
           {!readOnly && (
-            <button
+            <LoadingButton
               type="button"
-              disabled={openBusy || !branch}
+              disabled={!branch}
+              loading={openBusy}
+              loadingText={t("common.saving")}
               onClick={onToggleOpen}
               className={`h-10 rounded-xl px-3 text-sm font-bold ${branch?.isOpen === false ? "bg-amber-100 text-amber-900" : "bg-emerald-100 text-emerald-800"} disabled:opacity-50`}
             >
               {branch?.isOpen === false ? t("panel.closed", "Yopiq") : t("panel.open", "Ochiq")}
-            </button>
+            </LoadingButton>
           )}
           <button type="button" onClick={onSound} className="h-10 rounded-xl border border-slate-200 px-3 text-sm font-semibold">
             {sound ? t("panel.soundOn", "Ovoz yoqilgan") : t("panel.soundOff", "Ovoz o'chiq")}
           </button>
-          <button type="button" onClick={onRefresh} className="h-10 rounded-xl border border-slate-200 px-3 text-sm font-semibold">
-            {refreshing ? t("panel.refreshing", "Yangilanmoqda...") : t("panel.refresh", "Yangilash")}
-          </button>
+          <LoadingButton type="button" loading={refreshing} loadingText={t("panel.refreshing", "Yangilanmoqda...")} onClick={onRefresh} className="h-10 rounded-xl border border-slate-200 px-3 text-sm font-semibold disabled:opacity-50">
+            {t("panel.refresh", "Yangilash")}
+          </LoadingButton>
           <button type="button" onClick={onLogout} className="h-10 rounded-xl px-3 text-sm font-semibold text-slate-500">
             {t("panel.logout", "Chiqish")}
           </button>

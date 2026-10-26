@@ -101,7 +101,7 @@ async function getShopSettings() {
 
 function publicShopSettings(settings) {
   const { telegramToken, ...rest } = settings;
-  const telegramBotUsername = require("./telegramBot").currentBotUsername();
+  const telegramBotUsername = require("../bot/identity").currentBotUsername();
   return {
     ...rest,
     telegramBotUsername,
@@ -202,7 +202,15 @@ async function saveShopSettings(body) {
     },
   });
   const plain = telegramBotToken ? String(body.telegramBotToken).trim() : current.telegramToken;
-  return remember(normalize(saved, plain));
+  const next = remember(normalize(saved, plain));
+  if (telegramBotToken) {
+    queueMicrotask(() => {
+      Promise.resolve()
+        .then(() => require("../bot").syncBot())
+        .catch((error) => console.error("[telegram] qayta ishga tushirish:", error.message));
+    });
+  }
+  return next;
 }
 
 module.exports = {

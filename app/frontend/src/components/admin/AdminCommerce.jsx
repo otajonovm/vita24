@@ -15,6 +15,7 @@ import {
 import { useAdminAuth } from "../../store/useAuthStore";
 import { useToastStore } from "../../store/useToastStore";
 import PrescriptionFile from "../prescriptions/PrescriptionFile";
+import { LoadingButton } from "../ui";
 import { AdminSkeleton, controlClass, DataTable, EmptyState, ErrorState, Field } from "./ui";
 
 const SLOW_RX_MS = 30 * 60 * 1000;
@@ -79,6 +80,7 @@ export function OrdersPanel() {
   const [limit, setLimit] = useState(20);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     const timer = setTimeout(() => setQuery(q.trim()), 300);
@@ -87,7 +89,8 @@ export function OrdersPanel() {
 
   useEffect(() => {
     let active = true;
-    setLoading(true);
+    const keep = rows.length > 0;
+    if (!keep) setLoading(true);
     setError("");
     fetchStaffOrders({
       branchId: branchId || undefined,
@@ -117,7 +120,7 @@ export function OrdersPanel() {
     return () => {
       active = false;
     };
-  }, [branchId, status, paymentProvider, paymentStatus, deliveryType, from, to, query, page, t]);
+  }, [branchId, status, paymentProvider, paymentStatus, deliveryType, from, to, query, page, reloadKey, t]);
 
   const pages = Math.max(1, Math.ceil(total / limit));
 
@@ -174,10 +177,10 @@ export function OrdersPanel() {
           className="h-11 min-w-48 flex-1 rounded-xl border border-slate-200 px-3 text-sm outline-none ring-brand/30 focus:ring-2"
         />
       </div>
-      {error ? <div className="mt-3"><ErrorState title={error} onRetry={() => setPage(page)} /></div> : null}
-      {loading ? (
+      {error ? <div className="mt-3"><ErrorState title={error} onRetry={() => setReloadKey((value) => value + 1)} /></div> : null}
+      {loading && rows.length === 0 ? (
         <div className="mt-4"><AdminSkeleton /></div>
-      ) : rows.length === 0 ? (
+      ) : !loading && rows.length === 0 ? (
         <div className="mt-4">
           <EmptyState title={t("admin.emptyTitle")} body={t("admin.emptyBody")} />
         </div>
@@ -242,8 +245,8 @@ export function AdminOrderPage() {
   const [adminNote, setAdminNote] = useState("");
   const [busy, setBusy] = useState(false);
 
-  async function load() {
-    setLoading(true);
+  async function load({ quiet = false } = {}) {
+    if (!quiet) setLoading(true);
     setError("");
     try {
       const data = await fetchStaffOrder(id);
@@ -252,7 +255,7 @@ export function AdminOrderPage() {
     } catch (err) {
       setError(apiError(err, t("admin.errorTitle")));
     } finally {
-      setLoading(false);
+      if (!quiet) setLoading(false);
     }
   }
 
@@ -274,7 +277,7 @@ export function AdminOrderPage() {
       push(t("admin.statusSaved"), "success");
       setReason("");
       setCancelOpen(false);
-      await load();
+      await load({ quiet: true });
     } catch (err) {
       push(apiError(err, t("admin.errorTitle")), "error");
     } finally {
@@ -390,7 +393,7 @@ export function AdminOrderPage() {
           <Field label={t("admin.adminNote")}>
             <textarea value={adminNote} onChange={(event) => setAdminNote(event.target.value)} className="min-h-24 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" />
           </Field>
-          <button type="submit" disabled={busy} className="mt-3 h-10 rounded-xl bg-brand px-4 text-sm font-bold text-white disabled:opacity-50">{t("admin.saveNote")}</button>
+          <LoadingButton type="submit" loading={busy} loadingText={t("common.saving")} className="mt-3 h-10 rounded-xl bg-brand px-4 text-sm font-bold text-white disabled:opacity-50">{t("admin.saveNote")}</LoadingButton>
         </form>
       ) : null}
       {canWrite && canCancel ? (
@@ -415,9 +418,9 @@ export function AdminOrderPage() {
                 <input value={reason} onChange={(event) => setReason(event.target.value)} className={controlClass(Boolean(reasonError))} />
               </Field>
               <div className="flex flex-wrap gap-2">
-                <button type="submit" disabled={busy} className="h-10 rounded-xl bg-red-600 px-4 text-sm font-bold text-white disabled:opacity-50">
+                <LoadingButton type="submit" loading={busy} loadingText={t("common.saving")} className="h-10 rounded-xl bg-red-600 px-4 text-sm font-bold text-white disabled:opacity-50">
                   {t("admin.cancelOrder")}
-                </button>
+                </LoadingButton>
                 <button type="button" onClick={() => { setCancelOpen(false); setReasonError(""); }} className="h-10 rounded-xl border border-slate-200 px-4 text-sm font-bold">
                   {t("admin.cancel")}
                 </button>
@@ -475,17 +478,22 @@ export function PrescriptionQueue() {
   }, [branchId, page, waitLong, t]);
 
   async function reload() {
-    const data = await fetchStaffOrders({
-      queue: waitLong ? undefined : "review",
-      wait: waitLong ? "long" : undefined,
-      branchId: branchId || undefined,
-      sort: "wait",
-      page,
-      limit: 20,
-      audience: "admin",
-    });
-    setRows(data.items);
-    setTotal(data.total);
+    setError("");
+    try {
+      const data = await fetchStaffOrders({
+        queue: waitLong ? undefined : "review",
+        wait: waitLong ? "long" : undefined,
+        branchId: branchId || undefined,
+        sort: "wait",
+        page,
+        limit: 20,
+        audience: "admin",
+      });
+      setRows(data.items);
+      setTotal(data.total);
+    } catch (err) {
+      setError(apiError(err, t("admin.errorTitle")));
+    }
   }
 
   const pages = Math.max(1, Math.ceil(total / limit));
@@ -703,7 +711,7 @@ export function RefundsPanel() {
             </div>
             <div className="mt-4 flex justify-end gap-2">
               <button type="button" onClick={() => setActive(null)} className="h-10 rounded-xl border border-slate-200 px-4 text-sm font-bold">{t("admin.cancel")}</button>
-              <button type="submit" disabled={busy} className="h-10 rounded-xl bg-brand px-4 text-sm font-bold text-white disabled:opacity-50">{t("admin.markRefunded")}</button>
+              <LoadingButton type="submit" loading={busy} loadingText={t("common.saving")} className="h-10 rounded-xl bg-brand px-4 text-sm font-bold text-white disabled:opacity-50">{t("admin.markRefunded")}</LoadingButton>
             </div>
           </form>
         </div>

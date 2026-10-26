@@ -1,22 +1,24 @@
 import { useTranslation } from "react-i18next";
 import MedicineCard from "../cards/MedicineCard";
 
-export default function SearchEmpty({ suggestion, popular = [], categories = [], onSuggest, onCategory }) {
+export default function SearchEmpty({ suggestion, suggestions = [], popular = [], categories = [], onSuggest, onCategory }) {
   const { t } = useTranslation();
+  const ideas = suggestions.length ? suggestions : suggestion ? [suggestion] : [];
 
   return (
     <div className="grid gap-4">
       <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-5">
         <p className="text-sm font-semibold text-slate-700">{t("search.none")}</p>
-        {suggestion ? (
+        {ideas.map((name) => (
           <button
+            key={name}
             type="button"
-            onClick={() => onSuggest(suggestion)}
-            className="mt-2 text-left text-sm font-bold text-[#087B51]"
+            onClick={() => onSuggest(name)}
+            className="mt-2 block text-left text-sm font-bold text-[#087B51]"
           >
-            {t("search.didYouMean", { name: suggestion })}
+            {t("search.didYouMean", { name })}
           </button>
-        ) : null}
+        ))}
         {categories.length > 0 && (
           <div className="mt-4">
             <p className="text-xs font-bold uppercase tracking-wide text-slate-400">{t("search.categories")}</p>

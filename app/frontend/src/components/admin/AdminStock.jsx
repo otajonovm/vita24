@@ -1,9 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
 import { formatDateTime, formatSom } from "../../lib/format";
 import { fetchAdminBranches, fetchNetworkStock, fetchAdminStockMovements, updateAdminBranch } from "../../services/api";
 import { useToastStore } from "../../store/useToastStore";
+import { LoadingButton } from "../ui";
+import { createRequestGate, isCanceled } from "../../lib/requestGate";
 import { AdminSkeleton, ErrorState } from "./ui";
 
 function errorText(error, fallback) {
@@ -20,7 +22,12 @@ export function NetworkStock() {
   const [page, setPage] = useState(1);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [movesLoading, setMovesLoading] = useState(true);
   const [error, setError] = useState("");
+  const [movesError, setMovesError] = useState("");
+  const [savingThreshold, setSavingThreshold] = useState("");
+  const networkGate = useRef(createRequestGate());
+  const movesGate = useRef(createRequestGate());
   const [thresholds, setThresholds] = useState({});
   const [branchOptions, setBranchOptions] = useState([]);
   const [moves, setMoves] = useState(null);
@@ -30,23 +37,27 @@ export function NetworkStock() {
   const [movePage, setMovePage] = useState(1);
 
   async function load(nextPage = page) {
+    const requestId = networkGate.current.next();
     setLoading(true);
     setError("");
     try {
       const result = await fetchNetworkStock({ search: search.trim() || undefined, filter, page: nextPage, limit: 20 });
+      if (!networkGate.current.isLatest(requestId)) return;
       setData(result);
       setPage(result.page || nextPage);
       setThresholds(Object.fromEntries((result.branches || []).map((branch) => [branch.id, String(branch.lowStockThreshold)])));
     } catch (err) {
+      if (isCanceled(err) || !networkGate.current.isLatest(requestId)) return;
       setError(errorText(err, t("admin.errorTitle")));
     } finally {
-      setLoading(false);
+      if (networkGate.current.isLatest(requestId)) setLoading(false);
     }
   }
 
   async function loadMoves(nextPage = movePage) {
-    setLoading(true);
-    setError("");
+    const requestId = movesGate.current.next();
+    setMovesLoading(true);
+    setMovesError("");
     try {
       const result = await fetchAdminStockMovements({
         search: moveSearch.trim() || undefined,
@@ -55,12 +66,14 @@ export function NetworkStock() {
         page: nextPage,
         limit: 20,
       });
+      if (!movesGate.current.isLatest(requestId)) return;
       setMoves(result);
       setMovePage(result.page || nextPage);
     } catch (err) {
-      setError(errorText(err, t("admin.errorTitle")));
+      if (isCanceled(err) || !movesGate.current.isLatest(requestId)) return;
+      setMovesError(errorText(err, t("admin.errorTitle")));
     } finally {
-      setLoading(false);
+      if (movesGate.current.isLatest(requestId)) setMovesLoading(false);
     }
   }
 
@@ -84,16 +97,18 @@ export function NetworkStock() {
 
   async function saveThreshold(branchId) {
     const value = Number(thresholds[branchId]);
-    if (!Number.isInteger(value) || value < 1) {
-      push(t("admin.thresholdInvalid"), "error");
+    if (!Number.isInteger(value) || value < 1 || savingThreshold) {
+      if (!Number.isInteger(value) || value < 1) push(t("admin.thresholdInvalid"), "error");
       return;
     }
+    setSavingThreshold(branchId);
     try {
       await updateAdminBranch(branchId, { lowStockThreshold: value });
       push(t("admin.thresholdSaved"));
-      await load(page);
     } catch (err) {
       push(errorText(err, t("admin.errorTitle")), "error");
+    } finally {
+      setSavingThreshold("");
     }
   }
 
@@ -143,7 +158,7 @@ export function NetworkStock() {
                               onChange={(event) => setThresholds({ ...thresholds, [branch.id]: event.target.value })}
                               className="h-8 w-16 rounded-lg border border-slate-200 px-2 text-xs"
                             />
-                            <button type="button" onClick={() => saveThreshold(branch.id)} className="h-8 rounded-lg border border-slate-200 px-2 text-xs font-bold" title={t("admin.thresholdTooltip")}>{t("common.save")}</button>
+                            <LoadingButton type="button" loading={savingThreshold === branch.id} loadingText="..." onClick={() => saveThreshold(branch.id)} className="h-8 rounded-lg border border-slate-200 px-2 text-xs font-bold disabled:opacity-50" title={t("admin.thresholdTooltip")}>{t("common.save")}</LoadingButton>
                           </span>
                           <span className="text-[10px] font-medium normal-case text-slate-400" title={t("admin.thresholdTooltip")}>{t("admin.threshold")}</span>
                         </div>
@@ -201,7 +216,7 @@ export function NetworkStock() {
             </select>
             <input value={moveReason} onChange={(event) => setMoveReason(event.target.value)} placeholder={t("admin.reason")} aria-label={t("admin.reason")} className="h-11 w-40 rounded-xl border border-slate-200 px-3 text-sm" />
           </div>
-          {error ? <ErrorState title={error} onRetry={() => loadMoves(movePage)} /> : loading ? <AdminSkeleton /> : (
+          {movesError ? <ErrorState title={movesError} onRetry={() => loadMoves(movePage)} /> : movesLoading ? <AdminSkeleton /> : (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[720px] text-left text-sm">
                 <thead className="text-xs uppercase tracking-wide text-slate-500">

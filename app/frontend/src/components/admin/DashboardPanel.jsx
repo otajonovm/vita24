@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { Bar, BarChart, CartesianGrid, Cell, ComposedChart, Line, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { formatSom } from "../../lib/format";
 import { downloadAdminReport, fetchAdminDashboard } from "../../services/api";
+import { useToastStore } from "../../store/useToastStore";
 import { AdminSkeleton, DataTable, EmptyState, ErrorState } from "./ui";
 
 const COLORS = ["#087B51", "#0f766e", "#d97706", "#0369a1", "#7c3aed", "#be123c", "#64748b", "#65a30d", "#c2410c"];
@@ -48,6 +49,7 @@ function apiError(error, fallback) {
 
 export default function DashboardPanel() {
   const { t } = useTranslation();
+  const push = useToastStore((state) => state.push);
   const initial = presetRange("7");
   const [from, setFrom] = useState(initial.from);
   const [to, setTo] = useState(initial.to);
@@ -94,7 +96,7 @@ export default function DashboardPanel() {
     try {
       await downloadAdminReport({ kind, format, from, to, branchId: branchId || undefined });
     } catch (err) {
-      setError(apiError(err, t("admin.dash.exportFailed")));
+      push(apiError(err, t("admin.dash.exportFailed")), "error");
     } finally {
       setExporting("");
     }
@@ -184,6 +186,13 @@ export default function DashboardPanel() {
               </div>
             ))}
           </div>
+
+          {data.alerts.prescriptionMedicines === 0 && (
+            <div className="rounded-2xl border border-red-300 bg-red-50 p-4">
+              <p className="text-sm font-extrabold text-red-950">{t("admin.dash.rxMissing")}</p>
+              <Link to="/admin/catalog?rx=1" className="mt-2 inline-flex text-sm font-bold text-red-900">{t("admin.dash.rxMissingLink")}</Link>
+            </div>
+          )}
 
           {(data.alerts.lekkoItems || []).length > 0 && (
             <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4">

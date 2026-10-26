@@ -37,6 +37,8 @@ export default function MapCheckoutSection({
   const [locating, setLocating] = useState(false);
   const [accuracy, setAccuracy] = useState(null);
   const [status, setStatus] = useState("");
+  const [suggesting, setSuggesting] = useState(false);
+  const [mapOn, setMapOn] = useState(false);
 
   useEffect(() => {
     if (Number.isFinite(lat) && Number.isFinite(lng)) {
@@ -72,19 +74,29 @@ export default function MapCheckoutSection({
       return undefined;
     }
 
+    const controller = new AbortController();
     const timer = setTimeout(async () => {
       if (!typedRef.current) return;
+      setSuggesting(true);
       try {
         const rows = await searchPlaces(needle, center, city);
         if (!typedRef.current) return;
         setSuggestions(rows);
         setOpenSuggest(rows.length > 0);
-      } catch {
+        setStatus("");
+      } catch (error) {
+        if (error?.name === "AbortError") return;
         setSuggestions([]);
+        setStatus(t("address.notFound"));
+      } finally {
+        setSuggesting(false);
       }
     }, 400);
 
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
   }, [draft, city]);
 
   const handleLocate = async () => {
@@ -107,12 +119,17 @@ export default function MapCheckoutSection({
   };
 
   const handlePick = async (item) => {
-    if (item.lat && item.lng) {
-      applyPlace(item);
-      return;
+    try {
+      if (item.lat && item.lng) {
+        applyPlace(item);
+        return;
+      }
+      const place = await geocodePlace(item.title);
+      if (place) applyPlace(place);
+      else setStatus(t("address.notFound"));
+    } catch {
+      setStatus(t("address.gpsFailed"));
     }
-    const place = await geocodePlace(item.title);
-    if (place) applyPlace(place);
   };
 
   const suggestRef = useRef(null);
@@ -140,13 +157,17 @@ export default function MapCheckoutSection({
     }
     if (event.key !== "Enter") return;
     event.preventDefault();
-    if (suggestions[0]) {
-      handlePick(suggestions[0]);
-      return;
+    try {
+      if (suggestions[0]) {
+        await handlePick(suggestions[0]);
+        return;
+      }
+      const place = await geocodePlace(draft);
+      if (place) applyPlace(place);
+      else setStatus(t("address.notFound"));
+    } catch {
+      setStatus(t("address.gpsFailed"));
     }
-    const place = await geocodePlace(draft);
-    if (place) applyPlace(place);
-    else setStatus(t("address.notFound"));
   };
 
   return (
@@ -157,7 +178,19 @@ export default function MapCheckoutSection({
           title={t("address.map")}
           src={mapSrc(center.lat, center.lng)}
           loading="lazy"
+          className={mapOn ? "" : "pointer-events-none md:pointer-events-auto"}
         />
+        {!mapOn && (
+          <button
+            type="button"
+            className="absolute inset-0 z-10 flex items-end justify-center bg-slate-900/10 pb-2 md:hidden"
+            onClick={() => setMapOn(true)}
+          >
+            <span className="rounded-full bg-white/95 px-3 py-1 text-xs font-bold text-slate-800 shadow-sm">
+              {t("address.mapTap")}
+            </span>
+          </button>
+        )}
       </div>
       <p className="px-3 pt-1 text-[10px] leading-tight text-slate-400">
         <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer" className="text-slate-400">
@@ -188,14 +221,14 @@ export default function MapCheckoutSection({
               }}
               onKeyDown={handleEnter}
               placeholder={t("address.placeholder")}
-              className={`h-12 w-full scroll-mb-40 rounded-xl border bg-white pl-10 pr-14 text-sm font-normal outline-none ring-brand/30 focus:ring-2 ${invalid ? "border-red-500" : "border-slate-200"}`}
+              className={`h-12 w-full min-w-0 scroll-mb-40 rounded-xl border bg-white pl-10 pr-14 text-base font-normal outline-none ring-brand/30 focus:ring-2 md:text-sm ${invalid ? "border-red-500" : "border-slate-200"}`}
             />
             <button
               type="button"
               onClick={handleLocate}
               disabled={locating}
               aria-label={t("address.mine")}
-              className="absolute right-1.5 top-1/2 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-lg bg-brand text-white hover:bg-brand-dark disabled:opacity-60"
+              className="absolute right-1 top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-lg bg-brand text-white hover:bg-brand-dark disabled:opacity-60"
             >
               {locating ? (
                 <LoaderCircle className="h-4 w-4 animate-spin" />
@@ -203,8 +236,13 @@ export default function MapCheckoutSection({
                 <LocateFixed className="h-4 w-4" />
               )}
             </button>
-            {openSuggest && suggestions.length > 0 && (
-              <div className="absolute inset-x-0 top-[calc(100%+6px)] z-20 overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
+            {suggesting && (
+              <p className="absolute inset-x-0 top-[calc(100%+6px)] z-20 rounded-xl border border-slate-100 bg-white px-3 py-2 text-xs font-semibold text-slate-500 shadow-sm">
+                {t("common.searching")}
+              </p>
+            )}
+            {openSuggest && suggestions.length > 0 && !suggesting && (
+              <div className="absolute inset-x-0 top-[calc(100%+6px)] z-20 max-h-60 overflow-y-auto rounded-2xl border border-slate-100 bg-white shadow-sm">
                 {suggestions.map((item) => (
                   <button
                     key={`${item.title}-${item.lat}-${item.lng}`}
@@ -228,50 +266,53 @@ export default function MapCheckoutSection({
         {status && <p className="text-xs text-red-600">{status}</p>}
 
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <label className="grid gap-1 text-xs font-semibold text-slate-600">
+          <label className="grid min-w-0 gap-1 text-xs font-semibold text-slate-600">
             {t("address.apt")}
             <input
               value={apartment}
+              inputMode="numeric"
               onChange={(event) => onChange({ apartment: event.target.value })}
               placeholder={t("address.aptPh")}
-              className="h-12 rounded-xl border border-slate-200 px-3 text-sm font-normal outline-none ring-brand/30 focus:ring-2"
+              className="h-12 w-full min-w-0 rounded-xl border border-slate-200 px-3 text-base font-normal outline-none ring-brand/30 focus:ring-2 md:text-sm"
             />
           </label>
-          <label className="grid gap-1 text-xs font-semibold text-slate-600">
+          <label className="grid min-w-0 gap-1 text-xs font-semibold text-slate-600">
             {t("address.entrance")}
             <input
               value={entrance}
+              inputMode="numeric"
               onChange={(event) => onChange({ entrance: event.target.value })}
               placeholder={t("address.entrancePh")}
-              className="h-12 rounded-xl border border-slate-200 px-3 text-sm font-normal outline-none ring-brand/30 focus:ring-2"
+              className="h-12 w-full min-w-0 rounded-xl border border-slate-200 px-3 text-base font-normal outline-none ring-brand/30 focus:ring-2 md:text-sm"
             />
           </label>
-          <label className="grid gap-1 text-xs font-semibold text-slate-600">
+          <label className="grid min-w-0 gap-1 text-xs font-semibold text-slate-600">
             {t("address.floor")}
             <input
               value={floor}
+              inputMode="numeric"
               onChange={(event) => onChange({ floor: event.target.value })}
               placeholder={t("address.floorPh")}
-              className="h-12 rounded-xl border border-slate-200 px-3 text-sm font-normal outline-none ring-brand/30 focus:ring-2"
+              className="h-12 w-full min-w-0 rounded-xl border border-slate-200 px-3 text-base font-normal outline-none ring-brand/30 focus:ring-2 md:text-sm"
             />
           </label>
-          <label className="grid gap-1 text-xs font-semibold text-slate-600">
+          <label className="grid min-w-0 gap-1 text-xs font-semibold text-slate-600">
             {t("address.intercom")}
             <input
               value={intercom}
               onChange={(event) => onChange({ intercom: event.target.value })}
               placeholder={t("address.intercomPh")}
-              className="h-12 rounded-xl border border-slate-200 px-3 text-sm font-normal outline-none ring-brand/30 focus:ring-2"
+              className="h-12 w-full min-w-0 rounded-xl border border-slate-200 px-3 text-base font-normal outline-none ring-brand/30 focus:ring-2 md:text-sm"
             />
           </label>
         </div>
-        <label className="grid gap-1 text-xs font-semibold text-slate-600">
+        <label className="grid min-w-0 gap-1 text-xs font-semibold text-slate-600">
           {t("address.landmark")}
           <input
             value={landmark}
             onChange={(event) => onChange({ landmark: event.target.value })}
             placeholder={t("address.landmarkPh")}
-            className="h-12 rounded-xl border border-slate-200 px-3 text-sm font-normal outline-none ring-brand/30 focus:ring-2"
+            className="h-12 w-full min-w-0 rounded-xl border border-slate-200 px-3 text-base font-normal outline-none ring-brand/30 focus:ring-2 md:text-sm"
           />
         </label>
       </div>

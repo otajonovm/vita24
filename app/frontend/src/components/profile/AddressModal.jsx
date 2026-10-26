@@ -1,9 +1,11 @@
 import { useTranslation } from "react-i18next";
 import { MapPin, XCircle } from "lucide-react";
 import MapCheckoutSection from "../checkout/MapCheckoutSection";
+import useLockBodyScroll from "../../hooks/useLockBodyScroll";
 
 export default function AddressModal({ open, title, form, saving, onChange, onClose, onSubmit }) {
   const { t } = useTranslation();
+  useLockBodyScroll(open);
   if (!open) return null;
 
   return (
@@ -13,7 +15,7 @@ export default function AddressModal({ open, title, form, saving, onChange, onCl
       role="presentation"
     >
       <div
-        className="max-h-[92dvh] w-full max-w-lg overflow-y-auto rounded-t-2xl border border-slate-100 bg-white p-5 shadow-sm md:rounded-2xl"
+        className="max-h-[90dvh] w-full max-w-lg overflow-y-auto overscroll-contain rounded-t-2xl border border-slate-100 bg-white p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-sm md:rounded-2xl md:pb-5"
         onClick={(event) => event.stopPropagation()}
         role="dialog"
         aria-modal="true"

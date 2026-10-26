@@ -6,6 +6,8 @@ import customerService from "../../services/customerService";
 import { requestCustomerOtp, verifyCustomerOtp } from "../../services/api";
 import { loadPublicSettings } from "../../lib/publicSettings";
 import { userError } from "../../lib/userError";
+import useLockBodyScroll from "../../hooks/useLockBodyScroll";
+import { LoadingButton } from "../ui";
 import { useAuthStore } from "../../store/useAuthStore";
 
 function maskLocal(value) {
@@ -63,6 +65,7 @@ export default function AuthLoginModal({ open, onClose, onSuccess }) {
   const [awaitingContact, setAwaitingContact] = useState(false);
   const [resendLeft, setResendLeft] = useState(0);
   const [retryLeft, setRetryLeft] = useState(0);
+  useLockBodyScroll(open);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -205,12 +208,19 @@ export default function AuthLoginModal({ open, onClose, onSuccess }) {
   return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/45 p-0 md:items-center md:p-5"
-      onClick={onClose}
+      onClick={() => {
+        if (!loading) onClose();
+      }}
       role="presentation"
     >
       <div
-        className="w-full max-w-md rounded-t-2xl border border-slate-100 bg-white p-5 shadow-sm md:rounded-2xl"
+        className="max-h-[90dvh] w-full max-w-md overflow-y-auto overscroll-contain rounded-t-2xl border border-slate-100 bg-white p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-sm md:rounded-2xl md:pb-5"
         onClick={(event) => event.stopPropagation()}
+        onFocus={(event) => {
+          const field = event.target;
+          if (field?.tagName !== "INPUT" && field?.tagName !== "TEXTAREA") return;
+          window.setTimeout(() => field.scrollIntoView({ block: "center" }), 280);
+        }}
         role="dialog"
         aria-modal="true"
         aria-labelledby="auth-login-title"
@@ -243,7 +253,8 @@ export default function AuthLoginModal({ open, onClose, onSuccess }) {
           <button
             type="button"
             onClick={onClose}
-            className="grid h-10 w-10 place-items-center rounded-xl text-slate-400 hover:bg-slate-50"
+            disabled={loading}
+            className="grid h-10 w-10 place-items-center rounded-xl text-slate-400 hover:bg-slate-50 disabled:opacity-50"
             aria-label={t("common.close")}
           >
             <XCircle className="h-5 w-5" />
@@ -264,19 +275,21 @@ export default function AuthLoginModal({ open, onClose, onSuccess }) {
                   value={phone}
                   onChange={(event) => setPhone(maskLocal(event.target.value))}
                   placeholder="90 123 45 67"
-                  className="h-full min-w-0 flex-1 bg-transparent px-2 text-sm outline-none"
+                  className="h-full min-w-0 flex-1 bg-transparent px-2 text-base outline-none md:text-sm"
                 />
               </span>
             </label>
             {retryLeft > 0 && <p className="text-sm text-red-600">{t("auth.tooMany", { time: formatWait(retryLeft) })}</p>}
             {error && <p className="text-sm text-red-600">{error}</p>}
-            <button
+            <LoadingButton
               type="submit"
-              disabled={!phoneValid || loading || retryLeft > 0}
+              disabled={!phoneValid || retryLeft > 0}
+              loading={loading}
+              loadingText={t("common.loading")}
               className="h-12 rounded-xl bg-[#087b51] text-sm font-bold text-white hover:bg-[#066341] disabled:opacity-50"
             >
               {t("auth.getCode")}
-            </button>
+            </LoadingButton>
             {!phoneValid && <p className="text-xs font-medium text-slate-500">{t("auth.phoneIncomplete")}</p>}
           </form>
         )}
@@ -302,6 +315,7 @@ export default function AuthLoginModal({ open, onClose, onSuccess }) {
               <input
                 type="text"
                 inputMode="numeric"
+                autoComplete="one-time-code"
                 maxLength={6}
                 value={otp}
                 onChange={(event) => setOtp(event.target.value.replace(/\D/g, ""))}
@@ -312,14 +326,16 @@ export default function AuthLoginModal({ open, onClose, onSuccess }) {
             {devCode && <p className="text-xs text-slate-500">{t("auth.devCode", { code: devCode })}</p>}
             {retryLeft > 0 && <p className="text-sm text-red-600">{t("auth.tooMany", { time: formatWait(retryLeft) })}</p>}
             {error && <p className="text-sm text-red-600">{error}</p>}
-            <button
+            <LoadingButton
               type="button"
-              disabled={resendLeft > 0 || loading}
+              disabled={resendLeft > 0}
+              loading={loading}
+              loadingText={t("common.loading")}
               onClick={sendOtp}
               className="h-11 rounded-xl border border-slate-200 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
             >
               {resendLeft > 0 ? t("auth.resendIn", { time: formatWait(resendLeft) }) : t("auth.resend")}
-            </button>
+            </LoadingButton>
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
@@ -332,13 +348,15 @@ export default function AuthLoginModal({ open, onClose, onSuccess }) {
               >
                 {t("common.back")}
               </button>
-              <button
+              <LoadingButton
                 type="submit"
-                disabled={otp.length < 6 || loading}
+                disabled={otp.length < 6}
+                loading={loading}
+                loadingText={t("common.loading")}
                 className="h-12 rounded-xl bg-[#087b51] text-sm font-bold text-white hover:bg-[#066341] disabled:opacity-50"
               >
                 {t("order.cancel.submit")}
-              </button>
+              </LoadingButton>
             </div>
           </form>
         )}
@@ -355,18 +373,19 @@ export default function AuthLoginModal({ open, onClose, onSuccess }) {
                   value={fullName}
                   onChange={(event) => setFullName(event.target.value)}
                   placeholder="Ali Valiyev"
-                  className="h-12 w-full rounded-xl border border-slate-200 pl-10 pr-3 text-sm outline-none ring-[#087b51]/30 focus:ring-2"
+                  className="h-12 w-full rounded-xl border border-slate-200 pl-10 pr-3 text-base outline-none ring-[#087b51]/30 focus:ring-2 md:text-sm"
                 />
               </span>
             </label>
             {error && <p className="text-sm text-red-600">{error}</p>}
-            <button
+            <LoadingButton
               type="submit"
-              disabled={loading}
+              loading={loading}
+              loadingText={t("common.saving")}
               className="h-12 rounded-xl bg-[#087b51] text-sm font-bold text-white hover:bg-[#066341] disabled:opacity-50"
             >
               {t("auth.continue")}
-            </button>
+            </LoadingButton>
           </form>
         )}
       </div>

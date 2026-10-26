@@ -8,7 +8,7 @@ const {
   captureStock,
 } = require("./stock");
 const { publish } = require("./panelEvents");
-const { notifyCustomer } = require("./telegramBot");
+const { notifyCustomer } = require("../bot/services");
 const {
   REVIEW_STATUSES,
   canUndo,

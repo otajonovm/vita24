@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { formatDateTime, formatSom, orderStatusLabel } from "../../lib/format";
 import { fetchPanelStats, fetchShiftReport } from "../../services/api";
+import { ErrorState, LoadingButton, RefetchBar, SkeletonTable } from "../ui";
 import { apiError, printHtml } from "./panelShared";
+import { createRequestGate, isCanceled } from "../../lib/requestGate";
 
 export default function StatsTab({ branchId, onToast }) {
   const { t } = useTranslation();
@@ -10,26 +12,50 @@ export default function StatsTab({ branchId, onToast }) {
   const [stats, setStats] = useState(null);
   const [shift, setShift] = useState(null);
   const [askShift, setAskShift] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [ending, setEnding] = useState(false);
+  const requestGate = useRef(createRequestGate());
 
-  useEffect(() => {
+  function load(nextRange = range) {
     if (!branchId) return undefined;
     let active = true;
-    fetchPanelStats(branchId, range)
-      .then((data) => active && setStats(data))
-      .catch((error) => onToast(apiError(error, t("panel.loadFailed", "Ro'yxat yuklanmadi"))));
+    const requestId = requestGate.current.next();
+    setError("");
+    setLoading(true);
+    fetchPanelStats(branchId, nextRange)
+      .then((data) => {
+        if (!active || !requestGate.current.isLatest(requestId)) return;
+        setStats(data);
+      })
+      .catch((err) => {
+        if (!active || isCanceled(err) || !requestGate.current.isLatest(requestId)) return;
+        setError(apiError(err, t("panel.loadFailed", "Ro'yxat yuklanmadi")));
+        onToast(apiError(err, t("panel.loadFailed", "Ro'yxat yuklanmadi")));
+      })
+      .finally(() => {
+        if (active && requestGate.current.isLatest(requestId)) setLoading(false);
+      });
     return () => {
       active = false;
     };
-  }, [branchId, range]);
+  }
+
+  useEffect(() => load(), [branchId, range]);
 
   async function endShift() {
+    if (ending) return;
     const since = localStorage.getItem("vita24-shift-start") || new Date().toISOString();
+    setEnding(true);
     try {
       const report = await fetchShiftReport(branchId, since);
       setShift(report);
       localStorage.setItem("vita24-shift-start", new Date().toISOString());
-    } catch (error) {
-      onToast(apiError(error, t("panel.actionFailed", "Amal bajarilmadi")));
+      setAskShift(false);
+    } catch (err) {
+      onToast(apiError(err, t("panel.actionFailed", "Amal bajarilmadi")));
+    } finally {
+      setEnding(false);
     }
   }
 
@@ -45,6 +71,10 @@ export default function StatsTab({ branchId, onToast }) {
         ))}
         <button type="button" onClick={() => setAskShift(true)} className="ml-auto h-10 rounded-xl bg-brand px-3 text-sm font-bold text-white">{t("panel.shift", "Smenani yakunlash")}</button>
       </div>
+      {loading && !stats && <SkeletonTable rows={3} />}
+      {!loading && error && !stats && <ErrorState title={error} onRetry={() => load()} />}
+      <div className="relative">
+        <RefetchBar show={loading && Boolean(stats)} />
       {stats && (
         <div className="grid gap-3 md:grid-cols-3">
           <Card title={t("panel.orders", "Buyurtmalar")} value={stats.orders} />
@@ -70,12 +100,21 @@ export default function StatsTab({ branchId, onToast }) {
           </div>
         </div>
       )}
+      </div>
       {askShift && (
         <div className="grid gap-2 rounded-2xl border border-slate-100 bg-white p-4">
           <p className="text-sm">Smenani yakunlaysizmi? Hisobot ekranda chiqadi.</p>
           <div className="flex gap-2">
-            <button type="button" onClick={endShift} className="h-10 rounded-xl bg-brand px-3 text-sm font-bold text-white">Yakunlash</button>
-            <button type="button" onClick={() => setAskShift(false)} className="h-10 rounded-xl px-3 text-sm">Bekor</button>
+            <LoadingButton
+              type="button"
+              loading={ending}
+              loadingText={t("common.saving")}
+              onClick={endShift}
+              className="h-10 rounded-xl bg-brand px-3 text-sm font-bold text-white disabled:opacity-50"
+            >
+              Yakunlash
+            </LoadingButton>
+            <button type="button" disabled={ending} onClick={() => setAskShift(false)} className="h-10 rounded-xl px-3 text-sm disabled:opacity-50">Bekor</button>
           </div>
         </div>
       )}

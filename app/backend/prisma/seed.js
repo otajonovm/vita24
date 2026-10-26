@@ -1,5 +1,6 @@
 const { PrismaClient } = require("../generated/prisma");
 const { DEFAULTS } = require("../src/lib/shopSettings");
+const { buildSearchText } = require("../src/lib/searchText");
 
 const prisma = new PrismaClient();
 
@@ -280,15 +281,15 @@ async function main() {
   const storageConditions = "Quruq, yorug'likdan himoyalangan joyda, 25°C dan past saqlang";
 
   for (const medicine of medicines) {
-    await prisma.medicine.create({
-      data: {
-        ...medicine,
-        ...details[medicine.id],
-        usage: medicine.description,
-        storageConditions,
-        showOnHome: true,
-      },
-    });
+    const data = {
+      ...medicine,
+      ...details[medicine.id],
+      usage: medicine.description,
+      storageConditions,
+      showOnHome: true,
+    };
+    data.searchText = buildSearchText(data);
+    await prisma.medicine.create({ data });
   }
 
   for (const branch of branches) {

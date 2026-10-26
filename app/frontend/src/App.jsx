@@ -1,12 +1,14 @@
-import { lazy, Suspense } from "react";
-import { useTranslation } from "react-i18next";
-import { BrowserRouter, Route, Routes, useLocation } from "react-router-dom";
+import { lazy, Suspense, useEffect } from "react";
+import { BrowserRouter, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { isTelegramFormField, setTelegramClosingConfirmation, syncTelegramBackButton } from "./lib/telegram";
+import { useCartStore } from "./store/useCartStore";
 import { useToastStore } from "./store/useToastStore";
 import BottomNav from "./components/layout/BottomNav";
 import Footer from "./components/layout/Footer";
 import Header from "./components/layout/Header";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 import PageMeta from "./components/seo/PageMeta";
+import { ErrorBoundary, SkeletonPage } from "./components/ui";
 import CartPage from "./pages/CartPage";
 import CatalogPage from "./pages/CatalogPage";
 import FavoritesPage from "./pages/FavoritesPage";
@@ -18,19 +20,47 @@ import OrderDetailPage from "./pages/OrderDetailPage";
 import OrdersPage from "./pages/OrdersPage";
 import ProfilePage from "./pages/ProfilePage";
 
-function LoadingLine() {
-  const { t } = useTranslation();
-  return <p className="text-sm text-slate-500">{t("common.loading")}</p>;
-}
-
 const BranchAdminPage = lazy(() => import("./pages/BranchAdminPage"));
 const SuperAdminPage = lazy(() => import("./pages/SuperAdminPage"));
 
+function TelegramBridge() {
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const inner =
+      location.pathname !== "/" &&
+      !location.pathname.startsWith("/admin") &&
+      !location.pathname.startsWith("/branch-admin");
+    return syncTelegramBackButton(inner, () => navigate(-1));
+  }, [location.pathname, navigate]);
+
+  useEffect(() => {
+    const sync = () => {
+      const hasCart = useCartStore.getState().items.some((item) => Number(item.quantity) > 0);
+      setTelegramClosingConfirmation(hasCart || isTelegramFormField(document.activeElement));
+    };
+    sync();
+    const unsub = useCartStore.subscribe(sync);
+    const onBlur = () => window.setTimeout(sync, 0);
+    document.addEventListener("focusin", sync);
+    document.addEventListener("focusout", onBlur);
+    return () => {
+      unsub();
+      document.removeEventListener("focusin", sync);
+      document.removeEventListener("focusout", onBlur);
+      setTelegramClosingConfirmation(false);
+    };
+  }, []);
+
+  return null;
+}
+
 function StorefrontShell({ children }) {
   return (
-    <div className="flex min-h-dvh w-full min-w-0 flex-col overflow-x-hidden bg-canvas text-slate-900">
+    <div className="flex min-h-dvh w-full min-w-0 flex-col overflow-x-clip bg-canvas text-slate-900">
       <Header />
-      <main className="mx-auto w-full min-w-0 max-w-7xl flex-1 px-3 pb-24 pt-3 md:px-6 lg:pb-10">
+      <main className="mx-auto w-full min-w-0 max-w-7xl flex-1 px-3 pb-4 pt-3 md:px-6 lg:pb-10">
         {children}
       </main>
       <Footer />
@@ -56,7 +86,7 @@ function StoreToasts() {
   const dismiss = useToastStore((state) => state.dismiss);
   if (!toasts?.length) return null;
   return (
-    <div className="pointer-events-none fixed inset-x-0 top-[4.5rem] z-40 flex flex-col items-center gap-2 px-3 md:top-20">
+    <div className="pointer-events-none fixed inset-x-0 top-[calc(7.5rem+var(--tg-safe-top,env(safe-area-inset-top,0px)))] z-40 flex flex-col items-center gap-2 px-3 md:top-[calc(4.75rem+var(--tg-safe-top,env(safe-area-inset-top,0px)))] lg:top-[calc(5rem+var(--tg-safe-top,env(safe-area-inset-top,0px)))]">
       {toasts.slice(-2).map((toast) => (
         <div
           key={toast.id}
@@ -95,7 +125,7 @@ function AppRoutes() {
         description="Toshkent bo'ylab 24/7 onlayn dorixona. Filial tanlang, dori buyurtma qiling."
         path={location.pathname}
       />
-      <Suspense fallback={<LoadingLine />}>
+      <Suspense fallback={<SkeletonPage />}>
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/catalog" element={<CatalogPage />} />
@@ -127,14 +157,17 @@ function AppRoutes() {
         </Routes>
       </Suspense>
       {!isAdmin && !isPharmacist && <StoreToasts />}
+      <TelegramBridge />
     </Shell>
   );
 }
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <AppRoutes />
-    </BrowserRouter>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <AppRoutes />
+      </BrowserRouter>
+    </ErrorBoundary>
   );
 }

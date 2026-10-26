@@ -2,6 +2,7 @@ const { Prisma } = require("../../generated/prisma");
 const prisma = require("../lib/prisma");
 const { asyncHandler, sendSuccess } = require("../lib/response");
 const { availableCount } = require("../lib/stock");
+const { medicineSearchSql } = require("../lib/search");
 
 function money(value) {
   return Math.round((Number(value) || 0) * 100) / 100;
@@ -13,10 +14,7 @@ const networkStock = asyncHandler(async (req, res) => {
   const page = Number(req.query.page) || 1;
   const limit = Number(req.query.limit) || 20;
   const skip = (page - 1) * limit;
-  const like = `%${search}%`;
-  const searchSql = search
-    ? Prisma.sql`AND (m.name ILIKE ${like} OR COALESCE(m.barcode, '') ILIKE ${like} OR COALESCE(m."activeIngredient", '') ILIKE ${like})`
-    : Prisma.empty;
+  const searchSql = search ? Prisma.sql`AND ${medicineSearchSql(search)}` : Prisma.empty;
   const filterSql =
     filter === "low"
       ? Prisma.sql`AND EXISTS (

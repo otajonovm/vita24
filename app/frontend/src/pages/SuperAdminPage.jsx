@@ -16,6 +16,7 @@ import {
 } from "../components/admin/AdminPanels";
 import { AdminOrderPage, OrdersPanel, PrescriptionQueue, RefundsPanel } from "../components/admin/AdminCommerce";
 import { AuditPanel } from "../components/admin/AdminAudit";
+import { SearchAdminPanel } from "../components/admin/AdminSearch";
 import { ConfirmProvider } from "../components/admin/ui";
 import PasswordChangeForm from "../components/auth/PasswordChangeForm";
 import { can } from "../lib/permissions";
@@ -186,6 +187,7 @@ export default function SuperAdminPage() {
             element={<StaffGate permission="customers.manage"><CustomerManager /></StaffGate>}
           />
           <Route path="catalog" element={<StaffGate permission="catalog.manage"><CatalogManager /></StaffGate>} />
+          <Route path="search" element={<StaffGate permission="settings.manage"><SearchAdminPanel /></StaffGate>} />
           <Route path="stock" element={<StaffGate permission="stock.manage"><NetworkStock /></StaffGate>} />
           <Route path="showcase" element={<StaffGate permission="catalog.manage"><ShowcasePanel /></StaffGate>} />
           <Route

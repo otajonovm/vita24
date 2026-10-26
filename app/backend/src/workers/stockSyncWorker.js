@@ -1,5 +1,6 @@
 const prisma = require("../lib/prisma");
 const { expireStaleReservations } = require("../lib/stock");
+const { pruneSearchLogs } = require("../lib/search");
 const { encryptSecret, decryptSecret } = require("../lib/secrets");
 const { syncBranchStock } = require("../services/lekkoService");
 const { readSyncIntervalMinutes, writeSyncResult } = require("../lib/lekkoSync");
@@ -132,6 +133,7 @@ async function sweepExpiredReservations() {
   sweepInFlight = true;
   try {
     const expired = await expireStaleReservations();
+    await pruneSearchLogs();
     if (expired > 0) {
       console.log(`[stock] ${expired} ta muddati o'tgan zaxira omborga qaytarildi`);
     }

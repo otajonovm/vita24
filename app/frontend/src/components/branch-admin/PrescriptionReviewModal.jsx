@@ -70,7 +70,7 @@ export default function PrescriptionReviewModal({
         onClose();
         return;
       }
-      if (typing) return;
+      if (typing || busy) return;
       if (event.key === "Enter" && ask && review && !readOnly) {
         setAsk(false);
         onApprove(order);
@@ -86,7 +86,7 @@ export default function PrescriptionReviewModal({
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [order, queue, index, review, chips, note, ask, rejectDisabled]);
+  }, [order, queue, index, review, chips, note, ask, rejectDisabled, busy, readOnly, onApprove, onReject, onClose, onSelect]);
 
   if (!order) return null;
 
@@ -152,7 +152,25 @@ export default function PrescriptionReviewModal({
               <input id="rx-note" value={note} onChange={(event) => setNote(event.target.value)} placeholder={chips.includes("OTHER") ? "Izoh majburiy" : t("panel.extraNote", "Qo'shimcha izoh")} className="h-10 rounded-xl border border-slate-200 px-3 text-sm" />
               {otherNeedsNote && <p className="text-xs text-red-600">Boshqa sabab uchun izoh yozing</p>}
               {ask ? (
-                <p className="text-sm font-semibold">Tasdiqlaysizmi? Enter — ha, Esc — yo'q</p>
+                <div className="grid gap-2">
+                  <p className="text-sm font-semibold">Tasdiqlaysizmi?</p>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => {
+                        setAsk(false);
+                        onApprove(order);
+                      }}
+                      className="h-11 rounded-xl bg-brand px-4 text-sm font-bold text-white disabled:opacity-50"
+                    >
+                      Ha, tasdiqlash
+                    </button>
+                    <button type="button" disabled={busy} onClick={() => setAsk(false)} className="h-11 rounded-xl border border-slate-200 px-4 text-sm font-bold disabled:opacity-50">
+                      Bekor
+                    </button>
+                  </div>
+                </div>
               ) : (
                 <div className="flex flex-wrap items-center gap-2">
                   <button type="button" disabled={busy} onClick={() => setAsk(true)} className="h-11 rounded-xl bg-brand px-4 text-sm font-bold text-white disabled:opacity-50">{t("panel.approve", "Tasdiqlash")}</button>

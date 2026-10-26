@@ -92,7 +92,7 @@ export function LekkoPanel() {
       } else {
         const result = await syncAdminLekko(branch.id);
         push(result.message === "O'zgarish yo'q" ? t("admin.lekkoNoChange") : t("admin.lekkoSyncDone", result));
-        await load();
+        setRows((current) => current.map((item) => (item.id === branch.id ? { ...item, lastSyncedAt: new Date().toISOString(), lekkoLastError: null } : item)));
       }
     } catch (err) {
       const message = apiError(err, t("admin.errorTitle"));
@@ -172,11 +172,11 @@ export function LekkoPanel() {
                     </td>
                     <td className="py-3">
                       <div className="flex flex-wrap gap-2">
-                        <button type="button" disabled={!row.hasLekkoKey || busy === `check:${row.id}`} onClick={() => run(row, "check")} className="h-10 rounded-xl border border-slate-200 px-3 text-xs font-bold disabled:opacity-50" title={!row.hasLekkoKey ? t("admin.lekkoNeedKey") : undefined}>
-                          {busy === `check:${row.id}` ? t("admin.lekkoChecking") : t("admin.lekkoCheck")}
+                        <button type="button" disabled={!row.hasLekkoKey || Boolean(busy)} onClick={() => run(row, "check")} className="h-10 rounded-xl border border-slate-200 px-3 text-xs font-bold disabled:opacity-50" title={!row.hasLekkoKey ? t("admin.lekkoNeedKey") : undefined}>
+                          {busy === `check:${row.id}` ? t("admin.lekkoChecking") : busy.startsWith("check:") ? t("common.loading") : t("admin.lekkoCheck")}
                         </button>
-                        <button type="button" disabled={!row.hasLekkoKey || busy === `sync:${row.id}`} onClick={() => run(row, "sync")} className="h-10 rounded-xl bg-brand px-3 text-xs font-bold text-white disabled:opacity-50" title={!row.hasLekkoKey ? t("admin.lekkoNeedKey") : undefined}>
-                          {busy === `sync:${row.id}` ? t("admin.lekkoSyncing") : t("admin.lekkoSyncNow")}
+                        <button type="button" disabled={!row.hasLekkoKey || Boolean(busy)} onClick={() => run(row, "sync")} className="h-10 rounded-xl bg-brand px-3 text-xs font-bold text-white disabled:opacity-50" title={!row.hasLekkoKey ? t("admin.lekkoNeedKey") : undefined}>
+                          {busy === `sync:${row.id}` ? t("admin.lekkoSyncing") : busy.startsWith("sync:") ? t("common.loading") : t("admin.lekkoSyncNow")}
                         </button>
                       </div>
                       {!row.hasLekkoKey ? <p className="mt-1 text-xs text-amber-800">{t("admin.lekkoNeedKey")}</p> : null}

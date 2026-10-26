@@ -1,6 +1,7 @@
 import { NavLink } from "react-router-dom";
 import { Heart, Home, LayoutGrid, ShoppingCart, User } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import useSoftKeyboard from "../../hooks/useSoftKeyboard";
 import { useCartStore } from "../../store/useCartStore";
 
 const TABS = [
@@ -13,20 +14,23 @@ const TABS = [
 
 export default function BottomNav() {
   const { t } = useTranslation();
+  const keyboard = useSoftKeyboard();
   const itemCount = useCartStore((state) =>
     state.items.reduce((sum, item) => sum + item.quantity, 0)
   );
 
+  if (keyboard) return null;
+
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-30 block border-t border-slate-100 bg-white/95 backdrop-blur lg:hidden">
-      <div className="mx-auto grid max-w-lg grid-cols-5 px-0.5 pb-[max(0.35rem,var(--tg-safe-bottom,env(safe-area-inset-bottom)))] pt-1.5">
+    <nav className="fixed inset-x-0 bottom-0 z-30 block border-t border-slate-100 bg-white/95 pb-[var(--tg-safe-bottom,env(safe-area-inset-bottom))] backdrop-blur lg:hidden">
+      <div className="mx-auto grid h-[var(--bottom-nav-h)] max-w-lg grid-cols-5 px-0.5">
         {TABS.map((tab) => (
           <NavLink
             key={tab.to}
             to={tab.to}
             end={tab.end}
             className={({ isActive }) =>
-              `relative flex min-w-0 flex-col items-center gap-0.5 px-0.5 py-1 no-underline ${
+              `relative flex h-full min-w-0 flex-col items-center justify-center gap-0.5 px-0.5 no-underline ${
                 isActive ? "text-[#087b51]" : "text-slate-400"
               }`
             }

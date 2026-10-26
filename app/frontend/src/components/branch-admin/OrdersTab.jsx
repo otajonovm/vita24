@@ -6,8 +6,10 @@ import {
   undoOrderStatus,
   updateBranchOrderStatus,
 } from "../../services/api";
+import { EmptyState, ErrorState, LoadingButton, RefetchBar, SkeletonTable } from "../ui";
 import OrderCard from "./OrderCard";
 import { ORDER_FILTERS, apiError } from "./panelShared";
+import { createRequestGate, isCanceled } from "../../lib/requestGate";
 
 function formatUzDate(date) {
   const day = String(date.getDate()).padStart(2, "0");
@@ -29,7 +31,10 @@ export default function OrdersTab({ branchId, pulse, focus, readOnly = false, on
   const [counts, setCounts] = useState({});
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [isRefetching, setIsRefetching] = useState(false);
+  const [error, setError] = useState("");
+  const [loadingMore, setLoadingMore] = useState(false);
   const [busyId, setBusyId] = useState("");
   const [search, setSearch] = useState("");
   const [query, setQuery] = useState("");
@@ -43,6 +48,7 @@ export default function OrdersTab({ branchId, pulse, focus, readOnly = false, on
   const to = toIsoDate(toText);
   const rangeError = fromText.trim() && toText.trim() && from && to && from > to;
   const filters = useRef({ query, from, to, status, sort });
+  const requestGate = useRef(createRequestGate());
   filters.current = { query, from, to, status, sort };
 
   useEffect(() => {
@@ -61,22 +67,31 @@ export default function OrdersTab({ branchId, pulse, focus, readOnly = false, on
   useEffect(() => {
     if (!branchId || rangeError) return undefined;
     let active = true;
-    setLoading(orders.length === 0);
+    const requestId = requestGate.current.next();
+    setError("");
+    if (orders.length === 0) setLoading(true);
+    else setIsRefetching(true);
     fetchBranchAdminOrders(branchId, { search: query, from, to, status, sort, page: 1, limit: 20 })
       .then((data) => {
-        if (!active) return;
+        if (!active || !requestGate.current.isLatest(requestId)) return;
         setOrders(data.orders);
         onOrders?.(data.orders);
         setCounts(data.counts || {});
         setPage(1);
         setHasMore(data.hasMore);
-        setLoading(false);
+        setError("");
         ready.current = true;
       })
-      .catch((error) => {
-        if (!active) return;
-        setLoading(false);
-        onToast(apiError(error, t("panel.loadFailed", "Ro'yxat yuklanmadi")));
+      .catch((err) => {
+        if (!active || isCanceled(err) || !requestGate.current.isLatest(requestId)) return;
+        setError(apiError(err, t("panel.loadFailed", "Ro'yxat yuklanmadi")));
+        onToast(apiError(err, t("panel.loadFailed", "Ro'yxat yuklanmadi")));
+      })
+      .finally(() => {
+        if (active && requestGate.current.isLatest(requestId)) {
+          setLoading(false);
+          setIsRefetching(false);
+        }
       });
     return () => {
       active = false;
@@ -118,14 +133,22 @@ export default function OrdersTab({ branchId, pulse, focus, readOnly = false, on
   }, [pulse, branchId]);
 
   async function loadMore() {
+    if (loadingMore) return;
     const next = page + 1;
-    const data = await fetchBranchAdminOrders(branchId, { search: query, from, to, status, sort, page: next, limit: 20 });
-    setOrders((current) => {
-      const known = new Set(current.map((order) => order.id));
-      return [...current, ...data.orders.filter((order) => !known.has(order.id))];
-    });
-    setPage(next);
-    setHasMore(data.hasMore);
+    setLoadingMore(true);
+    try {
+      const data = await fetchBranchAdminOrders(branchId, { search: query, from, to, status, sort, page: next, limit: 20 });
+      setOrders((current) => {
+        const known = new Set(current.map((order) => order.id));
+        return [...current, ...data.orders.filter((order) => !known.has(order.id))];
+      });
+      setPage(next);
+      setHasMore(data.hasMore);
+    } catch (err) {
+      onToast(apiError(err, t("panel.loadFailed", "Ro'yxat yuklanmadi")));
+    } finally {
+      setLoadingMore(false);
+    }
   }
 
   async function changeStatus(order, payload) {
@@ -236,26 +259,39 @@ export default function OrdersTab({ branchId, pulse, focus, readOnly = false, on
         </div>
         <div className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-canvas to-transparent xl:hidden" />
       </div>
-      {loading && orders.length === 0 && <p className="text-sm text-slate-500">{t("panel.loading", "Yuklanmoqda...")}</p>}
-      {!loading && orders.length === 0 && (
-        <div className="grid justify-items-start gap-2">
-          <p className="text-sm text-slate-500">Bu filtr bo'yicha buyurtma topilmadi</p>
-          <button
-            type="button"
-            onClick={() => {
-              setStatus("");
-              setSearch("");
-              setQuery("");
-              setFromText("");
-              setToText("");
-            }}
-            className="h-10 rounded-xl border border-slate-200 px-3 text-sm font-semibold"
-          >
-            Filtrlarni tozalash
-          </button>
-        </div>
+      {loading && orders.length === 0 && <SkeletonTable rows={4} />}
+      {!loading && error && orders.length === 0 && (
+        <ErrorState title={error} onRetry={() => {
+          setError("");
+          setLoading(true);
+          fetchBranchAdminOrders(branchId, { search: query, from, to, status, sort, page: 1, limit: 20 })
+            .then((data) => {
+              setOrders(data.orders);
+              onOrders?.(data.orders);
+              setCounts(data.counts || {});
+              setPage(1);
+              setHasMore(data.hasMore);
+              setError("");
+            })
+            .catch((err) => setError(apiError(err, t("panel.loadFailed", "Ro'yxat yuklanmadi"))))
+            .finally(() => setLoading(false));
+        }} />
       )}
-      <div className="grid gap-3">
+      {!loading && !error && orders.length === 0 && (
+        <EmptyState
+          title="Bu filtr bo'yicha buyurtma topilmadi"
+          actionLabel="Filtrlarni tozalash"
+          onAction={() => {
+            setStatus("");
+            setSearch("");
+            setQuery("");
+            setFromText("");
+            setToText("");
+          }}
+        />
+      )}
+      <div className="relative grid gap-3">
+        <RefetchBar show={isRefetching} />
         {orders.map((order) => (
           <OrderCard
             key={order.id}
@@ -272,9 +308,15 @@ export default function OrdersTab({ branchId, pulse, focus, readOnly = false, on
         ))}
       </div>
       {hasMore && (
-        <button type="button" onClick={loadMore} className="h-11 rounded-xl border border-slate-200 text-sm font-bold">
+        <LoadingButton
+          type="button"
+          loading={loadingMore}
+          loadingText={t("common.loading")}
+          onClick={loadMore}
+          className="h-11 rounded-xl border border-slate-200 text-sm font-bold disabled:opacity-50"
+        >
           {t("panel.loadMore", "Yana yuklash")}
-        </button>
+        </LoadingButton>
       )}
     </section>
   );

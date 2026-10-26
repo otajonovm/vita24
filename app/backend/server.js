@@ -80,6 +80,7 @@ app.use("/api/customers", require("./src/routes/customers"));
 app.use("/api/prescriptions", require("./src/routes/prescriptions"));
 app.use("/api/branch-admin", require("./src/routes/branchAdmin"));
 app.use("/api/admin/medicines", require("./src/routes/adminMedicines"));
+app.use("/api/admin/search", require("./src/routes/adminSearch"));
 app.use("/api/admin", require("./src/routes/admin"));
 
 const clickController = require("./src/controllers/clickController");
@@ -103,6 +104,31 @@ async function encryptStoredLekkoKeys() {
   }
 }
 
+let httpServer = null;
+let shuttingDown = false;
+
+function shutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`[server] ${signal}`);
+  const bot = require("./src/bot");
+  bot.markStopping();
+  Promise.resolve()
+    .then(() => bot.stopBot())
+    .catch((error) => console.error("[telegram] stop:", error.message))
+    .finally(() => {
+      if (!httpServer) {
+        process.exit(0);
+        return;
+      }
+      httpServer.close(() => process.exit(0));
+      setTimeout(() => process.exit(0), 8000).unref();
+    });
+}
+
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));
+
 encryptStoredLekkoKeys()
   .catch((error) => {
     console.error("[secrets] LEKKO kalitlarini shifrlab bo'lmadi:", error.message);
@@ -113,7 +139,7 @@ encryptStoredLekkoKeys()
     console.error("[settings] Sozlamalar o'qilmadi:", error.message);
   })
   .then(() => {
-    app.listen(PORT, () => {
+    httpServer = app.listen(PORT, () => {
       console.log(`Vita24 API ${PORT}-portda ishlayapti`);
       try {
         require("./src/workers/stockSyncWorker").startStockSyncWorker();
@@ -121,7 +147,11 @@ encryptStoredLekkoKeys()
         console.error("[LEKKO] Worker ishga tushmadi:", error.message);
       }
       try {
-        require("./src/lib/telegramBot").startTelegramBot();
+        require("./src/bot")
+          .initBot()
+          .catch((error) => {
+            console.error("[telegram] Bot ishga tushmadi:", error.message);
+          });
       } catch (error) {
         console.error("[telegram] Bot ishga tushmadi:", error.message);
       }

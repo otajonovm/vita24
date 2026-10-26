@@ -91,6 +91,49 @@ function toLatin(value) {
     .join("");
 }
 
+function normalizeSearch(value) {
+  let text = toLatin(String(value || ""))
+    .toLowerCase()
+    .replace(/[ʻ’‘`´]/g, "'")
+    .replace(/o'|g'/g, (token) => token[0]);
+  text = text.replace(/ch/g, "\u0001");
+  text = text.replace(/ts/g, "s").replace(/ks/g, "x").replace(/c/g, "s");
+  text = text.replace(/\u0001/g, "ch");
+  let prev = "";
+  while (prev !== text) {
+    prev = text;
+    text = text.replace(/ss/g, "s").replace(/ll/g, "l");
+  }
+  return text
+    .replace(/[^a-z0-9' ]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function escapeLike(value) {
+  return String(value || "").replace(/[\\%_]/g, (char) => `\\${char}`);
+}
+
+function buildSearchText(medicine) {
+  const parts = [
+    medicine?.name,
+    medicine?.activeIngredient,
+    medicine?.manufacturer,
+    medicine?.dosageForm,
+    medicine?.description,
+  ];
+  return normalizeSearch(parts.filter(Boolean).join(" "));
+}
+
+function extractDosageNumbers(value) {
+  const numbers = [];
+  const text = String(value || "").replace(/\b(\d+(?:[.,]\d+)?)\s*(?:mg|ml|iu|g|%)?/gi, (match, number) => {
+    numbers.push(String(number).replace(",", "."));
+    return " ";
+  });
+  return { text: text.replace(/\s+/g, " ").trim(), numbers: [...new Set(numbers)] };
+}
+
 function searchVariants(input) {
   const raw = String(input || "").trim();
   if (raw.length < 2) return [];
@@ -148,4 +191,13 @@ function suggestName(query, names) {
   return best;
 }
 
-module.exports = { searchVariants, toCyrillic, toLatin, suggestName };
+module.exports = {
+  searchVariants,
+  toCyrillic,
+  toLatin,
+  suggestName,
+  normalizeSearch,
+  escapeLike,
+  buildSearchText,
+  extractDosageNumbers,
+};

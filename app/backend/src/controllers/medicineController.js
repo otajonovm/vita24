@@ -2,6 +2,7 @@ const prisma = require("../lib/prisma");
 const { asyncHandler, sendSuccess, AppError } = require("../lib/response");
 const { availableCount, stockLevel } = require("../lib/stock");
 const { searchVariants, suggestName } = require("../lib/searchText");
+const { rankMedicines } = require("../lib/search");
 
 // Strength such as "500 mg", "100 mg/5 ml", "5мг/10мг", "200мл" taken from the product name.
 const DOSAGE_PATTERN =
@@ -166,54 +167,90 @@ async function resolveStorefrontBranchId(branchId) {
 const listMedicines = asyncHandler(async (req, res) => {
   const { branchId, categoryId, search, inStockOnly, featured, page, limit, sort } = req.query;
   const resolvedBranchId = await resolveStorefrontBranchId(branchId);
+  if (String(search || "").trim().length >= 2) {
+    return listSmartMedicines({
+      search,
+      branchId: branchId || null,
+      priceBranchId: resolvedBranchId,
+      categoryId,
+      inStockOnly,
+      featured,
+      page,
+      limit,
+      sort,
+      res,
+    });
+  }
   const stockFilter = {
     branchId: resolvedBranchId,
     ...(inStockOnly ? { stockCount: { gt: 0 } } : {}),
   };
 
   const variants = search ? searchVariants(search) : [];
+  const medicineWhere = {
+    isActive: true,
+    ...(featured ? { showOnHome: true } : {}),
+    stocks: { some: stockFilter },
+    ...(categoryId ? { categoryId } : {}),
+    ...(variants.length
+      ? {
+          OR: variants.flatMap((term) => [
+            { name: { contains: term, mode: "insensitive" } },
+            { description: { contains: term, mode: "insensitive" } },
+            { manufacturer: { contains: term, mode: "insensitive" } },
+            { barcode: { contains: term, mode: "insensitive" } },
+            { ikpuCode: { contains: term, mode: "insensitive" } },
+          ]),
+        }
+      : {}),
+  };
+  const include = {
+    category: { select: { id: true, name: true, slug: true, icon: true } },
+    stocks: {
+      where: { branchId: resolvedBranchId },
+      select: { branchId: true, price: true, stockCount: true, reservedCount: true },
+    },
+  };
+  const skip = (page - 1) * limit;
+  const total = await prisma.medicine.count({ where: medicineWhere });
 
-  const medicines = await prisma.medicine.findMany({
-    where: {
-      isActive: true,
-      ...(featured ? { showOnHome: true } : {}),
-      stocks: { some: stockFilter },
-      ...(categoryId ? { categoryId } : {}),
-      ...(variants.length
-        ? {
-            OR: variants.flatMap((term) => [
-              { name: { contains: term, mode: "insensitive" } },
-              { description: { contains: term, mode: "insensitive" } },
-              { manufacturer: { contains: term, mode: "insensitive" } },
-              { barcode: { contains: term, mode: "insensitive" } },
-              { ikpuCode: { contains: term, mode: "insensitive" } },
-            ]),
-          }
-        : {}),
-    },
-    include: {
-      category: { select: { id: true, name: true, slug: true, icon: true } },
-      stocks: {
-        where: { branchId: resolvedBranchId },
-        select: { branchId: true, price: true, stockCount: true, reservedCount: true },
+  let medicines;
+  if (sort === "price_asc" || sort === "price_desc") {
+    const stocks = await prisma.branchStock.findMany({
+      where: {
+        ...stockFilter,
+        medicine: medicineWhere,
       },
-    },
-  });
+      orderBy: [{ price: sort === "price_asc" ? "asc" : "desc" }, { medicine: { name: "asc" } }],
+      skip,
+      take: limit,
+      include: { medicine: { include } },
+    });
+    medicines = stocks.map((row) => row.medicine);
+  } else {
+    const orderBy =
+      featured && (!sort || sort === "default" || sort === "popular")
+        ? [{ homeSortOrder: "asc" }, { name: "asc" }]
+        : sort === "name"
+          ? [{ name: "asc" }]
+          : [{ showOnHome: "desc" }, { homeSortOrder: "asc" }, { name: "asc" }];
+    medicines = await prisma.medicine.findMany({
+      where: medicineWhere,
+      include,
+      orderBy,
+      skip,
+      take: limit,
+    });
+  }
 
   const mapped = medicines.map((medicine) => mapMedicine(medicine, resolvedBranchId));
-  const sorted =
-    featured && (!sort || sort === "default" || sort === "popular")
-      ? [...mapped].sort((a, b) => a.homeSortOrder - b.homeSortOrder || a.name.localeCompare(b.name, "uz"))
-      : applyCatalogSort(mapped, sort);
-  const total = sorted.length;
-  const start = (page - 1) * limit;
   const missed = variants.length > 0 && total === 0;
   const hint = missed ? await searchMiss(resolvedBranchId, search) : { suggestion: "", popular: [], categories: [] };
 
   return sendSuccess(
     res,
     {
-      items: sorted.slice(start, start + limit),
+      items: mapped,
       page,
       limit,
       total,
@@ -225,6 +262,78 @@ const listMedicines = asyncHandler(async (req, res) => {
     "Dorilar katalogi"
   );
 });
+
+async function listSmartMedicines({
+  search,
+  branchId,
+  priceBranchId,
+  categoryId,
+  inStockOnly,
+  featured,
+  page,
+  limit,
+  sort,
+  res,
+}) {
+  const ranked = await rankMedicines({
+    query: search,
+    branchId,
+    categoryId,
+    inStockOnly,
+    featured,
+    limit,
+    offset: (page - 1) * limit,
+    log: true,
+  });
+  const include = {
+    category: { select: { id: true, name: true, slug: true, icon: true } },
+    stocks: {
+      where: { branchId: priceBranchId },
+      select: { branchId: true, price: true, stockCount: true, reservedCount: true },
+    },
+  };
+  const ids = ranked.hits.map((hit) => hit.id);
+  const popularIds = ranked.popularIds || [];
+  const rows = await prisma.medicine.findMany({
+    where: { id: { in: [...ids, ...popularIds] } },
+    include,
+  });
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  const reasons = new Map(ranked.hits.map((hit) => [hit.id, hit]));
+  let items = ids
+    .map((id) => {
+      const medicine = byId.get(id);
+      if (!medicine) return null;
+      const mapped = mapMedicine(medicine, priceBranchId);
+      const reason = reasons.get(id);
+      mapped.matchReason = reason?.matchReason || "";
+      mapped.matchGroup = reason?.matchGroup || "name";
+      return mapped;
+    })
+    .filter(Boolean);
+  if (sort === "price_asc" || sort === "price_desc" || sort === "name") {
+    items = applyCatalogSort(items, sort);
+  }
+  const popular = popularIds
+    .map((id) => (byId.get(id) ? mapMedicine(byId.get(id), priceBranchId) : null))
+    .filter(Boolean);
+
+  return sendSuccess(
+    res,
+    {
+      items,
+      page,
+      limit,
+      total: ranked.total,
+      branchId: priceBranchId,
+      suggestion: ranked.suggestions[0]?.name || "",
+      suggestions: ranked.suggestions.map((item) => item.name),
+      popular,
+      categories: ranked.categories,
+    },
+    "Dorilar katalogi"
+  );
+}
 
 async function searchMiss(branchId, search) {
   const stockInclude = {
@@ -392,4 +501,5 @@ module.exports = {
   getMedicineBySlug,
   getMedicines: listMedicines,
   cartAvailability,
+  mapMedicine,
 };

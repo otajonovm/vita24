@@ -6,6 +6,8 @@ const { writeAudit } = require("../lib/audit");
 const { slugify } = require("../lib/branchProfile");
 const { toCsv, toXlsx } = require("../lib/reportFile");
 const { EXPORT_HEADERS, parseCsv, rowsFromMatrix, classifyRows } = require("../lib/catalogImport");
+const { buildSearchText } = require("../lib/searchText");
+const { rankMedicines } = require("../lib/search");
 
 const medicineSelect = {
   id: true,
@@ -17,6 +19,9 @@ const medicineSelect = {
   activeIngredient: true,
   quantityInPack: true,
   isPrescription: true,
+  rxSource: true,
+  atcCode: true,
+  rxNeedsReview: true,
   isActive: true,
   barcode: true,
   usage: true,
@@ -39,6 +44,7 @@ function medicineAudit(row) {
     basePrice: money(row.basePrice),
     isActive: row.isActive,
     isPrescription: row.isPrescription,
+    rxSource: row.rxSource || null,
     categoryId: row.categoryId,
     barcode: row.barcode,
     manufacturer: row.manufacturer,
@@ -95,6 +101,8 @@ function medicineData(body, extra = {}) {
     manufacturer: body.manufacturer.trim(),
     categoryId: body.categoryId,
     isPrescription: body.isPrescription === true,
+    rxSource: "MANUAL",
+    rxNeedsReview: false,
     barcode: String(body.barcode || "").trim() || null,
     usage: String(body.usage || "").trim() || null,
     contraindications: String(body.contraindications || "").trim() || null,
@@ -105,13 +113,45 @@ function medicineData(body, extra = {}) {
   };
 }
 
+function withSearchText(data) {
+  return { ...data, searchText: buildSearchText(data) };
+}
+
 const listCatalog = asyncHandler(async (req, res) => {
   const search = String(req.query.search || "").trim();
   const categoryId = String(req.query.categoryId || "").trim();
   const active = String(req.query.active || "all");
+  const prescription = String(req.query.prescription || "all");
+  const rxSource = String(req.query.rxSource || "").trim();
   const page = Number(req.query.page) || 1;
   const limit = Number(req.query.limit) || 20;
+  const rxWhere = {
+    ...(prescription === "yes" ? { isPrescription: true } : {}),
+    ...(prescription === "no" ? { isPrescription: false } : {}),
+    ...(prescription === "review" ? { rxNeedsReview: true } : {}),
+    ...(rxSource ? { rxSource } : {}),
+  };
+  const rxStats = await loadRxStats();
+  if (search.length >= 2 && prescription === "all" && !rxSource) {
+    const ranked = await rankMedicines({
+      query: search,
+      categoryId: categoryId || undefined,
+      includeInactive: active !== "active",
+      inactiveOnly: active === "inactive",
+      limit,
+      offset: (page - 1) * limit,
+      log: false,
+    });
+    const ids = ranked.hits.map((hit) => hit.id);
+    const rows = ids.length
+      ? await prisma.medicine.findMany({ where: { id: { in: ids } }, select: medicineSelect })
+      : [];
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    const items = ids.map((id) => byId.get(id)).filter(Boolean).map(serializeMedicine);
+    return sendSuccess(res, { items, page, limit, total: ranked.total, rxStats }, "Katalog");
+  }
   const where = {
+    ...rxWhere,
     ...(categoryId ? { categoryId } : {}),
     ...(active === "active" ? { isActive: true } : {}),
     ...(active === "inactive" ? { isActive: false } : {}),
@@ -136,7 +176,76 @@ const listCatalog = asyncHandler(async (req, res) => {
       take: limit,
     }),
   ]);
-  return sendSuccess(res, { items: rows.map(serializeMedicine), page, limit, total }, "Katalog");
+  return sendSuccess(res, { items: rows.map(serializeMedicine), page, limit, total, rxStats }, "Katalog");
+});
+
+async function loadRxStats() {
+  const [rxCount, reviewCount, grouped] = await Promise.all([
+    prisma.medicine.count({ where: { isPrescription: true } }),
+    prisma.medicine.count({ where: { rxNeedsReview: true } }),
+    prisma.medicine.groupBy({
+      by: ["rxSource"],
+      where: { isPrescription: true },
+      _count: { _all: true },
+    }),
+  ]);
+  const bySource = { LEKKO: 0, RULE: 0, MANUAL: 0 };
+  for (const row of grouped) {
+    if (row.rxSource && bySource[row.rxSource] != null) bySource[row.rxSource] = row._count._all;
+  }
+  return { rxCount, reviewCount, bySource };
+}
+
+const setMedicinePrescription = asyncHandler(async (req, res) => {
+  const current = await prisma.medicine.findUnique({
+    where: { id: req.params.id },
+    select: { id: true, name: true, isPrescription: true, rxSource: true },
+  });
+  if (!current) throw new AppError("Dori topilmadi", 404, "NOT_FOUND");
+  const isPrescription = req.body.isPrescription === true;
+  const updated = await prisma.medicine.update({
+    where: { id: current.id },
+    data: { isPrescription, rxSource: "MANUAL", rxNeedsReview: false },
+    select: medicineSelect,
+  });
+  await writeAudit(prisma, {
+    req,
+    action: "MEDICINE_RX_SET",
+    entityType: "Medicine",
+    entityId: current.id,
+    summary: `${current.name}: retsept ${isPrescription ? "ha" : "yo'q"}`,
+    before: { isPrescription: current.isPrescription, rxSource: current.rxSource },
+    after: { isPrescription, rxSource: "MANUAL" },
+  });
+  return sendSuccess(res, serializeMedicine(updated), "Retsept belgisi saqlandi");
+});
+
+const setMedicinePrescriptionBulk = asyncHandler(async (req, res) => {
+  const ids = [...new Set(req.body.ids.map((id) => String(id)))];
+  const isPrescription = req.body.isPrescription === true;
+  const rows = await prisma.medicine.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, name: true, isPrescription: true, rxSource: true },
+  });
+  if (!rows.length) throw new AppError("Dori topilmadi", 404, "NOT_FOUND");
+  await runDbTransaction(prisma, async (tx) => {
+    for (const row of rows) {
+      await tx.medicine.update({
+        where: { id: row.id },
+        data: { isPrescription, rxSource: "MANUAL", rxNeedsReview: false },
+      });
+      await writeAudit(tx, {
+        req,
+        action: "MEDICINE_RX_SET",
+        entityType: "Medicine",
+        entityId: row.id,
+        summary: `${row.name}: retsept ${isPrescription ? "ha" : "yo'q"}`,
+        before: { isPrescription: row.isPrescription, rxSource: row.rxSource },
+        after: { isPrescription, rxSource: "MANUAL" },
+      });
+    }
+  });
+  return sendSuccess(res, { updated: rows.length, isPrescription }, "Retsept belgilari saqlandi");
 });
 
 const createMedicine = asyncHandler(async (req, res) => {
@@ -145,7 +254,7 @@ const createMedicine = asyncHandler(async (req, res) => {
   await assertBarcodeFree(String(req.body.barcode || "").trim());
   const created = await prisma.medicine.create({
     data: {
-      ...medicineData(req.body),
+      ...withSearchText(medicineData(req.body)),
       slug: await uniqueSlug(req.body.name),
       imageEmoji: "💊",
       isActive: true,
@@ -171,7 +280,11 @@ const updateMedicine = asyncHandler(async (req, res) => {
     if (!category) throw new AppError("Kategoriya topilmadi", 404, "NOT_FOUND");
   }
   await assertBarcodeFree(String(req.body.barcode || "").trim(), current.id);
-  const data = medicineData(req.body);
+  const data = withSearchText(medicineData(req.body));
+  if (req.body.isPrescription === current.isPrescription) {
+    delete data.rxSource;
+    delete data.rxNeedsReview;
+  }
   if (req.body.name && req.body.name.trim() !== current.name) data.slug = await uniqueSlug(req.body.name, current.id);
   const updated = await prisma.medicine.update({ where: { id: current.id }, data, select: medicineSelect });
   await writeAudit(prisma, {
@@ -389,6 +502,8 @@ const confirmImport = asyncHandler(async (req, res) => {
         manufacturer: row.data.manufacturer,
         categoryId: row.data.categoryId,
         isPrescription: row.data.isPrescription,
+        rxSource: "MANUAL",
+        rxNeedsReview: false,
         barcode: row.data.barcode || null,
         usage: row.data.usage || null,
         contraindications: row.data.contraindications || null,
@@ -396,6 +511,7 @@ const confirmImport = asyncHandler(async (req, res) => {
         description: row.data.usage || row.data.name,
         basePrice: row.data.basePrice,
       };
+      data.searchText = buildSearchText(data);
       if (row.action === "update" && row.medicineId) {
         await tx.medicine.update({ where: { id: row.medicineId }, data });
         updated += 1;
@@ -430,6 +546,7 @@ const exportCatalog = asyncHandler(async (req, res) => {
       quantityInPack: true,
       manufacturer: true,
       isPrescription: true,
+      rxSource: true,
       barcode: true,
       usage: true,
       contraindications: true,
@@ -443,6 +560,7 @@ const exportCatalog = asyncHandler(async (req, res) => {
     for (const [header, key] of EXPORT_HEADERS) {
       if (key === "category") record[header] = row.category?.name || "";
       else if (key === "isPrescription") record[header] = row.isPrescription ? "ha" : "yo'q";
+      else if (key === "rxSource") record[header] = row.rxSource || "";
       else if (key === "basePrice") record[header] = money(row.basePrice);
       else record[header] = row[key] ?? "";
     }
@@ -467,4 +585,6 @@ module.exports = {
   previewImport,
   confirmImport,
   exportCatalog,
+  setMedicinePrescription,
+  setMedicinePrescriptionBulk,
 };

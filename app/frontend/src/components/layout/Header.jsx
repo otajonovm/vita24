@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { ChevronDown, Heart, MapPin, Search, ShoppingCart, User } from "lucide-react";
-import { formatSom } from "../../lib/format";
+import { ChevronDown, Heart, MapPin, ShoppingCart, User } from "lucide-react";
 import { createRequestGate, isCanceled } from "../../lib/requestGate";
-import { fetchBranches, fetchMedicines } from "../../services/api";
+import SearchBox from "../search/SearchBox";
+import { fetchBranches, suggestMedicines } from "../../services/api";
 import { useAuthStore } from "../../store/useAuthStore";
 import { useBranchStore } from "../../store/useBranchStore";
 import { useCartStore } from "../../store/useCartStore";
@@ -11,120 +11,6 @@ import BranchModal from "../modals/BranchModal";
 import LanguageSwitcher from "./LanguageSwitcher";
 import NotificationBell from "./NotificationBell";
 import { useTranslation } from "react-i18next";
-
-function SearchField({
-  query,
-  setQuery,
-  results,
-  suggestion = "",
-  popular = [],
-  categories = [],
-  openResults,
-  setOpenResults,
-  navigate,
-  onSubmitQuery,
-  className,
-}) {
-  const { t } = useTranslation();
-  const missed = openResults && query.trim().length >= 2 && results.length === 0;
-  return (
-    <div className={`relative ${className}`}>
-      <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-      <input
-        type="search"
-        value={query}
-        placeholder={t("search.placeholder")}
-        onChange={(event) => setQuery(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key === "Enter") {
-            event.preventDefault();
-            const value = query.trim();
-            setOpenResults(false);
-            onSubmitQuery?.(value);
-            navigate(value ? `/catalog?q=${encodeURIComponent(value)}` : "/catalog");
-          }
-        }}
-        onBlur={() => setTimeout(() => setOpenResults(false), 160)}
-        className="h-11 w-full rounded-full border border-slate-200 bg-slate-50 pl-10 pr-4 text-sm outline-none ring-[#087b51]/30 placeholder:truncate placeholder:text-slate-400 focus:bg-white focus:ring-2 lg:h-12"
-      />
-      {missed && (
-        <div className="absolute inset-x-0 top-[calc(100%+6px)] z-20 max-h-80 overflow-auto rounded-2xl border border-slate-100 bg-white p-3 shadow-sm">
-          <p className="text-sm font-semibold text-slate-700">{t("search.none")}</p>
-          {suggestion ? (
-            <button
-              type="button"
-              className="mt-2 text-left text-sm font-bold text-[#087B51]"
-              onMouseDown={() => {
-                setOpenResults(false);
-                navigate(`/catalog?q=${encodeURIComponent(suggestion)}`);
-              }}
-            >
-              {t("search.didYouMean", { name: suggestion })}
-            </button>
-          ) : null}
-          {categories.length > 0 && (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {categories.map((category) => (
-                <button
-                  key={category.id}
-                  type="button"
-                  className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-700"
-                  onMouseDown={() => {
-                    setOpenResults(false);
-                    navigate(`/catalog?category=${encodeURIComponent(category.id)}`);
-                  }}
-                >
-                  {category.name}
-                </button>
-              ))}
-            </div>
-          )}
-          {popular.length > 0 && (
-            <div className="mt-3 grid gap-1">
-              <p className="text-xs font-bold uppercase tracking-wide text-slate-400">{t("search.popular")}</p>
-              {popular.slice(0, 4).map((medicine) => (
-                <button
-                  key={medicine.id}
-                  type="button"
-                  className="flex w-full items-center justify-between gap-3 rounded-xl px-1 py-2 text-left hover:bg-slate-50"
-                  onMouseDown={() => {
-                    setQuery("");
-                    setOpenResults(false);
-                    navigate(medicine.slug ? `/medicine/${medicine.slug}` : `/catalog?q=${encodeURIComponent(medicine.name)}`);
-                  }}
-                >
-                  <span className="text-sm font-medium text-slate-800">{medicine.name}</span>
-                  <span className="text-sm font-bold tabular-nums">{formatSom(medicine.price)}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-      {openResults && results.length > 0 && (
-        <div className="absolute inset-x-0 top-[calc(100%+6px)] z-20 overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
-          {results.map((medicine) => (
-            <button
-              key={medicine.id}
-              type="button"
-              className="flex w-full items-center justify-between gap-3 border-b border-slate-100 px-3.5 py-3 text-left last:border-0 hover:bg-slate-50"
-              onMouseDown={() => {
-                setQuery("");
-                setOpenResults(false);
-                navigate(medicine.slug ? `/medicine/${medicine.slug}` : `/catalog?q=${encodeURIComponent(medicine.name)}`);
-              }}
-            >
-              <span className="text-sm font-medium text-slate-800">{medicine.name}</span>
-              <span className="text-sm font-bold tabular-nums text-slate-900">
-                {formatSom(medicine.price)}
-              </span>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
 export default function Header() {
   const { t } = useTranslation();
@@ -134,6 +20,7 @@ export default function Header() {
   const setBranch = useBranchStore((state) => state.setBranch);
   const openModal = useBranchStore((state) => state.openModal);
   const hydrated = useBranchStore((state) => state.hydrated);
+  const skipped = useBranchStore((state) => state.skipped);
   const user = useAuthStore((state) => state.user);
   const branchLocked =
     location.pathname.startsWith("/branch-admin") && user?.role === "BRANCH_ADMIN";
@@ -141,11 +28,11 @@ export default function Header() {
     state.items.reduce((sum, item) => sum + item.quantity, 0)
   );
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState([]);
-  const [suggestion, setSuggestion] = useState("");
-  const [popular, setPopular] = useState([]);
-  const [searchCategories, setSearchCategories] = useState([]);
+  const [groups, setGroups] = useState({ medicines: [], ingredients: [], symptoms: [] });
+  const [suggestions, setSuggestions] = useState([]);
   const [openResults, setOpenResults] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState("");
   const searchGate = useRef(createRequestGate());
   const submittedQuery = useRef("");
 
@@ -184,18 +71,20 @@ export default function Header() {
   }, []);
 
   useEffect(() => {
-    if (!hydrated || branch || branchLocked) return;
+    if (!hydrated || branch || branchLocked || skipped) return;
     openModal();
-  }, [hydrated, branch, branchLocked, openModal]);
+  }, [hydrated, branch, branchLocked, skipped, openModal]);
 
   useEffect(() => {
     const needle = query.trim();
     const pageQuery = new URLSearchParams(location.search).get("q") || "";
     const onThisResult =
       (location.pathname === "/catalog" || location.pathname === "/") && pageQuery === needle && needle.length > 0;
-    if (needle.length < 2 || !branch || onThisResult || submittedQuery.current === needle) {
-      setResults([]);
-      setOpenResults(false);
+    if (needle.length < 2 || onThisResult || submittedQuery.current === needle) {
+      setGroups({ medicines: [], ingredients: [], symptoms: [] });
+      setSuggestions([]);
+      setSearching(false);
+      setSearchError("");
       return undefined;
     }
     if (submittedQuery.current && submittedQuery.current !== needle) submittedQuery.current = "";
@@ -203,26 +92,33 @@ export default function Header() {
     const controller = new AbortController();
     const requestId = searchGate.current.next();
     const timer = setTimeout(async () => {
+      setSearching(true);
+      setSearchError("");
+      setOpenResults(true);
       try {
-        const data = await fetchMedicines({
-          branchId: branch.id,
+        const data = await suggestMedicines({
+          branchId: branch?.id,
           search: needle,
-          limit: 6,
           signal: controller.signal,
         });
         if (!searchGate.current.isLatest(requestId)) return;
-        const rows = data || [];
-        setResults(rows.slice(0, 6));
-        setSuggestion(rows.suggestion || "");
-        setPopular(rows.popular || []);
-        setSearchCategories(rows.categories || []);
+        setGroups({
+          medicines: data.medicines || [],
+          ingredients: data.ingredients || [],
+          symptoms: data.symptoms || [],
+        });
+        setSuggestions(data.suggestions || []);
         setOpenResults(true);
       } catch (error) {
         if (isCanceled(error) || !searchGate.current.isLatest(requestId)) return;
-        setResults([]);
-        setOpenResults(false);
+        setGroups({ medicines: [], ingredients: [], symptoms: [] });
+        setSuggestions([]);
+        setSearchError(t("error.generic"));
+        setOpenResults(true);
+      } finally {
+        if (searchGate.current.isLatest(requestId)) setSearching(false);
       }
-    }, 220);
+    }, 250);
 
     return () => {
       clearTimeout(timer);
@@ -241,18 +137,20 @@ export default function Header() {
   const searchProps = {
     query,
     setQuery,
-    results,
-    suggestion,
-    popular,
-    categories: searchCategories,
+    groups,
+    suggestions,
     openResults,
     setOpenResults,
     navigate,
+    branchId: branch?.id,
     onSubmitQuery: (value) => {
       submittedQuery.current = value;
-      setResults([]);
+      setGroups({ medicines: [], ingredients: [], symptoms: [] });
+      setSuggestions([]);
       setOpenResults(false);
     },
+    searching,
+    searchError,
   };
 
   return (
@@ -300,7 +198,7 @@ export default function Header() {
           {!branchLocked && <ChevronDown className="h-4 w-4 shrink-0 text-[#087b51]" aria-hidden />}
         </button>
 
-        {!hideSearch && <SearchField {...searchProps} className="mx-auto w-full max-w-[450px]" />}
+        {!hideSearch && <SearchBox {...searchProps} className="mx-auto w-full max-w-[450px]" />}
 
         <div className="ml-auto flex items-center gap-2">
           <NotificationBell />
@@ -361,7 +259,7 @@ export default function Header() {
           </span>
           {!branchLocked && <ChevronDown className="h-4 w-4 shrink-0 text-[#087b51]" aria-hidden />}
         </button>
-        {!hideSearch && <SearchField {...searchProps} className="min-w-0 flex-1" />}
+        {!hideSearch && <SearchBox {...searchProps} className="min-w-0 flex-1" />}
         <NotificationBell />
         <LanguageSwitcher />
         <Link
@@ -438,7 +336,7 @@ export default function Header() {
           </Link>
         </div>
         <div className="mt-2.5 flex items-center gap-2">
-          {!hideSearch && <SearchField {...searchProps} className="min-w-0 flex-1" />}
+          {!hideSearch && <SearchBox {...searchProps} className="min-w-0 flex-1" />}
           <LanguageSwitcher />
         </div>
       </div>

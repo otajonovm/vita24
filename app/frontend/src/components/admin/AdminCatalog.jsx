@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useSearchParams } from "react-router-dom";
 import { X } from "lucide-react";
 import { formatSom } from "../../lib/format";
 import { resolveMediaUrl } from "../../lib/media";
@@ -13,12 +14,16 @@ import {
   fetchAdminCategories,
   previewMedicineImport,
   setAdminMedicineActive,
+  setAdminMedicineRx,
+  setAdminMedicineRxBulk,
   updateAdminCategory,
   updateAdminMedicine,
   uploadMedicineImage,
 } from "../../services/api";
 import { useAdminAuth } from "../../store/useAuthStore";
 import { useToastStore } from "../../store/useToastStore";
+import { LoadingButton } from "../ui";
+import { createRequestGate, isCanceled } from "../../lib/requestGate";
 import { AdminSkeleton, ErrorState, controlClass, useConfirm } from "./ui";
 
 function errorText(error, fallback) {
@@ -61,6 +66,7 @@ function payloadFrom(draft) {
 
 export function CatalogManager() {
   const { t } = useTranslation();
+  const [searchParams] = useSearchParams();
   const confirm = useConfirm();
   const push = useToastStore((state) => state.push);
   const isSuper = useAdminAuth((state) => state.user?.role) === "SUPER_ADMIN";
@@ -73,6 +79,10 @@ export function CatalogManager() {
   const [categoryId, setCategoryId] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [categoryError, setCategoryError] = useState("");
+  const [addingCategory, setAddingCategory] = useState(false);
+  const [exporting, setExporting] = useState("");
+  const catalogGate = useRef(createRequestGate());
   const [draft, setDraft] = useState(null);
   const [fieldErrors, setFieldErrors] = useState({});
   const [saving, setSaving] = useState(false);
@@ -82,40 +92,60 @@ export function CatalogManager() {
   const [categoryName, setCategoryName] = useState("");
   const [importRows, setImportRows] = useState(null);
   const [importing, setImporting] = useState(false);
+  const [rxFilter, setRxFilter] = useState(() => (searchParams.get("rx") === "1" ? "yes" : "all"));
+  const [rxStats, setRxStats] = useState(null);
+  const [selected, setSelected] = useState([]);
+  const [rxBusy, setRxBusy] = useState(false);
 
   async function loadCategories() {
-    setCategories(await fetchAdminCategories());
+    setCategoryError("");
+    try {
+      setCategories(await fetchAdminCategories());
+    } catch (err) {
+      setCategoryError(errorText(err, t("admin.errorTitle")));
+    }
   }
 
-  async function load(nextPage = page) {
-    setLoading(true);
+  async function load(nextPage = page, { quiet = false } = {}) {
+    const requestId = catalogGate.current.next();
+    if (!quiet) setLoading(true);
     setError("");
     try {
+      const rxQuery = rxFilter === "yes" || rxFilter === "review"
+        ? { prescription: rxFilter }
+        : rxFilter === "LEKKO" || rxFilter === "RULE" || rxFilter === "MANUAL"
+          ? { prescription: "yes", rxSource: rxFilter }
+          : {};
       const data = await fetchAdminCatalog({
         search: search.trim() || undefined,
         categoryId: categoryId || undefined,
         active,
         page: nextPage,
         limit: 20,
+        ...rxQuery,
       });
+      if (!catalogGate.current.isLatest(requestId)) return;
       setRows(data.items || []);
       setTotal(data.total || 0);
       setPage(data.page || nextPage);
+      setRxStats(data.rxStats || null);
+      setSelected([]);
     } catch (err) {
+      if (isCanceled(err) || !catalogGate.current.isLatest(requestId)) return;
       setError(errorText(err, t("admin.errorTitle")));
     } finally {
-      setLoading(false);
+      if (!quiet && catalogGate.current.isLatest(requestId)) setLoading(false);
     }
   }
 
   useEffect(() => {
-    loadCategories().catch((err) => setError(errorText(err, t("admin.errorTitle"))));
+    loadCategories();
   }, [t]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => load(1), 250);
     return () => window.clearTimeout(timer);
-  }, [search, active, categoryId]);
+  }, [search, active, categoryId, rxFilter]);
 
   function openCreate() {
     setFieldErrors({});
@@ -154,7 +184,7 @@ export function CatalogManager() {
       const saved = draft.id ? await updateAdminMedicine(draft.id, body) : await createAdminMedicine(body);
       push(draft.id ? t("admin.medicineSaved") : t("admin.medicineAdded"));
       setDraft({ ...draft, ...saved, quantityInPack: String(saved.quantityInPack || 1), basePrice: String(saved.basePrice ?? "") });
-      await load(page);
+      await load(page, { quiet: true });
     } catch (err) {
       push(errorText(err, t("admin.errorTitle")), "error");
     } finally {
@@ -171,9 +201,9 @@ export function CatalogManager() {
     });
     if (!accepted) return;
     try {
-      await setAdminMedicineActive(row.id, !turningOff);
+      const updated = await setAdminMedicineActive(row.id, !turningOff);
       push(turningOff ? t("admin.medicineInactive") : t("admin.medicineActive"));
-      await load(page);
+      setRows((current) => current.map((item) => (item.id === row.id ? { ...item, ...updated, isActive: !turningOff } : item)));
     } catch (err) {
       push(errorText(err, t("admin.errorTitle")), "error");
     }
@@ -202,13 +232,28 @@ export function CatalogManager() {
 
   async function addCategory(event) {
     event.preventDefault();
-    if (!categoryName.trim()) return;
+    if (!categoryName.trim() || addingCategory) return;
+    setAddingCategory(true);
     try {
       await createAdminCategory({ name: categoryName.trim(), icon: "pill" });
       setCategoryName("");
       await loadCategories();
     } catch (err) {
       push(errorText(err, t("admin.errorTitle")), "error");
+    } finally {
+      setAddingCategory(false);
+    }
+  }
+
+  async function exportCatalog(format) {
+    if (exporting) return;
+    setExporting(format);
+    try {
+      await downloadMedicineExport(format);
+    } catch (err) {
+      push(errorText(err, t("admin.errorTitle")), "error");
+    } finally {
+      setExporting("");
     }
   }
 
@@ -264,7 +309,50 @@ export function CatalogManager() {
     }
   }
 
+  async function toggleRx(row) {
+    setRxBusy(true);
+    try {
+      const updated = await setAdminMedicineRx(row.id, !row.isPrescription);
+      setRows((current) => current.map((item) => (item.id === row.id ? { ...item, ...updated } : item)));
+      push(t("admin.rxSaved"));
+      await load(page, { quiet: true });
+    } catch (err) {
+      push(errorText(err, t("admin.errorTitle")), "error");
+    } finally {
+      setRxBusy(false);
+    }
+  }
+
+  async function bulkRx(isPrescription) {
+    if (!selected.length) {
+      push(t("admin.rxNoneSelected"), "error");
+      return;
+    }
+    const accepted = await confirm({
+      title: isPrescription ? t("admin.rxBulkOn") : t("admin.rxBulkOff"),
+      body: t("admin.rxBulkHint", { count: selected.length }),
+    });
+    if (!accepted) return;
+    setRxBusy(true);
+    try {
+      await setAdminMedicineRxBulk(selected, isPrescription);
+      push(t("admin.rxSaved"));
+      await load(page, { quiet: true });
+    } catch (err) {
+      push(errorText(err, t("admin.errorTitle")), "error");
+    } finally {
+      setRxBusy(false);
+    }
+  }
+
+  function toggleSelected(id) {
+    setSelected((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
+  }
+
   const pages = Math.max(1, Math.ceil(total / 20));
+  const rxOpen = rxFilter !== "all";
+  const pageIds = rows.map((row) => row.id);
+  const allSelected = pageIds.length > 0 && pageIds.every((id) => selected.includes(id));
 
   return (
     <section className="grid gap-4">
@@ -279,8 +367,9 @@ export function CatalogManager() {
             {t("admin.import")}
             <input type="file" accept=".csv,.xlsx" className="sr-only" onChange={onImportFile} />
           </label>
-          <button type="button" onClick={() => downloadMedicineExport("xlsx")} className="h-10 rounded-xl border border-slate-200 px-3 text-sm font-bold">{t("admin.exportExcel")}</button>
-          <button type="button" onClick={() => downloadMedicineExport("csv")} className="h-10 rounded-xl border border-slate-200 px-3 text-sm font-bold">{t("admin.exportCsv")}</button>
+          <LoadingButton type="button" loading={exporting === "xlsx"} loadingText={t("common.loading")} onClick={() => exportCatalog("xlsx")} className="h-10 rounded-xl border border-slate-200 px-3 text-sm font-bold disabled:opacity-50">{t("admin.exportExcel")}</LoadingButton>
+          <LoadingButton type="button" loading={exporting === "csv"} loadingText={t("common.loading")} onClick={() => exportCatalog("csv")} className="h-10 rounded-xl border border-slate-200 px-3 text-sm font-bold disabled:opacity-50">{t("admin.exportCsv")}</LoadingButton>
+          <button type="button" onClick={() => setRxFilter(rxOpen ? "all" : "yes")} className={`h-10 rounded-xl px-3 text-sm font-bold ${rxOpen ? "bg-amber-500 text-white" : "border border-amber-300 text-amber-800"}`}>{t("admin.rxView")}</button>
           <button type="button" onClick={openCreate} className="h-10 rounded-xl bg-brand px-3 text-sm font-bold text-white">{t("admin.newMedicine")}</button>
         </div>
       </div>
@@ -296,11 +385,40 @@ export function CatalogManager() {
           {categories.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
         </select>
       </div>
-      {error ? <ErrorState title={error} onRetry={() => load(page)} /> : loading ? <AdminSkeleton /> : (
+      {rxStats && (
+        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-amber-100 bg-amber-50 px-3 py-2 text-sm">
+          <span className="font-extrabold text-slate-900">{t("admin.rxCount", { count: rxStats.rxCount || 0 })}</span>
+          <span className="text-slate-600">{t("admin.rxSourceLEKKO")}: {rxStats.bySource?.LEKKO || 0}</span>
+          <span className="text-slate-600">{t("admin.rxSourceRULE")}: {rxStats.bySource?.RULE || 0}</span>
+          <span className="text-slate-600">{t("admin.rxSourceMANUAL")}: {rxStats.bySource?.MANUAL || 0}</span>
+          <button type="button" onClick={() => setRxFilter("review")} className="font-bold text-amber-900">{t("admin.rxReviewCount", { count: rxStats.reviewCount || 0 })}</button>
+        </div>
+      )}
+      {rxOpen && (
+        <div className="flex flex-wrap items-center gap-2">
+          <select aria-label={t("admin.rxSourceFilter")} value={rxFilter} onChange={(event) => setRxFilter(event.target.value)} className="h-11 rounded-xl border border-slate-200 px-3 text-sm">
+            <option value="yes">{t("admin.rxSourceAll")}</option>
+            <option value="LEKKO">{t("admin.rxSourceLEKKO")}</option>
+            <option value="RULE">{t("admin.rxSourceRULE")}</option>
+            <option value="MANUAL">{t("admin.rxSourceMANUAL")}</option>
+            <option value="review">{t("admin.rxReview")}</option>
+          </select>
+          <button type="button" disabled={rxBusy} onClick={() => bulkRx(true)} className="h-10 rounded-xl border border-slate-200 px-3 text-sm font-bold disabled:opacity-50">{t("admin.rxBulkOn")}</button>
+          <button type="button" disabled={rxBusy} onClick={() => bulkRx(false)} className="h-10 rounded-xl border border-slate-200 px-3 text-sm font-bold disabled:opacity-50">{t("admin.rxBulkOff")}</button>
+        </div>
+      )}
+      {categoryError ? <ErrorState title={categoryError} onRetry={loadCategories} /> : null}
+      {error ? <ErrorState title={error} onRetry={() => load(page)} /> : null}
+      {loading ? <AdminSkeleton /> : (
         <div className="overflow-x-auto">
           <table className="w-full min-w-[720px] text-left text-sm">
             <thead className="text-xs uppercase tracking-wide text-slate-500">
               <tr>
+                {rxOpen && (
+                  <th className="pb-2 pr-3">
+                    <input type="checkbox" checked={allSelected} onChange={() => setSelected(allSelected ? [] : pageIds)} aria-label={t("admin.rxBulkOn")} />
+                  </th>
+                )}
                 <th className="pb-2 pr-3">{t("admin.colName")}</th>
                 <th className="pb-2 pr-3">{t("admin.category")}</th>
                 <th className="pb-2 pr-3">{t("admin.basePrice")}</th>
@@ -310,12 +428,21 @@ export function CatalogManager() {
             </thead>
             <tbody>
               {rows.length === 0 ? (
-                <tr><td colSpan={5} className="py-6 text-slate-500">{t("admin.catalogEmpty")}</td></tr>
+                <tr><td colSpan={rxOpen ? 6 : 5} className="py-6 text-slate-500">{t("admin.catalogEmpty")}</td></tr>
               ) : rows.map((row) => (
                 <tr key={row.id} className="border-t border-slate-100">
+                  {rxOpen && (
+                    <td className="py-3 pr-3">
+                      <input type="checkbox" checked={selected.includes(row.id)} onChange={() => toggleSelected(row.id)} aria-label={row.name} />
+                    </td>
+                  )}
                   <td className="py-3 pr-3">
-                    <p className="font-semibold text-slate-900">{row.name}</p>
-                    <p className="text-xs text-slate-500">{[row.dosage, row.manufacturer].filter(Boolean).join(" · ")}</p>
+                    <p className="font-semibold text-slate-900">
+                      {row.name}
+                      {row.isPrescription && <span className="ml-2 rounded-full bg-rose-50 px-2 py-0.5 text-xs font-bold text-rose-700">Rx</span>}
+                      {row.rxNeedsReview && <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-800">{t("admin.rxReview")}</span>}
+                    </p>
+                    <p className="text-xs text-slate-500">{[row.dosage, row.manufacturer, row.rxSource].filter(Boolean).join(" · ")}</p>
                   </td>
                   <td className="py-3 pr-3">{row.category?.name || "—"}</td>
                   <td className="py-3 pr-3">{formatSom(row.basePrice)}</td>
@@ -327,6 +454,11 @@ export function CatalogManager() {
                   <td className="py-3">
                     <div className="flex flex-wrap gap-2">
                       <button type="button" onClick={() => openEdit(row)} className="h-10 rounded-xl border border-slate-200 px-3 text-xs font-bold">{t("admin.edit")}</button>
+                      {rxOpen && (
+                        <button type="button" disabled={rxBusy} onClick={() => toggleRx(row)} className="h-10 rounded-xl border border-rose-200 px-3 text-xs font-bold text-rose-700 disabled:opacity-50">
+                          {row.isPrescription ? t("admin.rxToggleOff") : t("admin.rxToggleOn")}
+                        </button>
+                      )}
                       <button type="button" onClick={() => toggleActive(row)} className="h-10 rounded-xl border border-slate-200 px-3 text-xs font-bold">
                         {row.isActive ? t("admin.deactivateMedicine") : t("admin.activateMedicine")}
                       </button>
@@ -414,7 +546,7 @@ export function CatalogManager() {
             </div>
             <form onSubmit={addCategory} className="mt-3 flex gap-2">
               <input value={categoryName} onChange={(event) => setCategoryName(event.target.value)} placeholder={t("admin.colName")} aria-label={t("admin.colName")} className={controlClass()} />
-              <button type="submit" className="h-11 rounded-xl bg-brand px-3 text-sm font-bold text-white">{t("admin.add")}</button>
+              <LoadingButton type="submit" loading={addingCategory} loadingText={t("common.saving")} className="h-11 rounded-xl bg-brand px-3 text-sm font-bold text-white disabled:opacity-50">{t("admin.add")}</LoadingButton>
             </form>
             <ul className="mt-3 grid gap-2">
               {categories.map((row) => (

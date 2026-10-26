@@ -81,12 +81,12 @@ export default function CustomerOrderList({ orders, onOrders }) {
       className="block rounded-2xl border border-slate-100 bg-white p-4 text-inherit no-underline shadow-sm hover:border-brand/30"
     >
       <div className="flex items-start justify-between gap-3">
-        <div>
+        <div className="min-w-0">
           <p className="text-xs font-bold uppercase tracking-wide text-[#087B51]">{order.orderNumber}</p>
           <p className="mt-1 text-xs text-slate-500">{formatDateTime(order.createdAt)}</p>
-          {order.branch?.name && <p className="mt-1 text-sm font-semibold text-slate-800">{order.branch.name}</p>}
+          {order.branch?.name && <p className="mt-1 truncate text-sm font-semibold text-slate-800">{order.branch.name}</p>}
         </div>
-        <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${STATUS_TONES[order.status] || ""}`}>
+        <span className={`shrink-0 whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-bold ${STATUS_TONES[order.status] || ""}`}>
           {t(getCustomerOrderView(order).titleKey)}
         </span>
       </div>

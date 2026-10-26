@@ -65,6 +65,16 @@ const otpVerifySchema = z
   })
   .strict();
 
+const telegramWebAppSchema = z
+  .object({
+    initData: z
+      .string({ required_error: "initData majburiy" })
+      .trim()
+      .min(10, "initData majburiy")
+      .max(8192, "initData juda uzun"),
+  })
+  .strict();
+
 module.exports = {
   loginSchema,
   refreshSchema,
@@ -73,5 +83,6 @@ module.exports = {
   changePasswordSchema,
   otpRequestSchema,
   otpVerifySchema,
+  telegramWebAppSchema,
   uzPhoneRegex,
 };

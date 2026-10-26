@@ -24,6 +24,7 @@ const { getCustomerOrderView, initialCustomerStatus } = require("../lib/customer
 const { assertCustomerCanOrder } = require("../lib/customerAccess");
 const { applyOrderStatusChange } = require("../services/orderStatusService");
 const { writeAudit } = require("../lib/audit");
+const { assertRxOrder } = require("../lib/rxOrder");
 
 const REVIEW_STATUSES = ["PENDING_PRESCRIPTION", "PENDING_BRANCH"];
 
@@ -216,15 +217,7 @@ const createOrder = asyncHandler(async (req, res) => {
     }
 
     const medicineMap = new Map(medicines.map((medicine) => [medicine.id, medicine]));
-    const hasRxItems = medicines.some((medicine) => medicine.isPrescription);
-
-    if (hasRxItems && !prescriptionFileKey) {
-      throw new AppError(
-        "Retseptli dorilar uchun retsept yuklash majburiy",
-        400,
-        "PRESCRIPTION_REQUIRED"
-      );
-    }
+    const hasRxItems = assertRxOrder(medicines, prescriptionFileKey);
 
     const mergedQty = new Map();
     for (const line of items) {

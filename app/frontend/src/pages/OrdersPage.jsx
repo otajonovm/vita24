@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { ClipboardList } from "lucide-react";
 import AuthLoginModal from "../components/modals/AuthLoginModal";
 import CustomerOrderList from "../components/orders/CustomerOrderList";
+import { EmptyState, ErrorState, SkeletonTable } from "../components/ui";
 import { userError } from "../lib/userError";
 import { fetchCustomerOrders } from "../services/api";
 import { useAuthStore } from "../store/useAuthStore";
@@ -12,6 +13,7 @@ export default function OrdersPage() {
   const { t } = useTranslation();
   const token = useAuthStore((state) => state.token);
   const user = useAuthStore((state) => state.user);
+  const telegramAuthPending = useAuthStore((state) => state.telegramAuthPending);
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -26,7 +28,7 @@ export default function OrdersPage() {
     if (!token) {
       setOrders([]);
       setLoading(false);
-      setLoginOpen(true);
+      if (!telegramAuthPending) setLoginOpen(true);
       return undefined;
     }
     let active = true;
@@ -42,14 +44,31 @@ export default function OrdersPage() {
     return () => {
       active = false;
     };
-  }, [token, loadOrders, t]);
+  }, [token, telegramAuthPending, loadOrders, t]);
 
   return (
     <section className="grid gap-3">
       <h1 className="text-xl font-extrabold text-slate-900">{t("orders.title")}</h1>
-      {loading && orders.length === 0 && <p className="text-sm text-slate-500">{t("orders.loading")}</p>}
-      {error && <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
-      {!loading && !error && !token && (
+      {(loading && orders.length === 0) || telegramAuthPending ? (
+        telegramAuthPending && !token ? (
+          <p className="text-sm font-semibold text-slate-600">{t("common.signingIn")}</p>
+        ) : (
+          <SkeletonTable rows={4} />
+        )
+      ) : null}
+      {error && (
+        <ErrorState
+          title={error}
+          onRetry={() => {
+            setLoading(true);
+            setError("");
+            loadOrders()
+              .catch((err) => setError(userError(err, t, "orders.loadFailed")))
+              .finally(() => setLoading(false));
+          }}
+        />
+      )}
+      {!loading && !error && !token && !telegramAuthPending && (
         <div className="rounded-2xl border border-slate-100 bg-white px-5 py-10 text-center shadow-sm">
           <p className="text-sm text-slate-600">{t("orders.login")}</p>
           <button type="button" onClick={() => setLoginOpen(true)} className="mt-4 h-11 rounded-xl bg-[#087B51] px-4 text-sm font-bold text-white">

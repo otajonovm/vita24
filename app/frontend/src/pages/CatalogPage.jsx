@@ -5,34 +5,30 @@ import MedicineCard from "../components/cards/MedicineCard";
 import ProductGrid from "../components/cards/ProductGrid";
 import CategoryBar from "../components/home/CategoryBar";
 import SearchEmpty from "../components/search/SearchEmpty";
+import { EmptyState, ErrorState, LoadingButton, RefetchBar, SkeletonGrid } from "../components/ui";
 import { fetchCategories, getMedicines } from "../services/api";
+import { rememberSearch } from "../lib/searchMemory";
 import { createRequestGate, isCanceled } from "../lib/requestGate";
 import { userError } from "../lib/userError";
 import { useBranchStore } from "../store/useBranchStore";
 
 const PAGE_SIZE = 24;
 
-function SkeletonGrid() {
-  return (
-    <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
-      {Array.from({ length: 8 }).map((_, index) => (
-        <div key={index} className="h-64 animate-pulse rounded-2xl border border-slate-100 bg-white" />
-      ))}
-    </div>
-  );
-}
-
 export default function CatalogPage() {
   const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
   const branch = useBranchStore((state) => state.branch);
   const [categories, setCategories] = useState([]);
+  const [categoryError, setCategoryError] = useState("");
+  const [categoryReloadKey, setCategoryReloadKey] = useState(0);
   const [medicines, setMedicines] = useState([]);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
   const [suggestion, setSuggestion] = useState("");
+  const [suggestions, setSuggestions] = useState([]);
   const [popular, setPopular] = useState([]);
   const [missCategories, setMissCategories] = useState([]);
   const categoryId = searchParams.get("category") || "";
@@ -51,23 +47,30 @@ export default function CatalogPage() {
       return undefined;
     }
     let active = true;
-    fetchCategories(branch.id).then((data) => {
-      if (active) setCategories(Array.isArray(data) ? data : []);
-    });
+    setCategoryError("");
+    fetchCategories(branch.id)
+      .then((data) => {
+        if (active) setCategories(Array.isArray(data) ? data : []);
+      })
+      .catch((err) => {
+        if (!active) return;
+        setCategories([]);
+        setCategoryError(userError(err, t, "catalog.loadFailed"));
+      });
     return () => {
       active = false;
     };
-  }, [branch?.id]);
+  }, [branch?.id, t, categoryReloadKey]);
 
   useEffect(() => {
-    if (!branch) {
+    if (!branch && !query.trim()) {
       setMedicines([]);
       return undefined;
     }
     let active = true;
     const requestId = requestGate.current.next();
     const controller = new AbortController();
-    setLoading(true);
+    if (page === 1) setLoading(true);
     setError("");
     getMedicines({
       branchId: branch.id,
@@ -86,8 +89,10 @@ export default function CatalogPage() {
         setHasMore(rows.length === PAGE_SIZE);
         if (page === 1) {
           setSuggestion(rows.suggestion || "");
+          setSuggestions(rows.suggestions || []);
           setPopular(rows.popular || []);
           setMissCategories(rows.categories || []);
+          if (query.trim()) rememberSearch(query.trim());
         }
       })
       .catch((err) => {
@@ -102,7 +107,7 @@ export default function CatalogPage() {
       active = false;
       controller.abort();
     };
-  }, [branch, categoryId, query, sort, inStockOnly, page, t]);
+  }, [branch, categoryId, query, sort, inStockOnly, page, reloadKey, t]);
 
   const setCategory = (id) => {
     const next = new URLSearchParams(searchParams);
@@ -123,9 +128,9 @@ export default function CatalogPage() {
   return (
     <div className="grid gap-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
+        <div className="min-w-0 max-w-full">
           <h1 className="text-xl font-extrabold text-slate-900">{t("catalog.title")}</h1>
-          <p className="mt-1 text-sm text-slate-500">
+          <p className="mt-1 break-words text-sm text-slate-500">
             {branch ? `${branch.name}${query ? ` · "${query}"` : ""}` : t("catalog.pickBranch")}
           </p>
         </div>
@@ -136,7 +141,7 @@ export default function CatalogPage() {
               aria-label={t("catalog.sortLabel")}
               value={sort}
               onChange={(event) => setSort(event.target.value)}
-              className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm"
+              className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-base md:text-sm"
             >
               <option value="popular">{t("catalog.sort.popular")}</option>
               <option value="price_asc">{t("catalog.sort.cheap")}</option>
@@ -160,14 +165,18 @@ export default function CatalogPage() {
           </label>
         </div>
       </div>
+      {categoryError ? (
+        <ErrorState title={categoryError} onRetry={() => setCategoryReloadKey((value) => value + 1)} retryLabel={t("common.retry")} />
+      ) : null}
       <CategoryBar categories={categories} activeId={categoryId} onSelect={setCategory} />
-      {loading && page === 1 && <SkeletonGrid />}
-      {!loading && error && (
-        <p className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</p>
+      {loading && page === 1 && medicines.length === 0 && <SkeletonGrid count={8} />}
+      {!loading && error && page === 1 && medicines.length === 0 && (
+        <ErrorState title={error} onRetry={() => setReloadKey((value) => value + 1)} retryLabel={t("common.retry")} />
       )}
       {!loading && !error && medicines.length === 0 && query.trim() && (
         <SearchEmpty
           suggestion={suggestion}
+          suggestions={suggestions}
           popular={popular}
           categories={missCategories.length ? missCategories : categories}
           onSuggest={(name) => {
@@ -180,24 +189,28 @@ export default function CatalogPage() {
         />
       )}
       {!loading && !error && medicines.length === 0 && !query.trim() && (
-        <p className="rounded-2xl border border-dashed border-slate-200 bg-white p-5 text-sm text-slate-500">
-          {emptyText}
-        </p>
+        <EmptyState title={emptyText} />
       )}
-      <ProductGrid>
-        {medicines.map((medicine) => (
-          <MedicineCard key={medicine.id} medicine={medicine} />
-        ))}
-      </ProductGrid>
+      <div className="relative">
+        <RefetchBar show={loading && medicines.length > 0} />
+        {medicines.length > 0 && (
+          <ProductGrid>
+            {medicines.map((medicine) => (
+              <MedicineCard key={medicine.id} medicine={medicine} />
+            ))}
+          </ProductGrid>
+        )}
+      </div>
       {hasMore && (
-        <button
+        <LoadingButton
           type="button"
-          disabled={loading}
+          loading={loading && page > 1}
+          loadingText={t("common.loading")}
           onClick={() => setPage((current) => current + 1)}
-          className="h-11 justify-self-center rounded-xl border border-slate-200 bg-white px-5 text-sm font-bold text-slate-700"
+          className="h-11 justify-self-center rounded-xl border border-slate-200 bg-white px-5 text-sm font-bold text-slate-700 disabled:opacity-50"
         >
-          {loading ? t("common.loading") : t("catalog.more")}
-        </button>
+          {t("catalog.more")}
+        </LoadingButton>
       )}
     </div>
   );

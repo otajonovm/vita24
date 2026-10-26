@@ -11,6 +11,9 @@ import {
 } from "../../lib/geocode";
 import { fetchBranches } from "../../services/api";
 import { useBranchStore } from "../../store/useBranchStore";
+import { EmptyState, ErrorState, SkeletonCard } from "../ui";
+import useLockBodyScroll from "../../hooks/useLockBodyScroll";
+import { userError } from "../../lib/userError";
 
 export default function BranchModal() {
   const { t } = useTranslation();
@@ -22,16 +25,12 @@ export default function BranchModal() {
   const [origin, setOrigin] = useState(null);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
+  const [loadError, setLoadError] = useState("");
+  const [searchFocused, setSearchFocused] = useState(false);
+  useLockBodyScroll(isModalOpen);
 
   function dismiss() {
-    if (branch) {
-      closeModal();
-      return;
-    }
-    const fallback =
-      branches.find((item) => item.slug === "yunusobod" || /yunusobod/i.test(item.name || "")) ||
-      branches[0];
-    if (fallback) setBranch(fallback);
+    closeModal();
   }
 
   useEffect(() => {
@@ -48,13 +47,20 @@ export default function BranchModal() {
     let active = true;
     setLoading(true);
     setError("");
+    setLoadError("");
     setStatus("");
     setQuery("");
     setOrigin(null);
 
     fetchBranches()
       .then((data) => {
-        if (active) setBranches(data);
+        if (!active) return;
+        setBranches(Array.isArray(data) ? data : []);
+      })
+      .catch((err) => {
+        if (!active) return;
+        setBranches([]);
+        setLoadError(userError(err, t, "error.generic"));
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -157,7 +163,7 @@ export default function BranchModal() {
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[80] flex h-dvh w-screen items-center justify-center bg-slate-900/45 p-3 sm:p-5"
+      className="fixed inset-0 z-[80] flex h-dvh w-full items-center justify-center bg-slate-900/45 p-3 sm:p-5"
       onClick={dismiss}
       role="presentation"
     >
@@ -168,11 +174,11 @@ export default function BranchModal() {
         aria-labelledby="branch-modal-title"
         aria-modal="true"
       >
-        <div className="shrink-0 border-b border-slate-100 p-4 md:px-6 md:pt-6 md:pb-4">
+        <div className="shrink-0 border-b border-slate-100 px-3 py-3 md:px-6 md:pt-6 md:pb-4">
           <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-xs font-bold uppercase tracking-wide text-brand">{t("branch.pick")}</p>
-              <h2 id="branch-modal-title" className="mt-1 text-lg font-extrabold text-slate-900 md:text-xl">
+            <div className="min-w-0">
+              <p className={`text-xs font-bold uppercase tracking-wide text-brand ${searchFocused ? "hidden md:block" : ""}`}>{t("branch.pick")}</p>
+              <h2 id="branch-modal-title" className="text-base font-extrabold text-slate-900 md:mt-1 md:text-xl">
                 {t("branch.question")}
               </h2>
             </div>
@@ -180,13 +186,13 @@ export default function BranchModal() {
               type="button"
               aria-label={t("common.close")}
               onClick={dismiss}
-              className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-slate-50"
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-slate-50"
             >
-              <XCircle className="h-4 w-4" aria-hidden />
+              <XCircle className="h-5 w-5" aria-hidden />
             </button>
           </div>
 
-          <p className="mt-2 text-sm text-slate-500">
+          <p className={`mt-2 text-sm text-slate-500 ${searchFocused ? "hidden" : "line-clamp-2 md:line-clamp-none"}`}>
             {t("branch.note")}
           </p>
 
@@ -194,7 +200,7 @@ export default function BranchModal() {
             type="button"
             disabled={locating || loading}
             onClick={handleLocate}
-            className="mt-3 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-brand px-4 text-sm font-bold text-white hover:bg-brand-dark disabled:opacity-60 sm:w-auto"
+            className={`mt-3 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-brand px-4 text-sm font-bold text-white hover:bg-brand-dark disabled:opacity-60 sm:w-auto ${searchFocused ? "hidden md:inline-flex" : ""}`}
           >
             {locating ? (
               <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden />
@@ -215,15 +221,40 @@ export default function BranchModal() {
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
+              onFocus={() => setSearchFocused(true)}
+              onBlur={() => setSearchFocused(false)}
               placeholder={t("branch.search")}
-              className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-3 text-sm outline-none ring-brand/30 focus:ring-2"
+              className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-3 text-base outline-none ring-brand/30 focus:ring-2 md:text-sm"
             />
           </div>
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto p-4 md:p-6">
-          {loading && <p className="text-sm text-slate-500">{t("branch.loading")}</p>}
+          {loading && (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {Array.from({ length: 4 }, (_, index) => (
+                <SkeletonCard key={index} />
+              ))}
+            </div>
+          )}
+          {!loading && loadError && (
+            <ErrorState
+              title={loadError}
+              onRetry={() => {
+                setLoading(true);
+                setLoadError("");
+                fetchBranches()
+                  .then((data) => setBranches(Array.isArray(data) ? data : []))
+                  .catch((err) => setLoadError(userError(err, t, "error.generic")))
+                  .finally(() => setLoading(false));
+              }}
+            />
+          )}
+          {!loading && !loadError && ranked.length === 0 && (
+            <EmptyState title={t("empty.notFound")} body={t("branch.note")} />
+          )}
 
+          {!loading && !loadError && (
           <div className="grid gap-3 sm:grid-cols-2">
             {ranked.map((item) => {
               const active = branch?.id === item.id;
@@ -274,6 +305,7 @@ export default function BranchModal() {
               );
             })}
           </div>
+          )}
         </div>
       </div>
     </div>,

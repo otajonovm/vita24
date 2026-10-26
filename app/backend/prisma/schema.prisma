@@ -51,6 +51,13 @@ enum PaymentStatus {
   FAILED
 }
 
+enum SynonymType {
+  BRAND
+  INGREDIENT
+  SYMPTOM
+  SPELLING
+}
+
 enum DeliveryType {
   DELIVERY
   PICKUP
@@ -59,6 +66,12 @@ enum DeliveryType {
 enum PromoType {
   PERCENT
   AMOUNT
+}
+
+enum RxSource {
+  LEKKO
+  RULE
+  MANUAL
 }
 
 model User {
@@ -86,6 +99,7 @@ model User {
   lastLng             Float?
   additionalAddresses String?
   notifyOrders        Boolean        @default(true)
+  telegramChatId      String?        @unique
   totpSecretEnc       String?
   totpEnabled         Boolean        @default(false)
   tokenVersion        Int            @default(0)
@@ -210,6 +224,31 @@ model LekkoSyncLog {
   @@index([status, startedAt])
 }
 
+model SearchSynonym {
+  id        String      @id @default(uuid())
+  term      String
+  canonical String
+  type      SynonymType
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@unique([term, canonical, type])
+  @@index([term])
+}
+
+model SearchLog {
+  id                String   @id @default(uuid())
+  query             String
+  normalized        String
+  resultsCount      Int
+  clickedMedicineId String?
+  branchId          String?
+  createdAt         DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([normalized])
+}
+
 model Category {
   id        String     @id @default(uuid())
   name      String
@@ -227,6 +266,9 @@ model Medicine {
   manufacturer   String
   dosageForm     String
   isPrescription Boolean       @default(false)
+  rxSource       RxSource?
+  atcCode        String?
+  rxNeedsReview  Boolean       @default(false)
   showOnHome     Boolean       @default(false)
   homeSortOrder  Int           @default(0)
   imageEmoji     String
@@ -241,6 +283,7 @@ model Medicine {
   contraindications String?
   storageConditions String?
   basePrice         Decimal       @default(0) @db.Decimal(12, 2)
+  searchText        String        @default("")
   isActive          Boolean       @default(true)
   categoryId        String
   category       Category      @relation(fields: [categoryId], references: [id])
@@ -252,6 +295,9 @@ model Medicine {
   @@index([barcode])
   @@index([activeIngredient])
   @@index([showOnHome, homeSortOrder])
+  @@index([isPrescription])
+  @@index([rxSource])
+  @@index([rxNeedsReview])
 }
 
 model BranchStock {

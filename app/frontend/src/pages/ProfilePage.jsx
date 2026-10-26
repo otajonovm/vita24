@@ -15,6 +15,8 @@ import {
   User,
   XCircle,
 } from "lucide-react";
+import { ErrorState, LoadingButton } from "../components/ui";
+import useLockBodyScroll from "../hooks/useLockBodyScroll";
 import AddressModal from "../components/profile/AddressModal";
 import {
   ProfileHeaderSkeleton,
@@ -155,8 +157,10 @@ export default function ProfilePage() {
   const clearSession = useCartStore((state) => state.clearSession);
 
   const activeTab = searchParams.get("tab") || "orders";
+  const telegramAuthPending = useAuthStore((state) => state.telegramAuthPending);
   const [loginOpen, setLoginOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [orders, setOrders] = useState([]);
   const [prescriptions, setPrescriptions] = useState([]);
   const [profile, setProfile] = useState(null);
@@ -169,6 +173,7 @@ export default function ProfilePage() {
   const [savingAddress, setSavingAddress] = useState(false);
   const [message, setMessage] = useState("");
   const [logoutOpen, setLogoutOpen] = useState(false);
+  useLockBodyScroll(logoutOpen);
 
   const setTab = useCallback(
     (tabId) => {
@@ -177,10 +182,11 @@ export default function ProfilePage() {
     [setSearchParams]
   );
 
-  const loadProfileData = useCallback(async () => {
+  const loadProfileData = useCallback(async ({ quiet = false } = {}) => {
     if (!user?.phone) return;
-    setLoading(true);
+    if (!quiet) setLoading(true);
     setMessage("");
+    setLoadError("");
 
     try {
       const data = await customerService.loadDashboard(user.phone);
@@ -194,9 +200,9 @@ export default function ProfilePage() {
         setSession(data.profile.user);
       }
     } catch {
-      setMessage(t("profile.loadFailed"));
+      setLoadError(t("profile.loadFailed"));
     } finally {
-      setLoading(false);
+      if (!quiet) setLoading(false);
     }
   }, [user?.phone, user?.name, setSession, t]);
 
@@ -329,7 +335,7 @@ export default function ProfilePage() {
       });
 
       setAddressModalOpen(false);
-      await loadProfileData();
+      await loadProfileData({ quiet: true });
       setMessage(t("profile.addressSaved"));
     } catch {
       setMessage(t("profile.addressFailed"));
@@ -357,6 +363,9 @@ export default function ProfilePage() {
   }
 
   if (!isAuthenticated) {
+    if (telegramAuthPending) {
+      return <p className="text-sm font-semibold text-slate-600">{t("common.signingIn")}</p>;
+    }
     return (
       <>
         <EmptyState
@@ -376,8 +385,8 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)] lg:gap-6">
-      <header className="lg:col-span-2">
+    <div className="grid min-w-0 gap-4 lg:grid-cols-[260px_minmax(0,1fr)] lg:gap-6">
+      <header className="min-w-0 lg:col-span-2">
         {loading && !profile ? (
           <ProfileHeaderSkeleton />
         ) : (
@@ -396,15 +405,15 @@ export default function ProfilePage() {
                   </button>
                 )}
               </h1>
-              <p className="flex items-center gap-1.5 text-sm text-slate-500">
+              <p className="flex min-w-0 items-center gap-1.5 text-sm text-slate-500">
                 <Phone className="h-3.5 w-3.5 shrink-0" />
-                {formatPhoneDisplay(user?.phone)}
+                <span className="truncate">{formatPhoneDisplay(user?.phone)}</span>
               </p>
             </div>
             <button
               type="button"
               onClick={() => setLogoutOpen(true)}
-              className="inline-flex h-11 items-center gap-2 rounded-xl border border-slate-200 px-3 text-sm font-bold text-slate-600 hover:bg-slate-50"
+              className="inline-flex h-11 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border border-slate-200 px-2.5 text-sm font-bold text-slate-600 hover:bg-slate-50 sm:px-3"
             >
               <LogOut className="h-4 w-4" />
               {t("profile.logout")}
@@ -413,7 +422,7 @@ export default function ProfilePage() {
         )}
       </header>
 
-      <aside className="hidden lg:block">
+      <aside className="hidden min-w-0 lg:block">
         <nav className="sticky top-24 grid gap-1 rounded-2xl border border-slate-100 bg-white p-2 shadow-sm">
           {TABS.map((tab) => (
             <TabButton
@@ -427,8 +436,8 @@ export default function ProfilePage() {
         </nav>
       </aside>
 
-      <div className="lg:hidden">
-        <div className="flex gap-2 overflow-x-auto rounded-2xl border border-slate-100 bg-white p-2 shadow-sm scrollbar-none">
+      <div className="min-w-0 max-w-full lg:hidden">
+        <div className="no-scrollbar flex gap-2 overflow-x-auto overscroll-x-contain rounded-2xl border border-slate-100 bg-white p-2 shadow-sm">
           {TABS.map((tab) => (
             <TabButton
               key={tab.id}
@@ -448,7 +457,9 @@ export default function ProfilePage() {
           </p>
         )}
 
-        {loading ? (
+        {loadError ? (
+          <ErrorState title={loadError} onRetry={() => loadProfileData()} />
+        ) : loading ? (
           <ProfileTabSkeleton tab={activeTab} />
         ) : (
           <>
@@ -619,7 +630,7 @@ export default function ProfilePage() {
                         value={settingsName}
                         onChange={(event) => setSettingsName(event.target.value)}
                         placeholder={t("profile.enterName")}
-                        className="h-12 w-full rounded-xl border border-slate-200 pl-10 pr-3 text-sm outline-none ring-brand/30 focus:ring-2"
+                        className="h-12 w-full rounded-xl border border-slate-200 pl-10 pr-3 text-base outline-none ring-brand/30 focus:ring-2 md:text-sm"
                       />
                     </span>
                   </label>
@@ -631,7 +642,7 @@ export default function ProfilePage() {
                         type="tel"
                         readOnly
                         value={formatPhoneDisplay(user?.phone || "")}
-                        className="h-12 w-full cursor-not-allowed rounded-xl border border-slate-200 bg-slate-50 pl-10 pr-3 text-sm text-slate-500"
+                        className="h-12 w-full cursor-not-allowed rounded-xl border border-slate-200 bg-slate-50 pl-10 pr-3 text-base text-slate-500 md:text-sm"
                       />
                     </span>
                   </label>

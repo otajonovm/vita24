@@ -9,9 +9,11 @@ import { userError } from "../lib/userError";
 import { formatClock, formatDateTime, formatSom, STATUS_TONES } from "../lib/format";
 import { customerTimeline } from "../lib/orderTimeline";
 import { DELIVERY_FEE } from "../lib/pricing";
+import { ErrorState, LoadingButton, SkeletonLines } from "../components/ui";
+import useLockBodyScroll from "../hooks/useLockBodyScroll";
 import {
   cancelCustomerOrder,
-  fetchMedicines,
+  fetchCartAvailability,
   loadPrescriptionObjectUrl,
   mockPay,
   replaceOrderPrescription,
@@ -34,6 +36,7 @@ function OrderPrescription({ prescriptionId, fileName }) {
   const [file, setFile] = useState(null);
   const [open, setOpen] = useState(false);
   const [error, setError] = useState("");
+  useLockBodyScroll(open);
 
   useEffect(() => {
     if (!prescriptionId) return undefined;
@@ -57,11 +60,12 @@ function OrderPrescription({ prescriptionId, fileName }) {
     };
   }, [prescriptionId, t]);
 
-  if (error) return <p className="text-sm text-red-600">{error}</p>;
-  if (!file) return <p className="text-sm text-slate-500">{t("order.rx.loading")}</p>;
+  if (!prescriptionId) return <p className="text-sm text-slate-500">{t("common.missingRx")}</p>;
+  if (error) return <ErrorState title={error} />;
+  if (!file) return <SkeletonLines rows={3} />;
 
   const preview = file.type.includes("pdf") ? (
-    <iframe title={fileName} src={file.url} className="h-48 w-full rounded-xl bg-white" />
+    <iframe title={fileName} src={file.url} className="pointer-events-none h-48 w-full rounded-xl bg-white" />
   ) : (
     <img src={file.url} alt={fileName} className="max-h-48 w-full rounded-xl object-contain" />
   );
@@ -70,19 +74,26 @@ function OrderPrescription({ prescriptionId, fileName }) {
     <div className="mt-4">
       <button type="button" onClick={() => setOpen(true)} className="block w-full text-left">
         {preview}
-        <span className="mt-1 inline-block text-xs font-bold text-[#087B51]">{t("order.rx.zoom")}</span>
+        <span className="mt-1 inline-flex h-10 items-center text-xs font-bold text-[#087B51]">{t("order.rx.zoom")}</span>
       </button>
       {open && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/80 p-4" onClick={() => setOpen(false)}>
-          <div className="max-h-[92vh] w-full max-w-3xl" onClick={(event) => event.stopPropagation()}>
-            {file.type.includes("pdf") ? (
-              <iframe title={fileName} src={file.url} className="h-[80vh] w-full rounded-2xl bg-white" />
-            ) : (
-              <img src={file.url} alt={fileName} className="max-h-[80vh] w-full rounded-2xl object-contain" />
-            )}
-            <button type="button" onClick={() => setOpen(false)} className="mt-3 h-10 rounded-xl bg-white px-4 text-sm font-bold">
+        <div className="fixed inset-0 z-50 flex flex-col bg-slate-950/90 p-3 pt-[max(0.75rem,env(safe-area-inset-top))]" onClick={() => setOpen(false)}>
+          <div className="mx-auto flex w-full max-w-3xl justify-end pb-2" onClick={(event) => event.stopPropagation()}>
+            <button type="button" onClick={() => setOpen(false)} className="grid h-11 min-w-11 place-items-center rounded-xl bg-white px-3 text-sm font-bold text-slate-900">
               {t("order.rx.close")}
             </button>
+          </div>
+          <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col gap-3 overflow-y-auto" onClick={(event) => event.stopPropagation()}>
+            {file.type.includes("pdf") ? (
+              <>
+                <iframe title={fileName} src={file.url} className="h-[70dvh] w-full shrink-0 rounded-2xl bg-white" />
+                <a href={file.url} target="_blank" rel="noreferrer" className="inline-flex h-11 shrink-0 items-center justify-center rounded-xl bg-white text-sm font-bold text-slate-900">
+                  {t("order.rx.open")}
+                </a>
+              </>
+            ) : (
+              <img src={file.url} alt={fileName} className="max-h-[80dvh] w-full rounded-2xl object-contain" />
+            )}
           </div>
         </div>
       )}
@@ -95,11 +106,13 @@ export default function OrderDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const token = useAuthStore((state) => state.token);
+  const telegramAuthPending = useAuthStore((state) => state.telegramAuthPending);
   const branch = useBranchStore((state) => state.branch);
   const addToCart = useCartStore((state) => state.addToCart);
   const pushToast = useToastStore((state) => state.push);
   const [order, setOrder] = useState(null);
   const [error, setError] = useState("");
+  const [actionError, setActionError] = useState("");
   const [loading, setLoading] = useState(true);
   const [loginOpen, setLoginOpen] = useState(false);
   const [paying, setPaying] = useState(false);
@@ -114,7 +127,7 @@ export default function OrderDetailPage() {
   useEffect(() => {
     if (!token || !id) {
       setLoading(false);
-      if (!token) setLoginOpen(true);
+      if (!token && !telegramAuthPending) setLoginOpen(true);
       return undefined;
     }
     let active = true;
@@ -153,7 +166,7 @@ export default function OrderDetailPage() {
       active = false;
       window.clearInterval(timer);
     };
-  }, [id, token, t, pushToast]);
+  }, [id, token, telegramAuthPending, t, pushToast]);
 
   const cashOrder = String(order?.payment?.provider || "").toUpperCase() === "CASH";
   const reviewing = ["PENDING_PRESCRIPTION", "PENDING_BRANCH"].includes(order?.status);
@@ -181,11 +194,11 @@ export default function OrderDetailPage() {
 
   async function pay() {
     setPaying(true);
-    setError("");
+    setActionError("");
     try {
       remember(await mockPay(id));
     } catch (err) {
-      setError(userError(err, t, "cart.payFailed"));
+      setActionError(userError(err, t, "cart.payFailed"));
     } finally {
       setPaying(false);
     }
@@ -196,7 +209,7 @@ export default function OrderDetailPage() {
     event.target.value = "";
     if (!file) return;
     setReuploading(true);
-    setError("");
+    setActionError("");
     try {
       const uploaded = await uploadPrescription(file);
       remember(await replaceOrderPrescription(id, {
@@ -204,7 +217,7 @@ export default function OrderDetailPage() {
         prescriptionFileName: uploaded.fileName || file.name,
       }));
     } catch (err) {
-      setError(userError(err, t, "order.reupload"));
+      setActionError(userError(err, t, "order.reupload"));
     } finally {
       setReuploading(false);
     }
@@ -215,14 +228,14 @@ export default function OrderDetailPage() {
     const reason = cancelReason.trim();
     if (reason.length < 3) return;
     setCancelling(true);
-    setError("");
+    setActionError("");
     try {
       const updated = await cancelCustomerOrder(id, reason);
       remember(updated);
       setCancelOpen(false);
       pushToast(t("order.status.cancelled"));
     } catch (err) {
-      setError(userError(err, t, "order.cancel.action"));
+      setActionError(userError(err, t, "order.cancel.action"));
     } finally {
       setCancelling(false);
     }
@@ -235,15 +248,26 @@ export default function OrderDetailPage() {
     }
     setReordering(true);
     try {
-      const catalog = await fetchMedicines({ branchId: branch.id, limit: 5000 });
+      const ids = (order.items || []).map((item) => item.medicineId).filter(Boolean);
+      const stocks = await fetchCartAvailability(branch.id, ids);
+      const byId = new Map(stocks.map((row) => [row.id, row]));
       const missing = [];
       let added = 0;
       for (const item of order.items || []) {
-        const medicine = catalog.find((entry) => entry.id === item.medicineId);
-        const available = Number(medicine?.available ?? medicine?.stockCount ?? 0);
+        const stock = byId.get(item.medicineId);
+        const medicine = {
+          id: item.medicineId,
+          name: item.name,
+          price: stock?.price ?? item.unitPrice,
+          stockCount: Number(stock?.available ?? 0),
+          available: Number(stock?.available ?? 0),
+          isPrescription: Boolean(item.isPrescription),
+          dosageUnit: "tabletka",
+        };
+        const available = Number(medicine.available ?? medicine.stockCount ?? 0);
         const want = Number(item.quantity) || 0;
         const qty = Math.min(want, Math.max(0, available));
-        if (!medicine || qty < 1) {
+        if (!stock || qty < 1) {
           missing.push(item.name || item.medicineId);
           continue;
         }
@@ -275,9 +299,26 @@ export default function OrderDetailPage() {
     <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
       <PageMeta title={t("order.metaTitle")} description={t("order.history")} path={`/orders/${id}`} />
       <p className="text-xs font-bold uppercase tracking-wide text-[#087B51]">{t("orders.title")}</p>
-      {loading && <p className="mt-3 text-sm text-slate-500">{t("orders.loading")}</p>}
-      {!token && <p className="mt-3 text-sm text-slate-600">{t("orders.login")}</p>}
-      {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+      {(loading || (telegramAuthPending && !token)) && <div className="mt-3"><SkeletonLines rows={6} /></div>}
+      {telegramAuthPending && !token && <p className="mt-3 text-sm font-semibold text-slate-600">{t("common.signingIn")}</p>}
+      {!token && !telegramAuthPending && <p className="mt-3 text-sm text-slate-600">{t("orders.login")}</p>}
+      {error && (
+        <div className="mt-3">
+          <ErrorState
+            title={error}
+            onRetry={() => {
+              setLoading(true);
+              setError("");
+              client
+                .get(`/orders/${id}`, { audience: "customer" })
+                .then((response) => setOrder(response.data?.data || response.data))
+                .catch((err) => setError(userError(err, t, "orders.loadFailed")))
+                .finally(() => setLoading(false));
+            }}
+          />
+        </div>
+      )}
+      {actionError && <p className="mt-3 text-sm text-red-600">{actionError}</p>}
       {order && view && (
         <>
           <h1 className="mt-1 text-2xl font-extrabold">{order.orderNumber}</h1>
@@ -391,16 +432,16 @@ export default function OrderDetailPage() {
           )}
           {view.prescriptionKey && <p className="mt-1 text-sm text-slate-600">{t(view.prescriptionKey)}</p>}
           {view.showPay && (
-            <button type="button" disabled={paying} onClick={pay} className="mt-4 h-12 rounded-xl bg-[#087B51] px-4 text-sm font-bold text-white">
-              {paying ? t("orders.loading") : `${formatSom(total)} ${t("order.pay.label")}`}
-            </button>
+            <LoadingButton type="button" loading={paying} loadingText={t("cart.paying")} onClick={pay} className="mt-4 h-12 rounded-xl bg-[#087B51] px-4 text-sm font-bold text-white disabled:opacity-50">
+              {`${formatSom(total)} ${t("order.pay.label")}`}
+            </LoadingButton>
           )}
 
           <div className="mt-4 grid gap-2 sm:grid-cols-2">
             {isTerminalOrder(order) && (
-              <button type="button" disabled={reordering} onClick={reorder} className="h-11 rounded-xl border border-brand/20 bg-brand-soft text-sm font-bold text-brand disabled:opacity-50">
-                {reordering ? t("orders.loading") : view.showReupload ? t("order.reorderRx") : t("order.reorder")}
-              </button>
+              <LoadingButton type="button" loading={reordering} loadingText={t("common.loading")} onClick={reorder} className="h-11 rounded-xl border border-brand/20 bg-brand-soft text-sm font-bold text-brand disabled:opacity-50">
+                {view.showReupload ? t("order.reorderRx") : t("order.reorder")}
+              </LoadingButton>
             )}
             {canCancel && (
               <button type="button" onClick={() => setCancelOpen(true)} className="h-11 rounded-xl border border-red-200 text-sm font-bold text-red-700">
@@ -418,16 +459,16 @@ export default function OrderDetailPage() {
                   minLength={3}
                   value={cancelReason}
                   onChange={(event) => setCancelReason(event.target.value)}
-                  className="min-h-20 rounded-xl border border-red-200 bg-white p-2 text-sm font-normal text-slate-800"
+                  className="min-h-20 rounded-xl border border-red-200 bg-white p-2 text-base font-normal text-slate-800 md:text-sm"
                 />
               </label>
               <div className="flex gap-2">
                 <button type="button" onClick={() => setCancelOpen(false)} className="h-10 rounded-xl bg-white px-3 text-sm font-bold text-slate-700">
                   {t("order.cancel.back")}
                 </button>
-                <button type="submit" disabled={cancelling || cancelReason.trim().length < 3} className="h-10 rounded-xl bg-red-600 px-3 text-sm font-bold text-white disabled:opacity-50">
-                  {cancelling ? t("orders.loading") : t("order.cancel.submit")}
-                </button>
+                <LoadingButton type="submit" loading={cancelling} disabled={cancelReason.trim().length < 3} loadingText={t("common.saving")} className="h-10 rounded-xl bg-red-600 px-3 text-sm font-bold text-white disabled:opacity-50">
+                  {t("order.cancel.submit")}
+                </LoadingButton>
               </div>
             </form>
           )}

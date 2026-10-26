@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { ChevronDown, Clock, PhoneCall, ShieldCheck } from "lucide-react";
 import { loadPublicSettings, peekPublicSettings } from "../../lib/publicSettings";
 import { useBranchStore } from "../../store/useBranchStore";
 
 export default function Footer() {
   const { t } = useTranslation();
+  const { pathname } = useLocation();
   const branch = useBranchStore((state) => state.branch);
   const [openId, setOpenId] = useState("");
   const [shop, setShop] = useState(() => peekPublicSettings());
@@ -24,14 +25,14 @@ export default function Footer() {
       title: t("footer.contact"),
       body: (
         <div className="space-y-1.5 text-sm">
-          <p className="flex items-center gap-2">
+          <a href={`tel:${String(shop.contactPhone || "").replace(/[^\d+]/g, "")}`} className="flex items-center gap-2 text-inherit no-underline">
             <PhoneCall className="h-4 w-4" />
             {shop.contactPhone}
-          </p>
-          <p className="flex items-center gap-2">
+          </a>
+          <a href={`tel:${String(shop.contactPhoneAlt || "").replace(/[^\d+]/g, "")}`} className="flex items-center gap-2 text-inherit no-underline">
             <PhoneCall className="h-4 w-4" />
             {shop.contactPhoneAlt}
-          </p>
+          </a>
         </div>
       ),
     },
@@ -73,8 +74,16 @@ export default function Footer() {
     },
   ];
 
+  const onCart = pathname === "/cart";
+  const onMedicine = pathname.startsWith("/medicine/");
+  const clearance = onCart
+    ? "pb-[calc(var(--bottom-nav-h)+4.75rem+var(--tg-safe-bottom,env(safe-area-inset-bottom)))] lg:pb-0"
+    : onMedicine
+      ? "pb-[calc(var(--bottom-nav-h)+4.75rem+var(--tg-safe-bottom,env(safe-area-inset-bottom)))] md:pb-[calc(var(--bottom-nav-h)+var(--tg-safe-bottom,env(safe-area-inset-bottom)))] lg:pb-0"
+      : "pb-[calc(var(--bottom-nav-h)+var(--tg-safe-bottom,env(safe-area-inset-bottom)))] lg:pb-0";
+
   return (
-    <footer className="mt-auto hidden bg-[#083929] text-[#d7efe4] lg:block">
+    <footer className={`mt-auto bg-[#083929] text-[#d7efe4] ${clearance}`}>
       <div className="mx-auto hidden max-w-7xl grid-cols-4 gap-8 px-6 py-10 lg:grid">
         <div>
           <strong className="text-lg text-white">Vita24</strong>

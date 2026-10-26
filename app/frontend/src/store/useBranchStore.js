@@ -7,10 +7,11 @@ export const useBranchStore = create(
       branch: null,
       isModalOpen: false,
       hydrated: false,
+      skipped: false,
 
-      setBranch: (branch) => set({ branch, isModalOpen: false }),
+      setBranch: (branch) => set({ branch, isModalOpen: false, skipped: false }),
       openModal: () => set({ isModalOpen: true }),
-      closeModal: () => set({ isModalOpen: false }),
+      closeModal: () => set({ isModalOpen: false, skipped: true }),
       requireBranch: () => {
         if (!get().branch) {
           set({ isModalOpen: true });

@@ -96,7 +96,7 @@ export default function PromoCarousel({ onUpload }) {
                 <button
                   type="button"
                   onClick={onUpload}
-                  className="mt-3 inline-flex h-9 items-center rounded-xl bg-white px-3 text-xs font-bold text-[#087B51]"
+                  className="mt-2 inline-flex h-10 items-center rounded-xl bg-white px-3 text-xs font-bold text-[#087B51]"
                 >
                   {t("promo.rxAction")}
                 </button>
@@ -126,17 +126,21 @@ export default function PromoCarousel({ onUpload }) {
         <ChevronRight className="h-5 w-5" />
       </button>
 
-      <div className="absolute inset-x-0 bottom-2.5 flex justify-center gap-1.5 md:bottom-3">
+      <div className="absolute inset-x-0 bottom-0 flex justify-center">
         {SLIDES.map((item, dotIndex) => (
           <button
             key={item.id}
             type="button"
             aria-label={t("promo.dot", { n: dotIndex + 1 })}
             onClick={() => setIndex(dotIndex)}
-            className={`h-2 rounded-full transition-all ${
-              dotIndex === index ? "w-5 bg-white" : "w-2 bg-white/45"
-            }`}
-          />
+            className="grid h-10 w-10 place-items-center"
+          >
+            <span
+              className={`block h-2 rounded-full transition-all ${
+                dotIndex === index ? "w-5 bg-white" : "w-2 bg-white/45"
+              }`}
+            />
+          </button>
         ))}
       </div>
     </section>

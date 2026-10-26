@@ -20,19 +20,25 @@ body,
   max-width: 100%;
 }
 
+:root {
+  --bottom-nav-h: 3.25rem;
+}
+
 body {
   margin: 0;
-  overflow-x: hidden;
+  overflow-x: clip;
   background: #f8fafc;
   color: #0f172a;
   font-family: var(--font-sans);
 }
 
-button,
-input,
-textarea,
-select {
-  font: inherit;
+@layer base {
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+  }
 }
 
 .no-scrollbar {

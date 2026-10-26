@@ -4,6 +4,7 @@ const {
   me,
   requestOtp,
   verifyOtpLogin,
+  telegramWebAppLogin,
   refreshSession,
   logoutSession,
   listSessions,
@@ -24,9 +25,10 @@ const {
   changePasswordSchema,
   otpRequestSchema,
   otpVerifySchema,
+  telegramWebAppSchema,
 } = require("../validators/authValidator");
 const { idParamSchema } = require("../validators/branchAdminValidator");
-const { otpRequestLimiter, otpVerifyLimiter, staffLoginLimiter } = require("../lib/rateLimit");
+const { otpRequestLimiter, otpVerifyLimiter, staffLoginLimiter, telegramWebAppLimiter } = require("../lib/rateLimit");
 
 const router = express.Router();
 const adminGuard = [authenticateToken, requireRole("SUPER_ADMIN")];
@@ -35,6 +37,7 @@ router.post("/login", staffLoginLimiter, validateRequest(loginSchema, "body"), l
 router.post("/refresh", validateRequest(refreshSchema, "body"), refreshSession);
 router.post("/otp/request", otpRequestLimiter, validateRequest(otpRequestSchema, "body"), requestOtp);
 router.post("/otp/verify", otpVerifyLimiter, validateRequest(otpVerifySchema, "body"), verifyOtpLogin);
+router.post("/telegram-webapp", telegramWebAppLimiter, validateRequest(telegramWebAppSchema, "body"), telegramWebAppLogin);
 router.get("/me", authenticateToken, me);
 router.post("/change-password", authenticateToken, validateRequest(changePasswordSchema), changePassword);
 router.post("/logout", authenticateToken, logoutSession);

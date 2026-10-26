@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { formatDateTime, formatSom } from "../../lib/format";
+import { LoadingButton } from "../ui";
 import { CANCEL_REASONS, StatusBadge, canDecide, deadlineMs, formatRemain, paymentLabel, timerTone } from "./panelShared";
 
 const NEXT = {
@@ -83,19 +84,20 @@ export default function OrderCard({ order, highlight, busy, readOnly = false, on
           </button>
         )}
         {!readOnly && next && !(next[0] === "COMPLETED" && cashDue) && (
-          <button
+          <LoadingButton
             type="button"
-            disabled={busy}
+            loading={busy}
+            loadingText={t("common.saving")}
             onClick={() => (next[0] === "COMPLETED" ? setConfirmDone(true) : onStatus(order, { status: next[0] }))}
             className="h-10 rounded-xl bg-brand px-3 text-sm font-bold text-white disabled:opacity-50"
           >
             {t(next[1], next[2])}
-          </button>
+          </LoadingButton>
         )}
         {!readOnly && cashDue && (
-          <button type="button" disabled={busy} onClick={() => onCash(order)} className="h-10 rounded-xl border border-slate-200 px-3 text-sm font-bold disabled:opacity-50">
+          <LoadingButton type="button" loading={busy} loadingText={t("common.saving")} onClick={() => onCash(order)} className="h-10 rounded-xl border border-slate-200 px-3 text-sm font-bold disabled:opacity-50">
             Naqd olindi
-          </button>
+          </LoadingButton>
         )}
         {!readOnly && canCancel && (
           <button type="button" disabled={busy} onClick={() => setCancelOpen(true)} className="h-10 rounded-xl px-3 text-sm font-semibold text-red-700 disabled:opacity-50">
@@ -112,9 +114,10 @@ export default function OrderCard({ order, highlight, busy, readOnly = false, on
         <div className="grid gap-2 rounded-xl bg-slate-50 p-3">
           <p className="text-sm">{order.deliveryType === "PICKUP" ? t("panel.confirmPickup", "Mijoz buyurtmani olib ketganini tasdiqlaysizmi?") : t("panel.confirmDone", "Buyurtma yetkazilganini tasdiqlaysizmi?")}</p>
           <div className="flex gap-2">
-            <button
+            <LoadingButton
               type="button"
-              disabled={busy}
+              loading={busy}
+              loadingText={t("common.saving")}
               onClick={() => {
                 setConfirmDone(false);
                 onStatus(order, { status: "COMPLETED", confirm: true });
@@ -122,7 +125,7 @@ export default function OrderCard({ order, highlight, busy, readOnly = false, on
               className="h-10 rounded-xl bg-brand px-3 text-sm font-bold text-white disabled:opacity-50"
             >
               {order.deliveryType === "PICKUP" ? t("panel.pickedUp", "Mijoz olib ketdi") : t("panel.delivered", "Yetkazildi")}
-            </button>
+            </LoadingButton>
             <button type="button" onClick={() => setConfirmDone(false)} className="h-10 rounded-xl px-3 text-sm">Bekor</button>
           </div>
         </div>
@@ -148,7 +151,7 @@ export default function OrderCard({ order, highlight, busy, readOnly = false, on
           <input value={note} onChange={(event) => setNote(event.target.value)} placeholder={reason === "OTHER" ? "Izoh majburiy" : t("panel.extraNote", "Qo'shimcha izoh")} className="h-10 rounded-xl border border-slate-200 px-3 text-sm" />
           {noteRequired && <p className="text-xs text-red-600">Boshqa sabab uchun izoh yozing</p>}
           <div className="flex gap-2">
-            <button type="submit" disabled={busy || !reason || noteRequired} className="h-10 rounded-xl bg-red-600 px-3 text-sm font-bold text-white disabled:opacity-50">{t("panel.cancel", "Bekor qilish")}</button>
+            <LoadingButton type="submit" loading={busy} disabled={!reason || noteRequired} loadingText={t("common.saving")} className="h-10 rounded-xl bg-red-600 px-3 text-sm font-bold text-white disabled:opacity-50">{t("panel.cancel", "Bekor qilish")}</LoadingButton>
             <button type="button" onClick={() => setCancelOpen(false)} className="h-10 rounded-xl px-3 text-sm">Bekor</button>
           </div>
         </form>

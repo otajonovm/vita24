@@ -3,6 +3,8 @@ const prisma = require("../lib/prisma");
 const { decryptSecret } = require("../lib/secrets");
 const { AppError } = require("../lib/response");
 const { runDbTransaction } = require("../lib/transaction");
+const { buildSearchText } = require("../lib/searchText");
+const { prescriptionPatch } = require("../lib/rxApply");
 
 const LEKKO_API_URL = process.env.LEKKO_API_URL || "https://pharmalekko.uz/api/public/v1";
 const LEKKO_TIMEOUT_MS = Number(process.env.LEKKO_TIMEOUT_MS || 15_000);
@@ -250,13 +252,24 @@ function pickDrugId(row) {
   return toInt(row?.id ?? row?.drugId ?? row?.productId ?? row?.catalogProductId);
 }
 
+// 2026-10-25 dump: katalog kalitlari id, name, lekkoDrugId, tradeMark, mnn, form,
+// dose, quantityInPack, pharmGroup, atx, variants. Rx boolean yo'q.
+// atx/mnn/pharmGroup namunalarda null. Zaxira lotida Rx va ATC yo'q.
+function readAtcCode(row) {
+  const raw = row?.atx;
+  if (typeof raw !== "string" && typeof raw !== "number") return undefined;
+  const text = String(raw).trim();
+  if (!text || text.toLowerCase() === "null") return undefined;
+  return text.slice(0, 32);
+}
+
 function mapProduct(row) {
   const variant = Array.isArray(row?.variants) ? row.variants[0] : null;
   const drugId = pickDrugId(row);
   const name = String(row?.name || row?.drugName || row?.title || row?.fullName || "").trim();
   const form = String(row?.form || row?.dosageForm || row?.releaseForm || "").trim();
   const dose = String(row?.dose || "").trim();
-  return {
+  const mapped = {
     drugId,
     name: name || `LEKKO dori ${drugId || ""}`.trim(),
     barcode: variant?.barcode || row?.barcode || row?.barCode || row?.ean || null,
@@ -266,10 +279,12 @@ function mapProduct(row) {
       variant?.producer || row?.manufacturer || row?.producer || row?.tradeMark || "Noma'lum"
     ).trim(),
     dosageForm: [form, dose].filter(Boolean).join(" ") || "Noma'lum",
-    isPrescription: Boolean(row?.isPrescription ?? row?.rx ?? row?.recipeRequired ?? row?.isRx),
     description: String(row?.description || row?.mnn || row?.tradeMark || name || "").trim(),
     categoryName: row?.pharmGroup || row?.categoryName || row?.category?.name || form || null,
   };
+  const atcCode = readAtcCode(row);
+  if (atcCode) mapped.atcCode = atcCode;
+  return mapped;
 }
 
 /**
@@ -382,41 +397,59 @@ async function upsertMappedProducts(mapped) {
 
   const existing = await prisma.medicine.findMany({
     where: { externalApiId: { in: valid.map((item) => item.drugId) } },
-    select: { id: true, externalApiId: true },
+    select: {
+      id: true,
+      externalApiId: true,
+      isPrescription: true,
+      rxSource: true,
+      atcCode: true,
+      rxNeedsReview: true,
+      activeIngredient: true,
+      searchText: true,
+    },
   });
   const byExternalId = new Map(existing.map((item) => [item.externalApiId, item]));
 
   for (const product of valid) {
     const category = await categoryFor(product.categoryName);
+    const current = byExternalId.get(product.drugId);
+    const { patch } = prescriptionPatch(product, current || null);
     const data = {
       name: product.name,
       slug: `lekko-${product.drugId}`,
       description: product.description || product.name,
       manufacturer: product.manufacturer,
       dosageForm: product.dosageForm,
-      isPrescription: product.isPrescription,
       barcode: product.barcode ? String(product.barcode) : null,
       ikpuCode: product.ikpuCode ? String(product.ikpuCode) : null,
       quantityInPack: product.quantityInPack,
       categoryId: category.id,
       // imageUrl is intentionally absent: sync must never overwrite uploaded images.
+      ...patch,
     };
+    data.searchText = buildSearchText(data);
 
-    const current = byExternalId.get(product.drugId);
     if (current) {
+      const update = {
+        name: data.name,
+        description: data.description,
+        manufacturer: data.manufacturer,
+        dosageForm: data.dosageForm,
+        barcode: data.barcode,
+        ikpuCode: data.ikpuCode,
+        quantityInPack: data.quantityInPack,
+        categoryId: data.categoryId,
+        searchText: data.searchText,
+      };
+      if (patch.atcCode) update.atcCode = patch.atcCode;
+      if (Object.prototype.hasOwnProperty.call(patch, "isPrescription")) {
+        update.isPrescription = patch.isPrescription;
+        update.rxSource = patch.rxSource;
+        update.rxNeedsReview = patch.rxNeedsReview;
+      }
       await prisma.medicine.update({
         where: { id: current.id },
-        data: {
-          name: data.name,
-          description: data.description,
-          manufacturer: data.manufacturer,
-          dosageForm: data.dosageForm,
-          isPrescription: data.isPrescription,
-          barcode: data.barcode,
-          ikpuCode: data.ikpuCode,
-          quantityInPack: data.quantityInPack,
-          categoryId: data.categoryId,
-        },
+        data: update,
       });
       medicineIds.push(current.id);
       updated += 1;
@@ -632,20 +665,28 @@ async function ensureMedicinesForLots(byDrug) {
   for (const drugId of missing) {
     const lot = byDrug.get(drugId);
     const name = lot.name || `LEKKO dori ${drugId}`;
+    const dosageForm = "Noma'lum";
+    const { patch } = prescriptionPatch({ name, dosageForm }, null);
     const created = await prisma.medicine.create({
       data: {
         name,
         slug: `lekko-${drugId}`,
         description: name,
         manufacturer: lot.manufacturer || "Noma'lum",
-        dosageForm: "Noma'lum",
-        isPrescription: false,
+        dosageForm,
         imageEmoji: "-",
         externalApiId: drugId,
         barcode: lot.barcode,
         ikpuCode: lot.ikpuCode,
         quantityInPack: lot.quantityInPack,
         categoryId: category.id,
+        ...patch,
+        searchText: buildSearchText({
+          name,
+          description: name,
+          manufacturer: lot.manufacturer || "Noma'lum",
+          dosageForm,
+        }),
       },
       select: { id: true, externalApiId: true },
     });
@@ -925,4 +966,6 @@ module.exports = {
   syncBranchStock,
   syncBranchFromLekko,
   ensureBranchStockRows,
+  mapProduct,
+  prescriptionPatch,
 };

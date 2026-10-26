@@ -1,6 +1,7 @@
 import { createContext, useContext, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useToastStore } from "../../store/useToastStore";
+import { EmptyState as SharedEmptyState, ErrorState as SharedErrorState, SkeletonTable } from "../ui";
 
 const ConfirmContext = createContext(null);
 
@@ -68,40 +69,22 @@ export function ConfirmProvider({ children }) {
 }
 
 export function AdminSkeleton({ rows = 4 }) {
-  return (
-    <div className="grid gap-3" aria-hidden>
-      {Array.from({ length: rows }, (_, index) => (
-        <div key={index} className="h-14 animate-pulse rounded-2xl bg-slate-100" />
-      ))}
-    </div>
-  );
+  return <SkeletonTable rows={rows} />;
 }
 
-export function EmptyState({ title, body, actionLabel, onAction }) {
-  return (
-    <div className="grid justify-items-start gap-2 rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-8">
-      <p className="text-sm font-bold text-slate-800">{title}</p>
-      {body && <p className="max-w-md text-sm text-slate-500">{body}</p>}
-      {actionLabel && onAction && (
-        <button type="button" onClick={onAction} className="mt-1 h-10 rounded-xl bg-brand px-3 text-sm font-bold text-white">
-          {actionLabel}
-        </button>
-      )}
-    </div>
-  );
+export function EmptyState(props) {
+  return <SharedEmptyState {...props} />;
 }
 
-export function ErrorState({ title, onRetry }) {
+export function ErrorState({ title, onRetry, ...rest }) {
   const { t } = useTranslation();
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3">
-      <p className="text-sm font-semibold text-red-700">{title || t("admin.errorTitle")}</p>
-      {onRetry && (
-        <button type="button" onClick={onRetry} className="h-10 rounded-xl bg-white px-3 text-sm font-bold text-red-700">
-          {t("admin.retry")}
-        </button>
-      )}
-    </div>
+    <SharedErrorState
+      title={title || t("admin.errorTitle")}
+      onRetry={onRetry}
+      retryLabel={t("admin.retry")}
+      {...rest}
+    />
   );
 }
 

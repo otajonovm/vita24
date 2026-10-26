@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { formatDateTime, formatSom, orderStatusLabel } from "../../lib/format";
 import { fetchBranchOrder, markCashReceived, savePharmacistNote, undoOrderStatus, updateBranchOrderStatus } from "../../services/api";
+import { ErrorState, LoadingButton, SkeletonLines } from "../ui";
 import OrderCard from "./OrderCard";
 import { apiError, printHtml } from "./panelShared";
 
@@ -12,6 +13,9 @@ export default function OrderDetailDrawer({ orderId, readOnly = false, onClose, 
   const [order, setOrder] = useState(null);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
+  const [savingNote, setSavingNote] = useState(false);
+  const [loading, setLoading] = useState(Boolean(orderId));
+  const [error, setError] = useState("");
 
   useEffect(() => {
     if (!orderId) return undefined;
@@ -22,20 +26,34 @@ export default function OrderDetailDrawer({ orderId, readOnly = false, onClose, 
     return () => window.removeEventListener("keydown", onKey);
   }, [orderId, onClose]);
 
-  useEffect(() => {
+  function load() {
     if (!orderId) return undefined;
     let active = true;
-    fetchBranchOrder(orderId)
+    const controller = new AbortController();
+    setOrder(null);
+    setNote("");
+    setError("");
+    setLoading(true);
+    fetchBranchOrder(orderId, { signal: controller.signal })
       .then((data) => {
         if (!active) return;
         setOrder(data);
         setNote(data.pharmacistNote || "");
       })
-      .catch((error) => onToast(apiError(error, t("panel.loadFailed", "Ro'yxat yuklanmadi"))));
+      .catch((err) => {
+        if (!active || err?.name === "AbortError" || err?.code === "ERR_CANCELED") return;
+        setError(apiError(err, t("panel.loadFailed", "Ro'yxat yuklanmadi")));
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
     return () => {
       active = false;
+      controller.abort();
     };
-  }, [orderId]);
+  }
+
+  useEffect(() => load(), [orderId]);
 
   if (!orderId) return null;
   const address = encodeURIComponent(order?.deliveryAddress || "");
@@ -56,33 +74,51 @@ export default function OrderDetailDrawer({ orderId, readOnly = false, onClose, 
   }
 
   async function run(action) {
-    if (readOnly) return;
+    if (readOnly || busy) return;
     setBusy(true);
     try {
       const updated = await action();
       setOrder(updated);
       setNote(updated.pharmacistNote || "");
       onToast("Saqlandi");
-    } catch (error) {
-      onToast(apiError(error, "Amal bajarilmadi"));
+    } catch (err) {
+      onToast(apiError(err, "Amal bajarilmadi"));
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function saveNote() {
+    if (readOnly || savingNote || !order) return;
+    setSavingNote(true);
+    try {
+      const updated = await savePharmacistNote(order.id, note);
+      setOrder(updated);
+      onToast(t("panel.saved", "Saqlandi"));
+    } catch (err) {
+      onToast(apiError(err, t("panel.actionFailed", "Amal bajarilmadi")));
+    } finally {
+      setSavingNote(false);
     }
   }
 
   return (
     <div className="fixed inset-0 z-40 flex justify-end bg-slate-900/30" onClick={onClose}>
       <aside className="h-full w-full max-w-md overflow-y-auto bg-white p-4 shadow-xl" onClick={(event) => event.stopPropagation()}>
-        {!order ? (
-          <p className="text-sm text-slate-500">{t("panel.loading", "Yuklanmoqda...")}</p>
-        ) : (
+        <div className="mb-3 flex justify-end">
+          <button type="button" onClick={onClose} className="text-sm font-semibold text-slate-500">{t("panel.close", "Yopish")}</button>
+        </div>
+        {loading && <SkeletonLines rows={8} />}
+        {!loading && error && (
+          <ErrorState title={error} onRetry={load} onClose={onClose} closeLabel={t("panel.close", "Yopish")} />
+        )}
+        {!loading && !error && order && (
           <div className="grid gap-3">
             <div className="flex items-start justify-between gap-2">
               <div>
                 <h2 className="text-lg font-extrabold">{order.orderNumber}</h2>
                 <p className="text-sm text-slate-500">{formatDateTime(order.createdAt)} · {orderStatusLabel(order)}</p>
               </div>
-              <button type="button" onClick={onClose} className="text-sm font-semibold text-slate-500">{t("panel.close", "Yopish")}</button>
             </div>
             <p className="text-sm">{order.customerName || order.user?.name || order.customerPhone}</p>
             <a className="text-sm font-bold text-brand" href={`tel:${order.customerPhone}`}>{t("panel.call", "Qo'ng'iroq")}: {order.customerPhone}</a>
@@ -126,21 +162,15 @@ export default function OrderDetailDrawer({ orderId, readOnly = false, onClose, 
               />
             </label>
             {!readOnly && (
-              <button
+              <LoadingButton
                 type="button"
-                onClick={async () => {
-                  try {
-                    const updated = await savePharmacistNote(order.id, note);
-                    setOrder(updated);
-                    onToast(t("panel.saved", "Saqlandi"));
-                  } catch (error) {
-                    onToast(apiError(error, t("panel.actionFailed", "Amal bajarilmadi")));
-                  }
-                }}
-                className="h-10 rounded-xl bg-brand text-sm font-bold text-white"
+                loading={savingNote}
+                loadingText={t("common.saving")}
+                onClick={saveNote}
+                className="h-10 rounded-xl bg-brand text-sm font-bold text-white disabled:opacity-50"
               >
                 {t("panel.save", "Saqlash")}
-              </button>
+              </LoadingButton>
             )}
             <OrderCard
               order={order}

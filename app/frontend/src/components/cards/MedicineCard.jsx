@@ -3,6 +3,8 @@ import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { FileText, Heart, Minus, Pill, Plus, ShoppingCart } from "lucide-react";
 import { formatSom } from "../../lib/format";
+import { readSearchContext } from "../../lib/searchMemory";
+import { logSearchClick } from "../../services/api";
 import { resolveMediaUrl } from "../../lib/media";
 import { unitMultiplier } from "../../lib/mockData";
 import { useBranchStore } from "../../store/useBranchStore";
@@ -41,6 +43,10 @@ export default function MedicineCard({ medicine }) {
       pushToast(t("cart.onlyLeft", { count: stockCount }), "info", { duration: 2200 });
       return;
     }
+    const context = readSearchContext();
+    if (context?.query) {
+      logSearchClick({ query: context.query, medicineId: medicine.id, branchId: branch.id }).catch(() => {});
+    }
     pushToast(
       medicine.isPrescription
         ? t("medicine.addedRx", { name: medicine.name })
@@ -57,7 +63,11 @@ export default function MedicineCard({ medicine }) {
           <img
             src={imageSrc}
             alt={medicine.name}
-            className="h-full w-full object-contain p-2"
+            width={160}
+            height={160}
+            loading="lazy"
+            decoding="async"
+            className="h-full w-full bg-emerald-50/40 object-contain p-2"
             onError={() => setImgError(true)}
           />
         ) : (
@@ -80,7 +90,7 @@ export default function MedicineCard({ medicine }) {
             toggleFavorite(medicine);
             pushToast(isFavorite ? t("medicine.favOff") : t("medicine.favOn"));
           }}
-          className="absolute right-1.5 top-1.5 grid h-8 w-8 place-items-center rounded-full bg-white/95 text-slate-400 shadow-sm transition hover:text-red-500"
+          className="absolute right-1 top-1 grid h-10 w-10 place-items-center rounded-full bg-white/95 text-slate-400 shadow-sm transition hover:text-red-500"
         >
           <Heart className={`h-4 w-4 ${isFavorite ? "fill-red-500 text-red-500" : ""}`} aria-hidden />
         </button>
@@ -97,6 +107,7 @@ export default function MedicineCard({ medicine }) {
           )}
         </h3>
         {dosage ? <p className="mt-0.5 line-clamp-1 text-xs text-slate-500">{dosage}</p> : null}
+        {medicine.matchReason ? <p className="mt-0.5 line-clamp-2 text-[11px] text-slate-500">{medicine.matchReason}</p> : null}
 
         <strong className="mt-auto pt-2 text-sm font-bold tabular-nums text-slate-900">
           {branch ? formatSom(medicine.price) : t("medicine.pickBranch")}
@@ -126,12 +137,12 @@ export default function MedicineCard({ medicine }) {
             {t("medicine.add")}
           </button>
         ) : (
-          <div className="mt-2 inline-flex h-11 w-full items-center justify-between rounded-xl bg-[#e7f6ef] px-1">
+          <div className="mt-2 inline-flex h-12 w-full items-center justify-between rounded-xl bg-[#e7f6ef] px-1">
             <button
               type="button"
               aria-label={t("medicine.decrease")}
               onClick={() => updateQuantity(medicine.id, selectedUnit, quantity - 1)}
-              className="grid h-8 w-8 place-items-center rounded-lg bg-white text-slate-800 shadow-sm"
+              className="grid h-10 w-10 place-items-center rounded-lg bg-white text-slate-800 shadow-sm"
             >
               <Minus className="h-4 w-4" aria-hidden />
             </button>
@@ -142,7 +153,7 @@ export default function MedicineCard({ medicine }) {
               disabled={(quantity + 1) * pack > stockCount}
               title={(quantity + 1) * pack > stockCount ? t("cart.onlyLeft", { count: stockCount }) : undefined}
               onClick={() => updateQuantity(medicine.id, selectedUnit, quantity + 1)}
-              className="grid h-8 w-8 place-items-center rounded-lg bg-white text-slate-800 shadow-sm disabled:opacity-40"
+              className="grid h-10 w-10 place-items-center rounded-lg bg-white text-slate-800 shadow-sm disabled:opacity-40"
             >
               <Plus className="h-4 w-4" aria-hidden />
             </button>

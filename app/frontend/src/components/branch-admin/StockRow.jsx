@@ -2,6 +2,7 @@ import { useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { formatDateTime, formatSom } from "../../lib/format";
 import { resolveMediaUrl } from "../../lib/media";
+import { LoadingButton } from "../ui";
 import { STOCK_REASONS, stockInputError } from "./panelShared";
 
 const STOCK_LABELS = Object.fromEntries(STOCK_REASONS);
@@ -17,7 +18,17 @@ export default function StockRow({ row, draft, onDraft, onHistory, history, uplo
   return (
     <div className={`grid gap-2 rounded-2xl border border-slate-100 bg-white p-3 lg:items-center ${readOnly ? "lg:grid-cols-[72px_1.4fr_120px_auto]" : "lg:grid-cols-[72px_1.4fr_120px_160px_140px_auto]"}`}>
       <div className="h-16 w-16 overflow-hidden rounded-xl bg-slate-100">
-        {row.imageUrl ? <img src={resolveMediaUrl(row.imageUrl)} alt="" className="h-full w-full object-cover" /> : null}
+        {row.imageUrl ? (
+          <img
+            src={resolveMediaUrl(row.imageUrl)}
+            alt=""
+            width={64}
+            height={64}
+            loading="lazy"
+            decoding="async"
+            className="h-full w-full bg-slate-100 object-cover"
+          />
+        ) : null}
       </div>
       <div>
         <p className="font-bold text-slate-900">{row.name}</p>
@@ -55,9 +66,9 @@ export default function StockRow({ row, draft, onDraft, onHistory, history, uplo
       )}
       {!readOnly && (
         <div className="grid gap-1">
-          <button type="button" disabled={uploading} onClick={() => fileRef.current?.click()} className="h-10 rounded-xl border border-slate-200 px-3 text-sm font-semibold text-brand disabled:opacity-50">
-            {uploading ? "Yuklanmoqda..." : "Rasm yuklash"}
-          </button>
+          <LoadingButton type="button" loading={uploading} loadingText={t("common.loading")} onClick={() => fileRef.current?.click()} className="h-10 rounded-xl border border-slate-200 px-3 text-sm font-semibold text-brand disabled:opacity-50">
+            Rasm yuklash
+          </LoadingButton>
           <input
             ref={fileRef}
             type="file"

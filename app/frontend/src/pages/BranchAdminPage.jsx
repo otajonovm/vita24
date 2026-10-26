@@ -9,6 +9,7 @@ import PasswordChangeForm from "../components/auth/PasswordChangeForm";
 import StatsTab from "../components/branch-admin/StatsTab";
 import StockTab from "../components/branch-admin/StockTab";
 import { PanelToast, apiError, beep } from "../components/branch-admin/panelShared";
+import { ErrorState } from "../components/ui";
 import { fetchBranches, fetchPanelSummary, setBranchOpen, verifyPrescription } from "../services/api";
 import { useBranchStore } from "../store/useBranchStore";
 import { useAdminAuth, usePharmacistAuth } from "../store/useAuthStore";
@@ -48,6 +49,8 @@ export default function BranchAdminPage() {
   const [focus, setFocus] = useState(null);
   const [stockFocus, setStockFocus] = useState("");
   const [confirmClose, setConfirmClose] = useState(false);
+  const [summaryError, setSummaryError] = useState("");
+  const [branchesError, setBranchesError] = useState("");
   const toastTimer = useRef(null);
 
   const branchId = isPharmacist ? user?.branchId : branch?.id;
@@ -77,29 +80,39 @@ export default function BranchAdminPage() {
 
   useEffect(() => {
     if (!isSuperViewer) return undefined;
+    let active = true;
+    setBranchesError("");
     fetchBranches()
       .then((list) => {
+        if (!active) return;
         setBranches(list || []);
         setBranch((current) => current || (list || []).find((item) => item.id === customerBranch?.id) || list?.[0] || null);
       })
-      .catch(() => {});
-    return undefined;
-  }, [isSuperViewer]);
+      .catch((error) => {
+        if (active) setBranchesError(apiError(error, t("panel.loadFailed", "Ro'yxat yuklanmadi")));
+      });
+    return () => {
+      active = false;
+    };
+  }, [isSuperViewer, pulse, t, customerBranch?.id]);
 
   useEffect(() => {
     if (!token || !branchId) return undefined;
     let active = true;
+    setSummaryError("");
     fetchPanelSummary(branchId)
       .then((data) => {
         if (!active) return;
         setSummary(data);
         if (isPharmacist) setBranch(data.branch);
       })
-      .catch(() => {});
+      .catch((error) => {
+        if (active) setSummaryError(apiError(error, t("panel.loadFailed", "Ro'yxat yuklanmadi")));
+      });
     return () => {
       active = false;
     };
-  }, [token, branchId, pulse, isPharmacist]);
+  }, [token, branchId, pulse, isPharmacist, t]);
 
   useEffect(() => {
     if (!token || !branchId) return undefined;
@@ -253,6 +266,20 @@ export default function BranchAdminPage() {
           Filial yopiq. Mijozlar buyurtma bera olmaydi.
         </div>
       )}
+      {branchesError ? (
+        <ErrorState
+          title={branchesError}
+          onRetry={() => setPulse((value) => value + 1)}
+          retryLabel={t("common.retry", "Qayta urinish")}
+        />
+      ) : null}
+      {summaryError ? (
+        <ErrorState
+          title={summaryError}
+          onRetry={() => setPulse((value) => value + 1)}
+          retryLabel={t("common.retry", "Qayta urinish")}
+        />
+      ) : null}
       <PanelHeader
         summary={summary}
         tab={tab}
@@ -264,10 +291,19 @@ export default function BranchAdminPage() {
         sound={sound}
         onSound={toggleSound}
         refreshing={refreshing}
-        onRefresh={() => {
+        onRefresh={async () => {
+          if (refreshing || !branchId) return;
           setRefreshing(true);
-          setPulse((value) => value + 1);
-          setTimeout(() => setRefreshing(false), 600);
+          try {
+            const data = await fetchPanelSummary(branchId);
+            setSummary(data);
+            if (isPharmacist) setBranch(data.branch);
+            setPulse((value) => value + 1);
+          } catch (error) {
+            showToast(apiError(error, t("panel.loadFailed", "Ro'yxat yuklanmadi")));
+          } finally {
+            setRefreshing(false);
+          }
         }}
         onLogout={logout}
         branch={branch}

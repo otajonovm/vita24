@@ -23,3 +23,4 @@ app/package-lock.json
 !.env.example
 !**/.env.example
 app/backend/.seed-credentials.local
+app/backend/tmp

@@ -11,6 +11,7 @@ import {
   updateAdminPromo,
 } from "../../services/api";
 import { useToastStore } from "../../store/useToastStore";
+import { LoadingButton } from "../ui";
 import { AdminSkeleton, EmptyState, ErrorState, controlClass, useConfirm } from "./ui";
 
 function errorText(error, fallback) {
@@ -88,6 +89,7 @@ export function PromoManager() {
   const [error, setError] = useState("");
   const [draft, setDraft] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [rowBusy, setRowBusy] = useState("");
 
   async function load() {
     setLoading(true);
@@ -139,22 +141,29 @@ export function PromoManager() {
   }
 
   async function toggleActive(row) {
+    if (rowBusy) return;
+    setRowBusy(`toggle:${row.id}`);
     try {
       await setAdminPromoActive(row.id, !row.active);
       setRows((current) => current.map((item) => (item.id === row.id ? { ...item, active: !row.active } : item)));
     } catch (err) {
       push(errorText(err, t("admin.errorTitle")), "error");
+    } finally {
+      setRowBusy("");
     }
   }
 
   async function remove(row) {
     const accepted = await confirm({ title: t("admin.delete"), body: row.code, danger: true });
     if (!accepted) return;
+    setRowBusy(`delete:${row.id}`);
     try {
       await deleteAdminPromo(row.id);
       setRows((current) => current.filter((item) => item.id !== row.id));
     } catch (err) {
       push(errorText(err, t("admin.errorTitle")), "error");
+    } finally {
+      setRowBusy("");
     }
   }
 
@@ -206,11 +215,11 @@ export function PromoManager() {
                   <td className="py-3">
                     <div className="flex flex-wrap gap-2">
                       <button type="button" onClick={() => setDraft(draftFrom(row))} className="h-10 rounded-xl border border-slate-200 px-3 text-xs font-bold">{t("admin.edit")}</button>
-                      <button type="button" onClick={() => toggleActive(row)} className="h-10 rounded-xl border border-slate-200 px-3 text-xs font-bold">
+                      <LoadingButton type="button" loading={rowBusy === `toggle:${row.id}`} loadingText={t("common.saving")} onClick={() => toggleActive(row)} className="h-10 rounded-xl border border-slate-200 px-3 text-xs font-bold disabled:opacity-50">
                         {row.active ? t("admin.deactivate") : t("admin.activate")}
-                      </button>
+                      </LoadingButton>
                       {row.usedCount === 0 && (
-                        <button type="button" onClick={() => remove(row)} className="h-10 rounded-xl border border-slate-200 px-3 text-xs font-bold text-red-600">{t("admin.delete")}</button>
+                        <LoadingButton type="button" loading={rowBusy === `delete:${row.id}`} loadingText={t("common.saving")} onClick={() => remove(row)} className="h-10 rounded-xl border border-slate-200 px-3 text-xs font-bold text-red-600 disabled:opacity-50">{t("admin.delete")}</LoadingButton>
                       )}
                     </div>
                   </td>

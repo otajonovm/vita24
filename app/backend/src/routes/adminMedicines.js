@@ -13,6 +13,8 @@ const {
   previewImport,
   confirmImport,
   exportCatalog,
+  setMedicinePrescription,
+  setMedicinePrescriptionBulk,
 } = require("../controllers/adminCatalogController");
 const { authenticateToken, requireRole } = require("../middlewares/authMiddleware");
 const { validateRequest } = require("../middlewares/validateRequest");
@@ -21,6 +23,8 @@ const { idParamSchema } = require("../validators/branchAdminValidator");
 const {
   medicineWriteSchema,
   medicineActiveSchema,
+  medicineRxSchema,
+  medicineRxBulkSchema,
   categoryWriteSchema,
   importConfirmSchema,
   showcaseQuerySchema,
@@ -39,6 +43,8 @@ const catalogQuerySchema = z
     search: z.string().trim().max(80).optional(),
     categoryId: z.string().trim().optional(),
     active: z.enum(["all", "active", "inactive"]).optional(),
+    prescription: z.enum(["all", "yes", "no", "review"]).optional(),
+    rxSource: z.enum(["LEKKO", "RULE", "MANUAL"]).optional(),
     page: pageQuery,
     limit: limitQuery,
   })
@@ -65,6 +71,7 @@ router.post("/", admin, validateRequest(medicineWriteSchema), createMedicine);
 router.post("/import/preview", admin, uploadCatalogFile, previewImport);
 router.post("/import/confirm", admin, validateRequest(importConfirmSchema), confirmImport);
 router.get("/export", admin, validateRequest(exportQuerySchema, "query"), exportCatalog);
+router.post("/rx/bulk", admin, validateRequest(medicineRxBulkSchema), setMedicinePrescriptionBulk);
 router.get("/home", admin, validateRequest(showcaseQuerySchema, "query"), listShowcase);
 router.patch("/home/order", admin, validateRequest(showcaseOrderSchema), reorderShowcase);
 
@@ -76,6 +83,13 @@ router.patch(
   setMedicineActive
 );
 router.patch("/:id", admin, validateRequest(idParamSchema, "params"), validateRequest(medicineWriteSchema), updateMedicine);
+router.patch(
+  "/:id/rx",
+  admin,
+  validateRequest(idParamSchema, "params"),
+  validateRequest(medicineRxSchema),
+  setMedicinePrescription
+);
 
 router.patch(
   "/:id/home",

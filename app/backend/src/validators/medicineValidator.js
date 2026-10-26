@@ -24,7 +24,7 @@ const listMedicinesQuerySchema = z
       .optional()
       .transform((value) => value === "true" || value === "1"),
     page: z.coerce.number().int().min(1).optional().default(1),
-    limit: z.coerce.number().int().min(1).max(5000).optional().default(5000),
+    limit: z.coerce.number().int().min(1).max(100).optional().default(24),
     sort: z.enum(["default", "popular", "price_asc", "price_desc", "name"]).optional().default("default"),
   })
   .passthrough();

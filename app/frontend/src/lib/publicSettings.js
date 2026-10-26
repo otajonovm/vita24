@@ -24,8 +24,13 @@ let cached = null;
 let cachedAt = 0;
 let pending = null;
 
-export function peekPublicSettings() {
-  return cached || FALLBACK;
+export function hasPublicSettings() {
+  return Boolean(cached);
+}
+
+export function peekPublicSettings(allowFallback = true) {
+  if (cached) return cached;
+  return allowFallback ? FALLBACK : null;
 }
 
 export function loadPublicSettings() {

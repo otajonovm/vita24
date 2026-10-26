@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { X } from "lucide-react";
 import { formatDateTime, formatSom } from "../../lib/format";
 import { fetchAdminCustomer, fetchAdminCustomers, setCustomerBlock } from "../../services/api";
 import { useToastStore } from "../../store/useToastStore";
+import { createRequestGate, isCanceled } from "../../lib/requestGate";
 import { AdminSkeleton, DataTable, ErrorState, controlClass } from "./ui";
 
 function errorText(error, fallback) {
@@ -33,6 +34,7 @@ export function CustomerManager() {
   const [reason, setReason] = useState("");
   const [reasonError, setReasonError] = useState("");
   const [saving, setSaving] = useState(false);
+  const cardGate = useRef(createRequestGate());
 
   async function load() {
     setLoading(true);
@@ -51,17 +53,21 @@ export function CustomerManager() {
   }, []);
 
   async function openCard(id) {
+    const requestId = cardGate.current.next();
     setSelectedId(id);
     setCard(null);
     setCardError("");
     setCardLoading(true);
     setReasonOpen(false);
     try {
-      setCard(await fetchAdminCustomer(id));
+      const next = await fetchAdminCustomer(id);
+      if (!cardGate.current.isLatest(requestId)) return;
+      setCard(next);
     } catch (err) {
+      if (isCanceled(err) || !cardGate.current.isLatest(requestId)) return;
       setCardError(errorText(err, t("admin.errorTitle")));
     } finally {
-      setCardLoading(false);
+      if (cardGate.current.isLatest(requestId)) setCardLoading(false);
     }
   }
 

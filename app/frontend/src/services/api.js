@@ -10,6 +10,22 @@ const client = axios.create({
   timeout: 20000,
 });
 
+export function invalidPayloadError(message = "Server kutilgan javobni bermadi. Keyinroq urinib ko'ring.") {
+  const error = new Error(message);
+  error.code = "INVALID_RESPONSE";
+  return error;
+}
+
+export function looksLikeHtml(data) {
+  if (typeof data !== "string") return false;
+  const trimmed = data.trim().slice(0, 48).toLowerCase();
+  return trimmed.startsWith("<!doctype") || trimmed.startsWith("<html") || trimmed.startsWith("<?xml");
+}
+
+export function asList(value) {
+  return Array.isArray(value) ? value : [];
+}
+
 function readStoredToken(key) {
   try {
     const raw =
@@ -80,7 +96,13 @@ function refreshAdminToken() {
 }
 
 client.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    const type = String(response.headers?.["content-type"] || "");
+    if (type.includes("text/html") || looksLikeHtml(response.data)) {
+      return Promise.reject(invalidPayloadError());
+    }
+    return response;
+  },
   async (error) => {
     const url = String(error.config?.url || "");
     const status = error.response?.status;
@@ -118,7 +140,9 @@ client.interceptors.response.use(
 const mockOrders = [];
 
 function unwrap(response) {
-  return response.data?.data ?? response.data;
+  const payload = response.data?.data ?? response.data;
+  if (looksLikeHtml(payload)) throw invalidPayloadError();
+  return payload;
 }
 
 function normalizeMedicine(raw, branchId) {
@@ -138,6 +162,8 @@ function normalizeMedicine(raw, branchId) {
     isPrescription: Boolean(raw.isPrescription ?? raw.requiresPrescription),
     imageUrl: raw.imageUrl || "",
     showOnHome: Boolean(raw.showOnHome),
+    matchReason: raw.matchReason || "",
+    matchGroup: raw.matchGroup || "",
     categoryId: raw.categoryId || raw.category?.id || "",
     price: Number(raw.price) || 0,
     stockCount: Number(raw.stockCount ?? raw.available ?? 0),
@@ -218,11 +244,11 @@ export async function fetchBranches() {
     { treatEmptyAsMiss: true }
   );
 
-  return (branches || []).map(attachBranchCoords);
+  return asList(branches).map(attachBranchCoords);
 }
 
 export async function fetchCategories(branchId = "") {
-  return withFallback(
+  const rows = await withFallback(
     async () =>
       unwrap(
         await client.get("/medicines/categories", {
@@ -231,6 +257,7 @@ export async function fetchCategories(branchId = "") {
       ),
     () => getMockCategories()
   );
+  return asList(rows);
 }
 
 export async function getMedicines({
@@ -240,7 +267,7 @@ export async function getMedicines({
   inStockOnly = false,
   featured = false,
   page = 1,
-  limit = 5000,
+  limit = 48,
   sort = "default",
   signal,
 } = {}) {
@@ -260,14 +287,23 @@ export async function getMedicines({
       signal,
     })
   );
-  const rows = Array.isArray(data) ? data : data?.items || [];
+  if (data == null || (typeof data !== "object" && !Array.isArray(data))) {
+    throw invalidPayloadError();
+  }
+  const rows = asList(Array.isArray(data) ? data : data.items);
   const resolvedBranchId = branchId || data?.branchId || "";
   const items = rows.map((item) => normalizeMedicine(item, resolvedBranchId));
   items.suggestion = typeof data?.suggestion === "string" ? data.suggestion : "";
+  items.suggestions = Array.isArray(data?.suggestions)
+    ? data.suggestions.filter((item) => typeof item === "string" && item)
+    : items.suggestion
+      ? [items.suggestion]
+      : [];
   items.popular = Array.isArray(data?.popular)
     ? data.popular.map((item) => normalizeMedicine(item, resolvedBranchId))
     : [];
   items.categories = Array.isArray(data?.categories) ? data.categories : [];
+  items.total = Number(data?.total || items.length);
   return items;
 }
 
@@ -286,6 +322,51 @@ export async function reorderShowcase(ids) {
 
 export async function fetchMedicines(params = {}) {
   return getMedicines(params);
+}
+
+export async function suggestMedicines({ branchId, search = "", signal } = {}) {
+  const data = unwrap(
+    await client.get("/medicines/suggest", {
+      params: { q: search, ...(branchId ? { branchId } : {}) },
+      timeout: 8000,
+      signal,
+    })
+  );
+  const branch = branchId || "";
+  const mapList = (rows) => (Array.isArray(rows) ? rows.map((item) => normalizeMedicine(item, branch)) : []);
+  return {
+    medicines: mapList(data?.medicines),
+    ingredients: mapList(data?.ingredients),
+    symptoms: mapList(data?.symptoms),
+    suggestions: Array.isArray(data?.suggestions) ? data.suggestions : [],
+    popularQueries: Array.isArray(data?.popularQueries) ? data.popularQueries : [],
+    popular: mapList(data?.popular),
+  };
+}
+
+export async function logSearchClick({ query, medicineId, branchId }) {
+  if (!query || !medicineId) return;
+  await client.post("/medicines/search-click", {
+    query,
+    medicineId,
+    ...(branchId ? { branchId } : {}),
+  });
+}
+
+export async function fetchSearchAdmin() {
+  return unwrap(await client.get("/admin/search", { audience: "admin" }));
+}
+
+export async function createSearchSynonym(body) {
+  return unwrap(await client.post("/admin/search/synonyms", body, { audience: "admin" }));
+}
+
+export async function updateSearchSynonym(id, body) {
+  return unwrap(await client.patch(`/admin/search/synonyms/${id}`, body, { audience: "admin" }));
+}
+
+export async function deleteSearchSynonym(id) {
+  return unwrap(await client.delete(`/admin/search/synonyms/${id}`, { audience: "admin" }));
 }
 
 function unwrapOrderResult(data, payload) {
@@ -309,7 +390,7 @@ function unwrapOrderResult(data, payload) {
 
 export async function fetchCartAvailability(branchId, ids) {
   const data = unwrap(await client.get("/medicines/availability", { params: { branchId, ids: ids.join(",") } }));
-  return Array.isArray(data) ? data : [];
+  return asList(data);
 }
 
 export async function checkPromo(code, subtotal, branchId) {
@@ -434,8 +515,8 @@ export async function fetchBranchAdminOrders(branchId, params = {}) {
   };
 }
 
-export async function fetchBranchOrder(orderId) {
-  return normalizeOrder(unwrap(await client.get(`/branch-admin/orders/${orderId}`)));
+export async function fetchBranchOrder(orderId, { signal } = {}) {
+  return normalizeOrder(unwrap(await client.get(`/branch-admin/orders/${orderId}`, { signal })));
 }
 
 export async function updateBranchOrderStatus(orderId, payload) {
@@ -757,6 +838,14 @@ export async function setAdminMedicineActive(id, isActive) {
   return unwrap(await client.patch(`/admin/medicines/${id}/active`, { isActive }));
 }
 
+export async function setAdminMedicineRx(id, isPrescription) {
+  return unwrap(await client.patch(`/admin/medicines/${id}/rx`, { isPrescription }));
+}
+
+export async function setAdminMedicineRxBulk(ids, isPrescription) {
+  return unwrap(await client.post("/admin/medicines/rx/bulk", { ids, isPrescription }));
+}
+
 export async function fetchAdminCategories() {
   return unwrap(await client.get("/admin/medicines/categories"));
 }
@@ -815,6 +904,10 @@ export async function verifyCustomerOtp({ phone, code, fullName }) {
   return unwrap(await client.post("/auth/otp/verify", { phone, code, fullName }));
 }
 
+export async function loginWithTelegramWebApp(initData) {
+  return unwrap(await client.post("/auth/telegram-webapp", { initData }));
+}
+
 export async function fetchPrescriptionLink(prescriptionId, audience = "admin") {
   return unwrap(await client.get(`/prescriptions/${prescriptionId}/link`, { audience }));
 }
@@ -834,11 +927,20 @@ export async function replaceOrderPrescription(orderId, payload) {
   );
 }
 
-export async function uploadPrescription(file) {
+export async function uploadPrescription(file, onProgress) {
   const formData = new FormData();
   formData.append("file", file);
   return unwrap(
-    await client.post("/prescriptions/upload", formData, { audience: "customer", timeout: 30000 })
+    await client.post("/prescriptions/upload", formData, {
+      audience: "customer",
+      timeout: 30000,
+      onUploadProgress: onProgress
+        ? (event) => {
+            const total = Number(event.total) || 0;
+            if (total > 0) onProgress(Math.round((event.loaded / total) * 100));
+          }
+        : undefined,
+    })
   );
 }
 

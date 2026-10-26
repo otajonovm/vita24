@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { FileCheck, UploadCloud, XCircle } from "lucide-react";
+import useLockBodyScroll from "../../hooks/useLockBodyScroll";
 import { useCartStore } from "../../store/useCartStore";
 
 const ACCEPT = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
@@ -11,6 +12,7 @@ export default function PrescriptionModal({ open, onClose }) {
   const prescription = useCartStore((state) => state.prescription);
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState("");
+  useLockBodyScroll(open);
 
   if (!open) return null;
 

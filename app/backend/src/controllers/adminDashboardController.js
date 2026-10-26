@@ -57,7 +57,7 @@ async function loadScope(query) {
   }
 
   const branchWhere = query.branchId ? { branchId: query.branchId } : {};
-  const [orders, branchList, newCustomers, lowStockRows, pendingRefunds, slowPrescriptions, lekkoErrors, closedBranches, lekkoItems] = await Promise.all([
+  const [orders, branchList, newCustomers, lowStockRows, pendingRefunds, slowPrescriptions, lekkoErrors, closedBranches, lekkoItems, prescriptionMedicines] = await Promise.all([
     prisma.order.findMany({
       where: {
         ...branchWhere,
@@ -120,6 +120,7 @@ async function loadScope(query) {
       orderBy: { lekkoLastErrorAt: "desc" },
       take: 5,
     }),
+    prisma.medicine.count({ where: { isPrescription: true } }),
   ]);
 
   const summary = summarizeDashboard({
@@ -147,6 +148,7 @@ async function loadScope(query) {
         at: item.lekkoLastErrorAt,
       })),
       closedBranches,
+      prescriptionMedicines,
     },
     orders: orders.map(plainOrder),
   };

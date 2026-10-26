@@ -57,6 +57,8 @@ function createSessionStore(storageKey) {
         token: null,
         refreshToken: null,
         isAuthenticated: false,
+        telegramAuthPending: false,
+        setTelegramAuthPending: (telegramAuthPending) => set({ telegramAuthPending }),
         setSession: (user, token, extra) =>
           set((state) => ({
             user: mapUser(user),
@@ -66,8 +68,9 @@ function createSessionStore(storageKey) {
                 ? extra.refreshToken || null
                 : state.refreshToken,
             isAuthenticated: Boolean(user?.id || user?.phone),
+            telegramAuthPending: false,
           })),
-        logout: () => set({ user: null, token: null, refreshToken: null, isAuthenticated: false }),
+        logout: () => set({ user: null, token: null, refreshToken: null, isAuthenticated: false, telegramAuthPending: false }),
       }),
       {
         name: storageKey,

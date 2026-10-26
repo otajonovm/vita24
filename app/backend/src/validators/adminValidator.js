@@ -44,6 +44,19 @@ const medicineWriteSchema = z
   })
   .strict();
 
+const medicineRxSchema = z
+  .object({
+    isPrescription: z.boolean(),
+  })
+  .strict();
+
+const medicineRxBulkSchema = z
+  .object({
+    ids: z.array(z.string().trim().min(1)).min(1).max(200),
+    isPrescription: z.boolean(),
+  })
+  .strict();
+
 const medicineActiveSchema = z
   .object({
     isActive: z.boolean(),
@@ -308,6 +321,8 @@ module.exports = {
   auditQuerySchema,
   medicineWriteSchema,
   medicineActiveSchema,
+  medicineRxSchema,
+  medicineRxBulkSchema,
   categoryWriteSchema,
   importConfirmSchema,
   stockNetworkQuerySchema,

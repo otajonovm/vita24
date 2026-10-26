@@ -5,7 +5,10 @@ const { AppError, asyncHandler, sendSuccess } = require("../lib/response");
 const { normalizePhone, serializeUser, provisionCustomer } = require("../lib/userProvisioning");
 const { issueOtp, verifyOtp, dropOtp } = require("../lib/otpStore");
 const { resetOtpVerify, clearStaffLoginLimits } = require("../lib/rateLimit");
-const { deliverOtp, botUrl } = require("../lib/telegramBot");
+const { deliverOtp, botUrl } = require("../bot/services");
+const { getToken } = require("../bot/token");
+const { verifyTelegramInitData } = require("../bot/initData");
+const { customerBlockMessage } = require("../lib/customerAccess");
 const { runDbTransaction } = require("../lib/transaction");
 const { getJwtSecret } = require("../middlewares/authMiddleware");
 const { decryptSecret, encryptSecret } = require("../lib/secrets");
@@ -192,6 +195,44 @@ const requestOtp = asyncHandler(async (req, res) => {
       : "Telegram bot sozlanmagan",
     400,
     "TELEGRAM_REQUIRED"
+  );
+});
+
+const telegramWebAppLogin = asyncHandler(async (req, res) => {
+  const initData = String(req.body.initData || req.body.init_data || "");
+  const token = getToken();
+  if (!token) {
+    throw new AppError("Telegram bot sozlanmagan", 503, "TELEGRAM_REQUIRED");
+  }
+
+  const parsed = verifyTelegramInitData(initData, token);
+  if (!parsed.ok) {
+    if (parsed.code === "EXPIRED") {
+      throw new AppError("Telegram sessiyasi eskirgan. Botni qayta oching", 401, "TELEGRAM_AUTH_EXPIRED");
+    }
+    throw new AppError("Telegram imzo noto'g'ri", 401, "TELEGRAM_AUTH_INVALID");
+  }
+
+  const chatId = String(parsed.user.id);
+  const user = await prisma.user.findUnique({ where: { telegramChatId: chatId } });
+  if (!user || user.role !== "CUSTOMER" || user.deletedAt) {
+    throw new AppError("Avval botda telefon raqamingizni ulang", 404, "NOT_FOUND");
+  }
+  if (user.status === "SUSPENDED") {
+    throw new AppError(customerBlockMessage(user.blockReason), 403, "CUSTOMER_BLOCKED");
+  }
+
+  const accessToken = signAccessToken(user);
+  return sendSuccess(
+    res,
+    {
+      token: accessToken,
+      tokenType: "Bearer",
+      expiresIn: process.env.JWT_EXPIRES_IN || "7d",
+      user: serializeAuthUser(user),
+      isNew: false,
+    },
+    "Telefon tasdiqlandi"
   );
 });
 
@@ -486,6 +527,7 @@ module.exports = {
   login,
   requestOtp,
   verifyOtpLogin,
+  telegramWebAppLogin,
   me,
   refreshSession,
   logoutSession,

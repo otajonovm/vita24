@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   bulkUpdateBranchStock,
@@ -7,8 +7,10 @@ import {
   syncLekkoStock,
   uploadMedicineImage,
 } from "../../services/api";
+import { EmptyState, ErrorState, LoadingButton, RefetchBar, SkeletonTable, Spinner } from "../ui";
 import StockRow from "./StockRow";
 import { apiError, stockInputError } from "./panelShared";
+import { createRequestGate, isCanceled } from "../../lib/requestGate";
 
 export default function StockTab({ branch, branchId, focus, readOnly = false, onToast, onBranch }) {
   const { t } = useTranslation();
@@ -18,7 +20,12 @@ export default function StockTab({ branch, branchId, focus, readOnly = false, on
   const [search, setSearch] = useState("");
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("");
-  const [searching, setSearching] = useState(false);
+  const [searching, setSearching] = useState(true);
+  const [error, setError] = useState("");
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [historyBusy, setHistoryBusy] = useState("");
+  const [barcodeBusy, setBarcodeBusy] = useState(false);
+  const requestGate = useRef(createRequestGate());
   const [drafts, setDrafts] = useState({});
   const [history, setHistory] = useState({});
   const [uploadingId, setUploadingId] = useState("");
@@ -40,18 +47,26 @@ export default function StockTab({ branch, branchId, focus, readOnly = false, on
   useEffect(() => {
     if (!branchId) return undefined;
     let active = true;
+    const requestId = requestGate.current.next();
+    setError("");
     setSearching(true);
     fetchBranchStock(branchId, { search: query, filter, page: 1, limit: 20 })
       .then((data) => {
-        if (!active) return;
+        if (!active || !requestGate.current.isLatest(requestId)) return;
         setRows(data.stocks);
         setHasMore(data.hasMore);
         setPage(1);
         setTallies({ low: data.lowStockCount || 0, out: data.outCount || 0, rx: data.rxCount || 0 });
         if (data.branch) onBranch?.(data.branch);
       })
-      .catch((error) => onToast(apiError(error, t("panel.loadFailed", "Ro'yxat yuklanmadi"))))
-      .finally(() => active && setSearching(false));
+      .catch((err) => {
+        if (!active || isCanceled(err) || !requestGate.current.isLatest(requestId)) return;
+        setError(apiError(err, t("panel.loadFailed", "Ro'yxat yuklanmadi")));
+        onToast(apiError(err, t("panel.loadFailed", "Ro'yxat yuklanmadi")));
+      })
+      .finally(() => {
+        if (active && requestGate.current.isLatest(requestId)) setSearching(false);
+      });
     return () => {
       active = false;
     };
@@ -106,8 +121,16 @@ export default function StockTab({ branch, branchId, focus, readOnly = false, on
       setHistory((current) => ({ ...current, [row.id]: undefined }));
       return;
     }
-    const rowsHistory = await fetchStockMovements(row.id);
-    setHistory((current) => ({ ...current, [row.id]: rowsHistory || [] }));
+    if (historyBusy === row.id) return;
+    setHistoryBusy(row.id);
+    try {
+      const rowsHistory = await fetchStockMovements(row.id);
+      setHistory((current) => ({ ...current, [row.id]: rowsHistory || [] }));
+    } catch (err) {
+      onToast(apiError(err, t("panel.loadFailed", "Ro'yxat yuklanmadi")));
+    } finally {
+      setHistoryBusy("");
+    }
   }
 
   async function upload(row, file) {
@@ -156,15 +179,22 @@ export default function StockTab({ branch, branchId, focus, readOnly = false, on
   async function onSearchKey(event) {
     if (event.key !== "Enter") return;
     const code = search.trim();
-    if (!/^\d{6,}$/.test(code)) return;
+    if (!/^\d{6,}$/.test(code) || barcodeBusy) return;
     event.preventDefault();
-    const data = await fetchBranchStock(branchId, { barcode: code, page: 1, limit: 5 });
-    if (data.stocks[0]) {
-      setRows(data.stocks);
-      setHasMore(false);
-      onToast(data.stocks[0].name);
-    } else {
-      onToast(t("panel.notFound", "Mahsulot topilmadi"));
+    setBarcodeBusy(true);
+    try {
+      const data = await fetchBranchStock(branchId, { barcode: code, page: 1, limit: 5 });
+      if (data.stocks[0]) {
+        setRows(data.stocks);
+        setHasMore(false);
+        onToast(data.stocks[0].name);
+      } else {
+        onToast(t("panel.notFound", "Mahsulot topilmadi"));
+      }
+    } catch (err) {
+      onToast(apiError(err, t("panel.loadFailed", "Ro'yxat yuklanmadi")));
+    } finally {
+      setBarcodeBusy(false);
     }
   }
 
@@ -181,11 +211,18 @@ export default function StockTab({ branch, branchId, focus, readOnly = false, on
           placeholder={t("panel.stockSearch", "Dori yoki shtrix-kod")}
           className="h-11 min-w-0 flex-1 rounded-xl border border-slate-200 px-3 text-sm"
         />
-        {searching && <span className="text-xs text-slate-500">{t("panel.loading", "Yuklanmoqda...")}</span>}
+        {(searching || barcodeBusy) && rows.length > 0 && <Spinner className="h-4 w-4" label={t("common.searching")} />}
         {!readOnly && (
-          <button type="button" disabled={saving || !Object.keys(drafts).length || errorCount > 0} onClick={saveAll} className="h-11 rounded-xl bg-brand px-3 text-sm font-bold text-white disabled:opacity-50">
+          <LoadingButton
+            type="button"
+            disabled={saving || !Object.keys(drafts).length || errorCount > 0}
+            loading={saving}
+            loadingText={t("common.saving")}
+            onClick={saveAll}
+            className="h-11 rounded-xl bg-brand px-3 text-sm font-bold text-white disabled:opacity-50"
+          >
             {errorCount > 0 ? `${errorCount} ta xato` : t("panel.saveAll", "Hammasini saqlash")}
-          </button>
+          </LoadingButton>
         )}
       </div>
       <div className="flex flex-wrap gap-2">
@@ -214,13 +251,31 @@ export default function StockTab({ branch, branchId, focus, readOnly = false, on
         {!readOnly && <span>{t("panel.image", "Rasm")}</span>}
         <span>{t("panel.movements", "Harakatlar")}</span>
       </div>
-      {!searching && rows.length === 0 && (
-        <div className="grid justify-items-start gap-2">
-          <p className="text-sm text-slate-500">Mahsulot topilmadi</p>
-          <button type="button" onClick={() => { setSearch(""); setQuery(""); setFilter(""); }} className="h-10 rounded-xl border px-3 text-sm font-semibold">Filtrlarni tozalash</button>
-        </div>
+      {searching && rows.length === 0 && <SkeletonTable rows={5} />}
+      {!searching && error && rows.length === 0 && (
+        <ErrorState title={error} onRetry={() => {
+          setSearching(true);
+          setError("");
+          fetchBranchStock(branchId, { search: query, filter, page: 1, limit: 20 })
+            .then((data) => {
+              setRows(data.stocks);
+              setHasMore(data.hasMore);
+              setPage(1);
+              setTallies({ low: data.lowStockCount || 0, out: data.outCount || 0, rx: data.rxCount || 0 });
+            })
+            .catch((err) => setError(apiError(err, t("panel.loadFailed", "Ro'yxat yuklanmadi"))))
+            .finally(() => setSearching(false));
+        }} />
       )}
-      <div className="grid gap-2">
+      {!searching && !error && rows.length === 0 && (
+        <EmptyState
+          title="Mahsulot topilmadi"
+          actionLabel="Filtrlarni tozalash"
+          onAction={() => { setSearch(""); setQuery(""); setFilter(""); }}
+        />
+      )}
+      <div className="relative grid gap-2">
+        <RefetchBar show={searching && rows.length > 0} />
         {rows.map((row) => (
           <StockRow
             key={row.id}
@@ -237,18 +292,28 @@ export default function StockTab({ branch, branchId, focus, readOnly = false, on
         ))}
       </div>
       {hasMore && (
-        <button
+        <LoadingButton
           type="button"
+          loading={loadingMore}
+          loadingText={t("common.loading")}
           onClick={async () => {
-            const data = await fetchBranchStock(branchId, { search: query, filter, page: page + 1, limit: 20 });
-            setRows((current) => [...current, ...data.stocks]);
-            setPage((value) => value + 1);
-            setHasMore(data.hasMore);
+            if (loadingMore) return;
+            setLoadingMore(true);
+            try {
+              const data = await fetchBranchStock(branchId, { search: query, filter, page: page + 1, limit: 20 });
+              setRows((current) => [...current, ...data.stocks]);
+              setPage((value) => value + 1);
+              setHasMore(data.hasMore);
+            } catch (err) {
+              onToast(apiError(err, t("panel.loadFailed", "Ro'yxat yuklanmadi")));
+            } finally {
+              setLoadingMore(false);
+            }
           }}
-          className="h-11 rounded-xl border text-sm font-bold"
+          className="h-11 rounded-xl border text-sm font-bold disabled:opacity-50"
         >
           {t("panel.loadMore", "Yana yuklash")}
-        </button>
+        </LoadingButton>
       )}
     </section>
   );

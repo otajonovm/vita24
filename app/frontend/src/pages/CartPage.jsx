@@ -17,12 +17,16 @@ import {
   Wallet,
 } from "lucide-react";
 import MapCheckoutSection from "../components/checkout/MapCheckoutSection";
+import useLockBodyScroll from "../hooks/useLockBodyScroll";
+import useSoftKeyboard from "../hooks/useSoftKeyboard";
 import AuthLoginModal from "../components/modals/AuthLoginModal";
+import { LoadingButton } from "../components/ui";
 import { checkPromo, createOrder, fetchCartAvailability, fetchSavedAddress, mockPay, saveCustomerAddress, uploadPrescription } from "../services/api";
 import { getCustomerOrderView } from "../lib/customerOrderView";
 import { formatDateTime, formatGrouped, formatReservation, formatSom, isValidUzbekPhone, normalizePhoneInput } from "../lib/format";
 import { DELIVERY_CITY, DELIVERY_ETA, quoteTotals } from "../lib/pricing";
-import { loadPublicSettings, peekPublicSettings } from "../lib/publicSettings";
+import { hasPublicSettings, loadPublicSettings, peekPublicSettings } from "../lib/publicSettings";
+import { SkeletonPulse } from "../components/ui";
 import { userError } from "../lib/userError";
 import { lineTotal, unitMultiplier } from "../lib/mockData";
 import { displayName } from "../lib/personName";
@@ -78,19 +82,21 @@ export default function CartPage() {
   const promo = useCartStore((state) => state.promo);
   const setPromo = useCartStore((state) => state.setPromo);
   const applyBranchStock = useCartStore((state) => state.applyBranchStock);
-  const [shop, setShop] = useState(() => peekPublicSettings());
+  const [shop, setShop] = useState(() => (hasPublicSettings() ? peekPublicSettings() : null));
+  const shopReady = Boolean(shop);
   const totals = quoteTotals(totalAmount, {
     deliveryType,
     discount: promo?.discount || 0,
-    deliveryFee: shop.deliveryFee,
-    freeFrom: shop.freeDeliveryFrom,
+    deliveryFee: shop?.deliveryFee,
+    freeFrom: shop?.freeDeliveryFrom,
   });
-  const paymentOptions = PAYMENT_OPTIONS.filter((option) => shop[option.flag] !== false);
+  const paymentOptions = PAYMENT_OPTIONS.filter((option) => !shop || shop[option.flag] !== false);
   const paymentOptionsKey = paymentOptions.map((option) => option.id).join(",");
   useEffect(() => {
-    loadPublicSettings().then(setShop).catch(() => {});
+    loadPublicSettings().then(setShop).catch(() => setShop(peekPublicSettings()));
   }, []);
   useEffect(() => {
+    if (!shop) return;
     if (deliveryType === "PICKUP" && shop.pickupEnabled === false) setDeliveryType("DELIVERY");
     const options = PAYMENT_OPTIONS.filter((option) => shop[option.flag] !== false);
     if (options.length && !options.some((option) => option.id === paymentMethod)) {
@@ -121,9 +127,16 @@ export default function CartPage() {
   const [attempted, setAttempted] = useState(false);
   const [touched, setTouched] = useState({});
   const [confirmClear, setConfirmClear] = useState(false);
+  const [pendingRemove, setPendingRemove] = useState("");
+  const keyboard = useSoftKeyboard();
+  useLockBodyScroll(confirmClear);
   const [promoInput, setPromoInput] = useState("");
   const [promoError, setPromoError] = useState("");
   const [promoBusy, setPromoBusy] = useState(false);
+  const [stockChecking, setStockChecking] = useState(false);
+  const [stockError, setStockError] = useState("");
+  const [submitStage, setSubmitStage] = useState("");
+  const [uploadPct, setUploadPct] = useState(0);
   const addressRef = useRef(null);
   const rxRef = useRef(null);
   const phoneRef = useRef(null);
@@ -240,15 +253,24 @@ export default function CartPage() {
   useEffect(() => {
     if (!branch?.id || !cartIds) return undefined;
     let active = true;
+    setStockChecking(true);
+    setStockError("");
     fetchCartAvailability(branch.id, cartIds.split(","))
       .then((rows) => {
-        if (active) applyBranchStock(branch.id, rows || []);
+        if (!active) return;
+        applyBranchStock(branch.id, rows || []);
       })
-      .catch(() => {});
+      .catch((err) => {
+        if (!active) return;
+        setStockError(userError(err, t, "cart.stockCheckFailed"));
+      })
+      .finally(() => {
+        if (active) setStockChecking(false);
+      });
     return () => {
       active = false;
     };
-  }, [branch?.id, cartIds, applyBranchStock]);
+  }, [branch?.id, cartIds, applyBranchStock, t]);
 
   const holdUntil = pendingOrder ? reservationUntil : null;
   const remaining = holdUntil ? holdUntil - now : 0;
@@ -329,7 +351,23 @@ export default function CartPage() {
         ? "cart.holdCashPickup"
         : "cart.holdCash"
       : "cart.hold";
-  const holdMinutes = hasPrescriptionItems ? shop.reviewWindowMinutes : shop.paymentWindowMinutes;
+  const holdMinutes = hasPrescriptionItems ? shop?.reviewWindowMinutes : shop?.paymentWindowMinutes;
+
+  async function applyPromo() {
+    const code = promoInput.trim();
+    if (!code || promoBusy) return;
+    setPromoBusy(true);
+    setPromoError("");
+    try {
+      const result = await checkPromo(code, totalAmount, branch?.id);
+      setPromo({ code: result.code, discount: result.discount });
+    } catch (err) {
+      setPromo(null);
+      setPromoError(userError(err, t, "cart.promoInvalid"));
+    } finally {
+      setPromoBusy(false);
+    }
+  }
 
   const handleOrder = async (event) => {
     event.preventDefault();
@@ -363,6 +401,8 @@ export default function CartPage() {
       return;
     }
     setSubmitting(true);
+    setSubmitStage("");
+    setUploadPct(0);
     setError("");
 
     try {
@@ -390,12 +430,14 @@ export default function CartPage() {
           prescriptionFileKey = prescription.fileKey;
           prescriptionFileName = prescription.fileName;
         } else if (prescription?.file) {
-          const uploaded = await uploadPrescription(prescription.file);
+          setSubmitStage("rx");
+          const uploaded = await uploadPrescription(prescription.file, setUploadPct);
           prescriptionFileKey = uploaded.fileKey;
           prescriptionFileName = uploaded.fileName || prescription.fileName;
         }
       }
 
+      setSubmitStage("order");
       const result = await createOrder({
         phone: normalizedPhone,
         fullName: fullName.trim(),
@@ -434,6 +476,7 @@ export default function CartPage() {
       setError(userError(err, t, "cart.failed"));
     } finally {
       setSubmitting(false);
+      setSubmitStage("");
     }
   };
 
@@ -542,20 +585,33 @@ export default function CartPage() {
     : paymentMethod === "cash"
       ? t("cart.submit")
       : t("cart.pay", { amount: formatSom(totals.totalAmount) });
+  const submittingLabel =
+    submitStage === "rx"
+      ? t("cart.uploadingRx", { percent: uploadPct || 0 })
+      : submitStage === "order"
+        ? t("cart.creatingOrder")
+        : t("cart.sending");
 
-  const payButton = (
-    <button
+  const submitShort = hasPrescriptionItems
+    ? t("cart.submitRxShort")
+    : paymentMethod === "cash"
+      ? t("cart.submitShort")
+      : t("cart.payShort");
+
+  const payButton = (label, extra = "") => (
+    <LoadingButton
       type="submit"
-      disabled={submitting}
-      className="h-12 w-full rounded-xl bg-[#087B51] text-sm font-bold text-white shadow-lg hover:bg-[#1A6840] disabled:opacity-50"
+      loading={submitting}
+      loadingText={submittingLabel}
+      className={`h-12 w-full min-w-0 rounded-xl bg-[#087B51] px-3 text-sm font-bold text-white shadow-lg hover:bg-[#1A6840] disabled:opacity-50 [&>span]:min-w-0 [&>span]:truncate ${extra}`}
     >
-      {submitting ? t("cart.sending") : submitLabel}
-    </button>
+      {label}
+    </LoadingButton>
   );
 
   return (
     <>
-    <form className="pb-[calc(14rem+env(safe-area-inset-bottom))] md:pb-56 lg:pb-0" onSubmit={handleOrder}>
+    <form className="lg:pb-0" onSubmit={handleOrder}>
       <div className="mb-4 flex items-center gap-2">
         <button
           type="button"
@@ -576,9 +632,35 @@ export default function CartPage() {
             {items.map((item) => (
               <article
                 key={`${item.medicine.id}-${item.selectedUnit}`}
-                className="flex items-center gap-2.5 border-b border-slate-100 py-3 last:border-0 last:pb-0 first:pt-0"
+                className="flex items-center gap-2 border-b border-slate-100 py-3 last:border-0 last:pb-0 first:pt-0"
               >
-                <div className="grid h-12 w-12 place-items-center rounded-xl bg-slate-50 text-brand">
+                {pendingRemove === `${item.medicine.id}-${item.selectedUnit}` ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const removed = removeFromCart(item.medicine.id, item.selectedUnit);
+                      setPendingRemove("");
+                      if (!removed) return;
+                      pushToast(t("cart.removed"), "info", {
+                        duration: 5000,
+                        action: { label: t("cart.undo"), onClick: () => restoreLine(removed) },
+                      });
+                    }}
+                    className="grid h-10 min-w-10 shrink-0 place-items-center rounded-xl bg-red-600 px-2 text-xs font-bold text-white"
+                  >
+                    {t("cart.remove")}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setPendingRemove(`${item.medicine.id}-${item.selectedUnit}`)}
+                    className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-red-500 hover:bg-red-50"
+                    aria-label={t("cart.remove")}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                )}
+                <div className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-slate-50 text-brand">
                   <Pill className="h-5 w-5" />
                 </div>
                 <div className="min-w-0 flex-1">
@@ -586,7 +668,7 @@ export default function CartPage() {
                   {item.medicine.isPrescription && (
                     <p className="text-[11px] font-bold text-red-600">{t("cart.rxBadge")}</p>
                   )}
-                  <p className="text-xs font-bold tabular-nums text-slate-900">
+                  <p className="truncate text-xs font-bold tabular-nums text-slate-900">
                     {item.quantity > 1
                       ? `${formatGrouped(Number(item.medicine.price) * unitMultiplier(item.selectedUnit))} × ${item.quantity} = ${formatSom(lineTotal(item))}`
                       : formatSom(lineTotal(item))}
@@ -599,18 +681,18 @@ export default function CartPage() {
                     return null;
                   })()}
                 </div>
-                <div className="inline-flex items-center gap-1 rounded-full bg-brand-soft p-0.5">
+                <div className="inline-flex shrink-0 items-center rounded-full bg-brand-soft p-0.5">
                   <button
                     type="button"
                     onClick={() =>
                       updateQuantity(item.medicine.id, item.selectedUnit, item.quantity - 1)
                     }
-                    className="grid h-7 w-7 place-items-center rounded-full bg-white"
+                    className="grid h-10 w-10 place-items-center rounded-full bg-white"
                     aria-label={t("cart.decrease")}
                   >
-                    <Minus className="h-3.5 w-3.5" aria-hidden />
+                    <Minus className="h-4 w-4" aria-hidden />
                   </button>
-                  <span className="min-w-4 text-center text-xs font-bold">{item.quantity}</span>
+                  <span className="min-w-5 text-center text-xs font-bold">{item.quantity}</span>
                   <button
                     type="button"
                     disabled={Boolean(lineStock(item).kind)}
@@ -618,27 +700,12 @@ export default function CartPage() {
                     onClick={() =>
                       updateQuantity(item.medicine.id, item.selectedUnit, item.quantity + 1)
                     }
-                    className="grid h-7 w-7 place-items-center rounded-full bg-white disabled:cursor-not-allowed disabled:opacity-40"
+                    className="grid h-10 w-10 place-items-center rounded-full bg-white disabled:cursor-not-allowed disabled:opacity-40"
                     aria-label={t("cart.increase")}
                   >
-                    <Plus className="h-3.5 w-3.5" aria-hidden />
+                    <Plus className="h-4 w-4" aria-hidden />
                   </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const removed = removeFromCart(item.medicine.id, item.selectedUnit);
-                    if (!removed) return;
-                    pushToast(t("cart.removed"), "info", {
-                      duration: 5000,
-                      action: { label: t("cart.undo"), onClick: () => restoreLine(removed) },
-                    });
-                  }}
-                  className="text-red-500"
-                  aria-label={t("cart.remove")}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
               </article>
             ))}
             <button type="button" onClick={() => setConfirmClear(true)} className="mt-2 text-left text-sm font-bold text-red-600">
@@ -659,7 +726,13 @@ export default function CartPage() {
           </button>
 
           <div className="grid grid-cols-2 gap-2">
-            {[
+            {!shopReady && (
+              <>
+                <SkeletonPulse className="h-11 w-full" />
+                <SkeletonPulse className="h-11 w-full" />
+              </>
+            )}
+            {shopReady && [
               ["DELIVERY", "cart.deliveryMode"],
               ["PICKUP", "cart.pickupMode"],
             ].filter(([id]) => id === "DELIVERY" || shop.pickupEnabled !== false).map(([id, key]) => (
@@ -667,9 +740,10 @@ export default function CartPage() {
                 key={id}
                 type="button"
                 onClick={() => setDeliveryType(id)}
-                className={`h-11 rounded-xl border text-sm font-bold ${deliveryType === id ? "border-brand bg-brand-soft text-brand" : "border-slate-200 bg-white text-slate-700"}`}
+                title={t(key)}
+                className={`flex h-11 min-w-0 items-center justify-center truncate rounded-xl border px-2 text-sm font-bold ${deliveryType === id ? "border-brand bg-brand-soft text-brand" : "border-slate-200 bg-white text-slate-700"}`}
               >
-                {t(key)}
+                {t(id === "DELIVERY" ? "cart.deliveryShort" : "cart.pickupShort")}
               </button>
             ))}
           </div>
@@ -759,7 +833,7 @@ export default function CartPage() {
                     if (next) setPhone(next);
                   }}
                   placeholder="+998 90 123 45 67"
-                  className={`h-12 w-full scroll-mb-40 rounded-xl border pl-10 pr-3 text-sm font-normal outline-none ring-brand/30 focus:ring-2 ${
+                  className={`h-12 w-full scroll-mb-40 rounded-xl border pl-10 pr-3 text-base font-normal outline-none ring-brand/30 focus:ring-2 md:text-sm ${
                     showProblem("phone") ? "border-red-500 bg-red-50" : "border-slate-200"
                   }`}
                 />
@@ -788,7 +862,7 @@ export default function CartPage() {
                   onChange={(event) => setFullName(event.target.value)}
                   onBlur={() => setTouched((current) => ({ ...current, name: true }))}
                   placeholder={t("profile.enterName")}
-                  className={`h-12 w-full scroll-mb-40 rounded-xl border pl-10 pr-3 text-sm font-normal outline-none ring-brand/30 focus:ring-2 ${showProblem("name") ? "border-red-500" : "border-slate-200"}`}
+                  className={`h-12 w-full scroll-mb-40 rounded-xl border pl-10 pr-3 text-base font-normal outline-none ring-brand/30 focus:ring-2 md:text-sm ${showProblem("name") ? "border-red-500" : "border-slate-200"}`}
                 />
               </span>
               {showProblem("name") && <span className="text-xs font-medium text-red-600">{fieldProblems.name}</span>}
@@ -807,28 +881,24 @@ export default function CartPage() {
                 <input
                   value={promoInput}
                   onChange={(event) => setPromoInput(event.target.value.toUpperCase())}
-                  className="h-12 min-w-0 flex-1 rounded-xl border border-slate-200 px-3 text-sm font-normal uppercase outline-none ring-brand/30 focus:ring-2"
+                  onKeyDown={(event) => {
+                    if (event.key !== "Enter") return;
+                    event.preventDefault();
+                    event.stopPropagation();
+                    applyPromo();
+                  }}
+                  className="h-12 min-w-0 flex-1 rounded-xl border border-slate-200 px-3 text-base font-normal uppercase outline-none ring-brand/30 focus:ring-2 md:text-sm"
                 />
-                <button
+                <LoadingButton
                   type="button"
                   disabled={promoBusy || !promoInput.trim()}
-                  onClick={async () => {
-                    setPromoBusy(true);
-                    setPromoError("");
-                    try {
-                      const result = await checkPromo(promoInput.trim(), totalAmount, branch?.id);
-                      setPromo({ code: result.code, discount: result.discount });
-                    } catch (err) {
-                      setPromo(null);
-                      setPromoError(userError(err, t, "cart.promoInvalid"));
-                    } finally {
-                      setPromoBusy(false);
-                    }
-                  }}
+                  loading={promoBusy}
+                  loadingText={t("common.applying")}
+                  onClick={applyPromo}
                   className="h-12 rounded-xl bg-slate-900 px-3 text-sm font-bold text-white disabled:opacity-50"
                 >
                   {t("cart.promoApply")}
-                </button>
+                </LoadingButton>
               </span>
               )}
               {promo?.code && <span className="text-xs font-medium text-emerald-700">{t("cart.promoOk", { code: promo.code })}</span>}
@@ -852,7 +922,13 @@ export default function CartPage() {
           <section className="rounded-2xl border border-slate-100 bg-white p-3 shadow-sm md:p-5">
             <p className="mb-2 text-sm font-bold text-slate-900">{t("cart.payment")}</p>
             <div className="grid gap-2">
-              {paymentOptions.map((option) => (
+              {!shopReady && (
+                <>
+                  <SkeletonPulse className="h-12 w-full" />
+                  <SkeletonPulse className="h-12 w-full" />
+                </>
+              )}
+              {shopReady && paymentOptions.map((option) => (
                 <label
                   key={option.id}
                   className={`flex h-12 items-center gap-3 rounded-xl border px-3 ${
@@ -882,7 +958,8 @@ export default function CartPage() {
               <span className="text-slate-500">{t("cart.products")}</span>
               <strong className="tabular-nums text-slate-900">{formatSom(totalAmount)}</strong>
             </div>
-            {deliveryType === "DELIVERY" && (
+            {!shopReady && <SkeletonPulse className="mt-3 h-16 w-full" />}
+            {shopReady && deliveryType === "DELIVERY" && (
               <div className="mt-3">
                 <p className="text-xs text-slate-600">
                   {totalAmount >= shop.freeDeliveryFrom
@@ -920,6 +997,8 @@ export default function CartPage() {
                 {formatSom(totals.totalAmount)}
               </strong>
             </div>
+            {stockChecking && <p className="mt-3 text-xs font-semibold text-slate-500">{t("cart.stockChecking")}</p>}
+            {stockError && <p className="mt-3 text-xs font-semibold text-red-600">{stockError}</p>}
             {error && (
               <p className="mt-3 flex items-center gap-2 text-sm text-red-600">
                 <AlertCircle className="h-4 w-4" />
@@ -936,14 +1015,17 @@ export default function CartPage() {
                 ))}
               </ul>
             )}
-            <div className="mt-4 hidden lg:block">{payButton}</div>
+            <div className="mt-4 hidden lg:block">{payButton(submitLabel)}</div>
           </section>
         </aside>
       </div>
 
-      <div className="fixed inset-x-0 bottom-[calc(4rem+var(--tg-safe-bottom,env(safe-area-inset-bottom)))] z-20 border-t border-slate-200 bg-white px-3 py-2 shadow-[0_-8px_24px_rgba(15,23,42,0.06)] lg:hidden">
-        <div className="mx-auto flex max-w-lg items-center gap-3">
-          <div className="min-w-0">
+      <div
+        className={`fixed inset-x-0 z-20 border-t border-slate-200 bg-white px-3 py-2 shadow-[0_-8px_24px_rgba(15,23,42,0.06)] lg:hidden ${keyboard ? "hidden" : ""}`}
+        style={{ bottom: "calc(var(--bottom-nav-h) + var(--tg-safe-bottom, env(safe-area-inset-bottom)))" }}
+      >
+        <div className="mx-auto flex max-w-lg items-center gap-2">
+          <div className="min-w-0 shrink">
             <p className="truncate text-[11px] font-semibold text-slate-500">
               {(paymentOptions.find((option) => option.id === paymentMethod)?.labelKey
                 ? t(paymentOptions.find((option) => option.id === paymentMethod).labelKey)
@@ -953,7 +1035,7 @@ export default function CartPage() {
             </p>
             <p className="text-sm font-extrabold tabular-nums text-slate-900">{t("cart.total")}: {formatSom(totals.totalAmount)}</p>
           </div>
-          <div className="min-w-0 flex-1">{payButton}</div>
+          <div className="min-w-0 flex-1">{payButton(submitShort)}</div>
         </div>
       </div>
     </form>

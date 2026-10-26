@@ -7,22 +7,11 @@ import CategoryBar from "../components/home/CategoryBar";
 import PromoCarousel from "../components/home/PromoCarousel";
 import PrescriptionModal from "../components/modals/PrescriptionModal";
 import SearchEmpty from "../components/search/SearchEmpty";
+import { ErrorState, RefetchBar, SkeletonGrid } from "../components/ui";
 import { fetchCategories, getMedicines } from "../services/api";
 import { createRequestGate, isCanceled } from "../lib/requestGate";
 import { userError } from "../lib/userError";
 import { useBranchStore } from "../store/useBranchStore";
-
-function MedicineCardSkeleton() {
-  return (
-    <div className="flex h-full flex-col rounded-2xl border border-slate-200 bg-white p-2.5 shadow-sm">
-      <div className="h-36 animate-pulse rounded-xl border border-emerald-100/50 bg-emerald-50/70 md:h-40" />
-      <div className="mt-2 h-4 w-4/5 animate-pulse rounded bg-slate-100" />
-      <div className="mt-1.5 h-3 w-1/2 animate-pulse rounded bg-slate-100" />
-      <div className="mt-3 h-4 w-2/3 animate-pulse rounded bg-slate-100" />
-      <div className="mt-2 h-11 animate-pulse rounded-xl bg-slate-100" />
-    </div>
-  );
-}
 
 export default function HomePage() {
   const { t } = useTranslation();
@@ -30,13 +19,15 @@ export default function HomePage() {
   const branch = useBranchStore((state) => state.branch);
   const openModal = useBranchStore((state) => state.openModal);
   const [categories, setCategories] = useState([]);
+  const [categoryError, setCategoryError] = useState("");
   const [medicines, setMedicines] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [suggestion, setSuggestion] = useState("");
   const [popular, setPopular] = useState([]);
   const [missCategories, setMissCategories] = useState([]);
   const [reloadKey, setReloadKey] = useState(0);
+  const [categoryReloadKey, setCategoryReloadKey] = useState(0);
   const [rxOpen, setRxOpen] = useState(false);
   const requestGate = useRef(createRequestGate());
   const query = searchParams.get("q") || "";
@@ -44,13 +35,19 @@ export default function HomePage() {
 
   useEffect(() => {
     let active = true;
-    fetchCategories(branch?.id || "").then((data) => {
-      if (active && Array.isArray(data) && data.length > 0) setCategories(data);
-    });
+    setCategoryError("");
+    fetchCategories(branch?.id || "")
+      .then((data) => {
+        if (!active) return;
+        if (Array.isArray(data) && data.length > 0) setCategories(data);
+      })
+      .catch((err) => {
+        if (active) setCategoryError(userError(err, t, "home.loadFailed"));
+      });
     return () => {
       active = false;
     };
-  }, [branch?.id]);
+  }, [branch?.id, t, categoryReloadKey]);
 
   const loadMedicines = useCallback(() => {
     let active = true;
@@ -64,7 +61,7 @@ export default function HomePage() {
       search: query,
       categoryId,
       page: 1,
-      limit: showcase ? 48 : 5000,
+      limit: 48,
       signal: controller.signal,
     });
     const featuredRequest = showcase
@@ -122,13 +119,14 @@ export default function HomePage() {
         <p className="mt-2 text-sm font-semibold text-[#087B51]">{t("home.heroSteps")}</p>
       </section>
       <PromoCarousel onUpload={() => setRxOpen(true)} />
+      {categoryError ? <ErrorState title={categoryError} onRetry={() => setCategoryReloadKey((value) => value + 1)} retryLabel={t("common.retry")} /> : null}
       <CategoryBar categories={categories} activeId={categoryId} onSelect={setCategory} />
 
       <section className="min-w-0">
         <div className="mb-3 flex items-end justify-between gap-3">
           <h2 className="min-w-0 text-base font-extrabold text-slate-900 md:text-xl">{title}</h2>
           {!query && !categoryId ? (
-            <Link to="/catalog" className="shrink-0 text-sm font-bold text-[#087B51] no-underline">
+            <Link to="/catalog" className="inline-flex h-10 shrink-0 items-center text-sm font-bold text-[#087B51] no-underline">
               {t("home.allMedicines")}
             </Link>
           ) : !loading ? (
@@ -147,27 +145,9 @@ export default function HomePage() {
           </button>
         )}
 
-        {loading && (
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5 lg:gap-5">
-            {Array.from({ length: 10 }, (_, index) => (
-              <MedicineCardSkeleton key={index} />
-            ))}
-          </div>
-        )}
+        {loading && medicines.length === 0 && <SkeletonGrid count={10} className="md:grid-cols-3 lg:grid-cols-5 lg:gap-5" />}
 
-        {!loading && error && (
-          <div className="grid place-items-center rounded-2xl border border-dashed border-slate-200 bg-white px-5 py-10 text-center shadow-sm">
-            <p className="text-sm font-semibold text-slate-700">{error}</p>
-            <button
-              type="button"
-              onClick={refresh}
-              className="mt-4 inline-flex h-11 items-center gap-2 rounded-xl bg-[#087B51] px-4 text-sm font-bold text-white hover:bg-[#066341]"
-            >
-              <RefreshCw className="h-4 w-4" aria-hidden />
-              {t("common.refresh")}
-            </button>
-          </div>
-        )}
+        {!loading && error && medicines.length === 0 && <ErrorState title={error} onRetry={refresh} retryLabel={t("common.retry")} />}
 
         {!loading && !error && medicines.length === 0 && query.trim() && (
           <SearchEmpty
@@ -201,11 +181,14 @@ export default function HomePage() {
           </div>
         )}
 
-        {!loading && !error && medicines.length > 0 && (
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5 lg:gap-5">
-            {medicines.map((medicine) => (
-              <MedicineCard key={medicine.id} medicine={medicine} />
-            ))}
+        {medicines.length > 0 && (
+          <div className="relative">
+            <RefetchBar show={loading} />
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5 lg:gap-5">
+              {medicines.map((medicine) => (
+                <MedicineCard key={medicine.id} medicine={medicine} />
+              ))}
+            </div>
           </div>
         )}
       </section>

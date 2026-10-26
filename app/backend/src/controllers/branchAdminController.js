@@ -13,6 +13,7 @@ const {
 const { serializeUser } = require("../lib/userProvisioning");
 const { assertBranchAccess } = require("../middlewares/authMiddleware");
 const { syncBranchStock } = require("../services/lekkoService");
+const { medicineSearchSql } = require("../lib/search");
 const { settledTotals } = require("../lib/pricing");
 const { publish, subscribe } = require("../lib/panelEvents");
 const { unpaidCash } = require("../lib/orderState");
@@ -542,12 +543,7 @@ function stockConditionSql(branchId, { search, filter, barcode, threshold }) {
     Prisma.sql`s."branchId" = ${branchId}`,
     Prisma.sql`NOT (s."stockCount" = 0 AND s."reservedCount" = 0 AND s.price = 0 AND m."externalApiId" IS NOT NULL)`,
   ];
-  if (search) {
-    const like = `%${search}%`;
-    parts.push(
-      Prisma.sql`(m.name ILIKE ${like} OR m.manufacturer ILIKE ${like} OR m."dosageForm" ILIKE ${like} OR COALESCE(m.barcode, '') ILIKE ${like} OR COALESCE(m."ikpuCode", '') ILIKE ${like})`
-    );
-  }
+  if (search) parts.push(medicineSearchSql(search));
   if (barcode) parts.push(Prisma.sql`m.barcode = ${barcode}`);
   if (filter === "low") {
     parts.push(

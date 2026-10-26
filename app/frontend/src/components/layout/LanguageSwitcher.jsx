@@ -17,7 +17,7 @@ export default function LanguageSwitcher({ full = false }) {
           type="button"
           aria-pressed={i18n.language === option.id}
           onClick={() => setLanguage(option.id)}
-          className={`h-8 rounded-lg px-2 text-xs font-bold ${
+          className={`grid h-10 min-w-10 place-items-center rounded-lg px-2 text-xs font-bold ${
             i18n.language === option.id ? "bg-[#087B51] text-white" : "text-slate-600"
           }`}
         >
