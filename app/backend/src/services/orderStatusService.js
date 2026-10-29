@@ -11,6 +11,8 @@ const { cancelOrder, emitOrder, notifyStatus, writeHistory } = require("../lib/o
 const { writeAudit } = require("../lib/audit");
 const { reservationDeadline } = require("../lib/stock");
 const { peekShopSettings } = require("../lib/shopSettings");
+const { proofForDeliver } = require("../lib/courierRules");
+const { publish } = require("../lib/panelEvents");
 
 function reservationForNextStatus(status, checkoutRules) {
   if (status === "WAITING_PAYMENT") return reservationDeadline("payment", checkoutRules);
@@ -29,6 +31,7 @@ async function applyOrderStatusChange({
   req,
   orderInclude,
   serialize,
+  proof,
 }) {
   const currentOrder = await prisma.order.findUnique({
     where: { id: orderId },
@@ -41,7 +44,9 @@ async function applyOrderStatusChange({
       deliveryType: true,
       checkoutRules: true,
       orderNumber: true,
-      payment: { select: { provider: true, status: true } },
+      courierId: true,
+      courierStage: true,
+      payment: { select: { id: true, provider: true, status: true, amount: true } },
     },
   });
   if (!currentOrder) {
@@ -61,11 +66,34 @@ async function applyOrderStatusChange({
     );
   }
 
-  if (
-    unpaidCash(currentOrder.payment) &&
-    describeTransition(currentOrder.status, requestedStatus).status === "COMPLETED"
-  ) {
+  if (user.role === "COURIER") {
+    if (currentOrder.deliveryType === "PICKUP" || currentOrder.courierId !== user.id) {
+      throw new AppError("Bu buyurtma sizga biriktirilmagan", 403, "FORBIDDEN");
+    }
+  }
+
+  const completing = describeTransition(currentOrder.status, requestedStatus).status === "COMPLETED";
+  let settledProof = null;
+  if (user.role === "COURIER" && completing) {
+    const checked = proofForDeliver(currentOrder, proof);
+    if (!checked.ok) {
+      throw new AppError(
+        checked.code === "CASH_NOT_RECEIVED"
+          ? "To'lov tasdig'isiz buyurtmani yakunlab bo'lmaydi"
+          : "To'lov tasdig'i noto'g'ri",
+        checked.code === "CASH_NOT_RECEIVED" ? 409 : 400,
+        checked.code
+      );
+    }
+    settledProof = checked;
+  } else if (unpaidCash(currentOrder.payment) && completing) {
     throw new AppError("Naqd pul qabul qilinmaguncha buyurtmani yakunlab bo'lmaydi", 409, "CASH_NOT_RECEIVED");
+  }
+
+  if (user.role === "COURIER" && requestedStatus === "DELIVERING") {
+    if (currentOrder.status !== "READY" || currentOrder.courierStage !== "ASSIGNED") {
+      throw new AppError("Buyurtmani olish uchun avval biriktirilgan bo'lishi kerak", 409, "INVALID_STATUS");
+    }
   }
 
   if (
@@ -75,6 +103,9 @@ async function applyOrderStatusChange({
       role: user.role,
       deliveryType: currentOrder.deliveryType,
       payment: currentOrder.payment,
+      userId: user.id,
+      courierId: currentOrder.courierId,
+      collected: Boolean(settledProof?.markPaid) || Boolean(settledProof && !unpaidCash(currentOrder.payment)),
     })
   ) {
     throw new AppError("Bu holatga o'tishga ruxsat yo'q", 409, "INVALID_STATUS");
@@ -138,16 +169,68 @@ async function applyOrderStatusChange({
       });
     }
 
+    if (user.role === "COURIER" && nextStatus === "DELIVERING") {
+      await tx.order.update({
+        where: { id: orderId },
+        data: { courierStage: "PICKED_UP", pickedUpAt: new Date() },
+      });
+    }
+    if (user.role === "COURIER" && nextStatus === "COMPLETED") {
+      await tx.order.update({
+        where: { id: orderId },
+        data: { courierStage: "DELIVERED", deliveredAt: new Date() },
+      });
+    }
+    if (settledProof && user.role === "COURIER") {
+      await tx.deliveryProof.create({
+        data: {
+          orderId,
+          courierId: user.id,
+          method: settledProof.method,
+          collectedAmount: settledProof.collectedAmount,
+          receiptGiven: Boolean(settledProof.receiptGiven),
+          photoPath: settledProof.photoPath || null,
+        },
+      });
+      if (settledProof.markPaid && currentOrder.payment?.id) {
+        await tx.paymentTransaction.update({
+          where: { id: currentOrder.payment.id },
+          data: { status: "COMPLETED", paidAt: new Date() },
+        });
+      }
+    }
+    if (user.role === "COURIER") {
+      await writeAudit(tx, {
+        req: req || { user },
+        action: "ORDER_STATUS",
+        entityType: "Order",
+        entityId: orderId,
+        branchId: currentOrder.branchId,
+        summary: `${currentOrder.orderNumber || ""} ${currentOrder.status} → ${nextStatus}`.trim(),
+        before: { status: currentOrder.status, courierStage: currentOrder.courierStage },
+        after: { status: nextStatus, proof: settledProof?.method || null },
+      });
+    }
+
     return tx.order.findUnique({ where: { id: current.id }, include: orderInclude });
   });
 
   emitOrder(updated.branchId, updated);
+  if (user.role === "COURIER") {
+    publish(`courier:${user.id}`, { type: "order.updated", orderId: updated.id, status: updated.status });
+  }
 
   const cancelExtra =
     nextStatus === "CANCELLED" && note
       ? `Buyurtmangiz bekor qilindi. Sabab: ${note}`
       : undefined;
-  notifyStatus(updated, nextStatus, cancelExtra);
+  const notifyKey =
+    user.role === "COURIER" && nextStatus === "DELIVERING"
+      ? "COURIER_PICKED_UP"
+      : user.role === "COURIER" && nextStatus === "COMPLETED"
+        ? "COURIER_DELIVERED"
+        : nextStatus;
+  notifyStatus(updated, notifyKey, cancelExtra);
 
   if (user.role === "SUPER_ADMIN" || user.role === "BRANCH_ADMIN") {
     await writeAudit(prisma, {

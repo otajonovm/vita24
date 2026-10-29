@@ -13,6 +13,27 @@ enum Role {
   BRANCH_ADMIN
   SUPER_ADMIN
   MANAGER
+  COURIER
+}
+
+enum CourierStage {
+  UNASSIGNED
+  ASSIGNED
+  PICKED_UP
+  DELIVERED
+  FAILED
+}
+
+enum DeliveryProofMethod {
+  CASH
+  CARD_TERMINAL
+  PREPAID
+}
+
+enum HandoverStatus {
+  PENDING
+  CONFIRMED
+  DISPUTED
 }
 
 enum UserStatus {
@@ -89,7 +110,12 @@ model User {
   mustChangePassword  Boolean        @default(false)
   branchId            String?
   branch              Branch?        @relation(fields: [branchId], references: [id])
-  orders              Order[]
+  orders              Order[]            @relation("CustomerOrders")
+  courierBranches     CourierBranch[]
+  courierOrders       Order[]            @relation("AssignedCourier")
+  deliveryProofs      DeliveryProof[]
+  cashHandovers       CashHandover[]     @relation("HandoverCourier")
+  confirmedHandovers  CashHandover[]     @relation("HandoverConfirmer")
   prescriptions       Prescription[]
   lastStreet          String?
   lastApartment       String?
@@ -175,6 +201,8 @@ model Branch {
   stocks           BranchStock[]
   orders           Order[]
   staff            User[]
+  courierLinks     CourierBranch[]
+  cashHandovers    CashHandover[]
   promoBranches    PromoBranch[]
   lekkoSyncLogs    LekkoSyncLog[]
   createdAt        DateTime      @default(now())
@@ -189,7 +217,8 @@ model ShopSetting {
   paymentWindowMinutes Int      @default(15)
   paymeEnabled         Boolean  @default(true)
   clickEnabled         Boolean  @default(true)
-  cashEnabled         Boolean  @default(true)
+  cashEnabled          Boolean  @default(true)
+  cardTerminalEnabled  Boolean  @default(true)
   pickupEnabled        Boolean  @default(true)
   telegramBotToken     String?
   messageTemplates     Json
@@ -353,9 +382,17 @@ model Order {
   reservedUntil   DateTime
   refundStatus    RefundStatus        @default(NONE)
   statusChangedAt DateTime            @default(now())
-  user            User?               @relation(fields: [userId], references: [id])
-  branch          Branch              @relation(fields: [branchId], references: [id])
-  items           OrderItem[]
+  courierId           String?
+  courierStage        CourierStage        @default(UNASSIGNED)
+  assignedAt          DateTime?
+  pickedUpAt          DateTime?
+  deliveredAt         DateTime?
+  deliveryFailReason  String?
+  user                User?               @relation("CustomerOrders", fields: [userId], references: [id])
+  courier             User?               @relation("AssignedCourier", fields: [courierId], references: [id])
+  branch              Branch              @relation(fields: [branchId], references: [id])
+  items               OrderItem[]
+  deliveryProofs      DeliveryProof[]
   prescription    Prescription?
   payment         PaymentTransaction?
   history         OrderStatusHistory[]
@@ -364,6 +401,53 @@ model Order {
   updatedAt       DateTime            @updatedAt
 
   @@index([branchId, status])
+  @@index([courierId, courierStage])
+}
+
+model CourierBranch {
+  courierId String
+  branchId  String
+  createdAt DateTime @default(now())
+  courier   User     @relation(fields: [courierId], references: [id], onDelete: Cascade)
+  branch    Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@id([courierId, branchId])
+  @@index([branchId])
+}
+
+model DeliveryProof {
+  id              String              @id @default(uuid())
+  orderId         String
+  courierId       String
+  method          DeliveryProofMethod
+  collectedAmount Decimal?            @db.Decimal(12, 2)
+  receiptGiven    Boolean             @default(false)
+  photoPath       String?
+  createdAt       DateTime            @default(now())
+  order           Order               @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  courier         User                @relation(fields: [courierId], references: [id])
+
+  @@index([orderId])
+  @@index([courierId, createdAt])
+}
+
+model CashHandover {
+  id            String         @id @default(uuid())
+  courierId     String
+  branchId      String
+  amount        Decimal        @db.Decimal(12, 2)
+  orderIds      String[]
+  status        HandoverStatus @default(PENDING)
+  confirmedById String?
+  confirmedAt   DateTime?
+  note          String?
+  createdAt     DateTime       @default(now())
+  courier       User           @relation("HandoverCourier", fields: [courierId], references: [id])
+  branch        Branch         @relation(fields: [branchId], references: [id])
+  confirmedBy   User?          @relation("HandoverConfirmer", fields: [confirmedById], references: [id])
+
+  @@index([branchId, status])
+  @@index([courierId, createdAt])
 }
 
 model OrderItem {

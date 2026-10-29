@@ -80,6 +80,9 @@
   "order.status.completed": "Завершён",
   "order.status.cashConfirmed": "Подтверждён",
   "order.status.unknown": "Заказ",
+  "order.status.pendingBranch": "На проверке филиала",
+  "meta.title": "Vita24 — Онлайн-аптека",
+  "meta.description": "Онлайн-аптека 24/7 по Ташкенту. Выберите филиал и закажите лекарства.",
   "order.reserve.review": "Пока рецепт проверяют, лекарства резервируются на 2 часа",
   "order.reserve.payment": "На оплату есть 15 минут",
   "order.pay.cashDue": "Наличные · оплата при доставке",
@@ -193,7 +196,8 @@
   "header": {
     "brand": "Онлайн-аптека",
     "home": "Главная Vita24",
-    "branch": "Филиал"
+    "branch": "Филиал",
+    "branchHint": "Наличие и самовывоз по этому филиалу"
   },
   "footer": {
     "contact": "Связь 24/7",
@@ -228,7 +232,10 @@
     "emptyCategory": "В этой категории лекарств нет",
     "emptyBranch": "На складе этого филиала пока нет лекарств",
     "defaultBranch": "Показан основной филиал. Выбрать другой",
-    "loadFailed": "Не удалось загрузить лекарства"
+    "loadFailed": "Не удалось загрузить лекарства",
+    "allMedicines": "Все лекарства",
+    "heroTitle": "Vita24 — онлайн-аптека. Оформите заказ: доставим или заберёте в филиале.",
+    "heroSteps": "Найдите лекарство → Добавьте в корзину → Выберите доставку или самовывоз"
   },
   "catalog": {
     "title": "Каталог",
@@ -238,11 +245,13 @@
       "stock": "Сначала в наличии",
       "cheap": "Цена: дешевле",
       "expensive": "Цена: дороже",
-      "name": "Название"
+      "name": "Название",
+      "popular": "По популярности"
     },
     "empty": "В этой категории лекарств нет.",
     "more": "Показать ещё",
-    "loadFailed": "Не удалось загрузить каталог"
+    "loadFailed": "Не удалось загрузить каталог",
+    "inStockOnly": "Только в наличии"
   },
   "medicine": {
     "missing": "Лекарство не найдено",
@@ -272,7 +281,13 @@
     "favOn": "Добавлено в избранное",
     "favOff": "Удалено из избранного",
     "decrease": "Уменьшить",
-    "increase": "Увеличить"
+    "increase": "Увеличить",
+    "packValue": "{{count}} {{unit}}",
+    "unitPiece": "шт.",
+    "unitCapsule": "капсула",
+    "unitTablet": "таблетка",
+    "low": "Мало осталось",
+    "rxNote": "Фото рецепта загрузите в корзине — фармацевт проверит и подтвердит"
   },
   "favorites": {
     "title": "Избранное",
@@ -297,7 +312,7 @@
     "other": "Категория"
   },
   "cart": {
-    "title": "Адрес доставки и оформление",
+    "title": "Корзина",
     "empty": "Корзина пуста",
     "emptyHint": "Добавьте нужные лекарства из каталога.",
     "browse": "Смотреть лекарства",
@@ -376,7 +391,15 @@
     "apt": "Квартира",
     "floor": "Этаж",
     "intercom": "Домофон",
-    "title": "Адрес"
+    "title": "Адрес",
+    "aptPh": "Квартира (необязательно)",
+    "entrance": "Подъезд",
+    "entrancePh": "Подъезд",
+    "floorPh": "Этаж",
+    "landmark": "Ориентир",
+    "landmarkPh": "Ориентир",
+    "intercomPh": "Домофон (необязательно)",
+    "mapCredit": "Карта: OpenStreetMap"
   },
   "rx": {
     "title": "Загрузите рецепт",
@@ -422,7 +445,12 @@
     "codeFailed": "Код не отправлен",
     "codeWrong": "Неверный код",
     "nameRequired": "Введите имя и фамилию",
-    "saveFailed": "Не сохранилось"
+    "saveFailed": "Не сохранилось",
+    "phoneIncomplete": "Введите полный номер телефона",
+    "botTarget": "Код придёт в Telegram-бот @{{bot}}",
+    "botTargetPlain": "Код придёт в Telegram-бот",
+    "botStart": "Сначала откройте бота и нажмите /start",
+    "codeSentWait": "Код отправлен. Повторный запрос через 1 минуту"
   },
   "profile": {
     "kicker": "Личный кабинет",
@@ -470,7 +498,8 @@
     "saveFailed": "Не удалось сохранить",
     "addressSaved": "Адрес сохранён",
     "addressFailed": "Не удалось сохранить адрес",
-    "extra": "Дополнительный адрес {{n}}"
+    "extra": "Дополнительный адрес {{n}}",
+    "logoutConfirm": "Выйти из аккаунта?"
   },
   "orders": {
     "loadFailed": "Не удалось загрузить заказы"
@@ -551,7 +580,21 @@
     "confirm": "Подтвердить",
     "retry": "Повторить",
     "refresh": "Обновить",
-    "search": "Поиск",
+    "search": {
+      "title": "Поиск и синонимы",
+      "hint": "Запрос без результатов можно сразу добавить как синоним. Журнал старше 90 дней удаляется.",
+      "top": "Частые запросы",
+      "zero": "Запросы без результата",
+      "conversion": "Поиск в корзину",
+      "addSynonym": "Добавить как синоним",
+      "term": "Слово",
+      "canonical": "Основное имя",
+      "type": "Тип",
+      "save": "Сохранить",
+      "edit": "Изменить",
+      "delete": "Удалить",
+      "empty": "Пока нет записей"
+    },
     "sort": "Сортировка",
     "sortNewest": "Сначала новые",
     "sortOldest": "Сначала старые",
@@ -574,7 +617,11 @@
     "branchHint": "Адрес, график, карта и ключ LEKKO.",
     "branchFilterCurrent": "Кроме архива",
     "archivedStatus": "Архив",
-    "branchStatus": { "active": "Активен", "inactive": "Неактивен", "archived": "Архив" },
+    "branchStatus": {
+      "active": "Активен",
+      "inactive": "Неактивен",
+      "archived": "Архив"
+    },
     "pharmacists": "Фармацевты",
     "todayOrders": "Заказы сегодня",
     "todayRevenue": "Выручка сегодня",
@@ -601,7 +648,15 @@
     "mapPoint": "Точка на карте",
     "mapHint": "Нажмите на карту, чтобы поставить точку",
     "radius": "Радиус доставки, км",
-    "days": { "mon": "Пн", "tue": "Вт", "wed": "Ср", "thu": "Чт", "fri": "Пт", "sat": "Сб", "sun": "Вс" },
+    "days": {
+      "mon": "Пн",
+      "tue": "Вт",
+      "wed": "Ср",
+      "thu": "Чт",
+      "fri": "Пт",
+      "sat": "Сб",
+      "sun": "Вс"
+    },
     "phone": "Телефон",
     "password": "Пароль",
     "loginTitle": "Вход супер-админа",
@@ -610,11 +665,19 @@
     "checking": "Проверяем...",
     "loginFailed": "Не удалось войти",
     "superOnly": "Войти может только супер-админ",
-    "role": { "SUPER_ADMIN": "Супер-админ", "BRANCH_ADMIN": "Фармацевт", "MANAGER": "Менеджер", "CUSTOMER": "Клиент" },
+    "role": {
+      "SUPER_ADMIN": "Супер-админ",
+      "BRANCH_ADMIN": "Фармацевт",
+      "MANAGER": "Менеджер",
+      "CUSTOMER": "Клиент"
+    },
     "colRole": "Роль",
     "allRoles": "Все роли",
     "lastLogin": "Последний вход",
-    "userStatus": { "ACTIVE": "Активен", "SUSPENDED": "Приостановлен" },
+    "userStatus": {
+      "ACTIVE": "Активен",
+      "SUSPENDED": "Приостановлен"
+    },
     "staffHint": "Учётные записи фармацевтов и менеджеров.",
     "newStaff": "Новый сотрудник",
     "editStaff": "Редактировать сотрудника",
@@ -654,21 +717,6 @@
       "settings": "Настройки",
       "audit": "Журнал аудита"
     },
-    "search": {
-      "title": "Поиск и синонимы",
-      "hint": "Запрос без результатов можно сразу добавить как синоним. Журнал старше 90 дней удаляется.",
-      "top": "Частые запросы",
-      "zero": "Запросы без результата",
-      "conversion": "Поиск в корзину",
-      "addSynonym": "Добавить как синоним",
-      "term": "Слово",
-      "canonical": "Основное имя",
-      "type": "Тип",
-      "save": "Сохранить",
-      "edit": "Изменить",
-      "delete": "Удалить",
-      "empty": "Пока нет записей"
-    },
     "validation": {
       "required": "Заполните это поле",
       "password": "Пароль не короче 6 символов",
@@ -687,7 +735,10 @@
       "CANCELLED": "Отменён",
       "REJECTED": "Отклонён"
     },
-    "refund": { "PENDING": "Ожидает", "DONE": "Возвращён" },
+    "refund": {
+      "PENDING": "Ожидает",
+      "DONE": "Возвращён"
+    },
     "dashboardTitle": "Панель",
     "dashboardHint": "Кратко: филиалы, заказы и сотрудники.",
     "uncovered": "Филиалы без фармацевта: {{names}}. Рецепты остаются в очереди супер-админа.",
@@ -703,7 +754,10 @@
     "colSpent": "Сумма покупок",
     "colLastOrder": "Последний заказ",
     "openCard": "Карточка",
-    "customerStatus": { "ACTIVE": "Активен", "SUSPENDED": "Заблокирован" },
+    "customerStatus": {
+      "ACTIVE": "Активен",
+      "SUSPENDED": "Заблокирован"
+    },
     "block": "Заблокировать",
     "unblock": "Разблокировать",
     "blockHint": "Причина сохранится. Заблокированный клиент не сможет оформить заказ.",
@@ -714,14 +768,25 @@
     "noCustomerOrders": "Заказов нет",
     "addresses": "Адреса",
     "noAddresses": "Адресов нет",
-    "addressSource": { "primary": "Основной", "saved": "Сохранённый", "order": "Из заказа" },
+    "addressSource": {
+      "primary": "Основной",
+      "saved": "Сохранённый",
+      "order": "Из заказа"
+    },
     "noPrescriptions": "Рецептов нет",
-    "rxStatus": { "PENDING": "Ожидает", "APPROVED": "Подтверждён", "REJECTED": "Отклонён" },
+    "rxStatus": {
+      "PENDING": "Ожидает",
+      "APPROVED": "Подтверждён",
+      "REJECTED": "Отклонён"
+    },
     "promoUse": "Промокоды",
     "noPromos": "Промокод не использовался",
     "blockHistory": "История блокировок",
     "noBlockHistory": "Записей о блокировке нет",
-    "blockAction": { "BLOCK": "Заблокирован", "UNBLOCK": "Разблокирован" },
+    "blockAction": {
+      "BLOCK": "Заблокирован",
+      "UNBLOCK": "Разблокирован"
+    },
     "promosEmpty": "Промокодов нет",
     "promosEmptyBody": "Добавьте новый промокод.",
     "promoHint": "Код, скидка, срок, лимит и филиалы.",
@@ -922,9 +987,21 @@
     "allPaymentStatuses": "Все статусы оплаты",
     "deliveryType": "Доставка",
     "allDeliveries": "Все способы",
-    "pay": { "CASH": "Наличные", "CLICK": "Click", "PAYME": "Payme", "MOCK": "Тест" },
-    "payState": { "PENDING": "Ожидает", "COMPLETED": "Оплачен", "FAILED": "Ошибка" },
-    "delivery": { "DELIVERY": "Доставка", "PICKUP": "Самовывоз" },
+    "pay": {
+      "CASH": "Наличные",
+      "CLICK": "Click",
+      "PAYME": "Payme",
+      "MOCK": "Тест"
+    },
+    "payState": {
+      "PENDING": "Ожидает",
+      "COMPLETED": "Оплачен",
+      "FAILED": "Ошибка"
+    },
+    "delivery": {
+      "DELIVERY": "Доставка",
+      "PICKUP": "Самовывоз"
+    },
     "customer": "Клиент",
     "amounts": "Сумма",
     "medicines": "Лекарства",
@@ -953,7 +1030,6 @@
     "transactionId": "Номер транзакции",
     "transactionRequired": "Введите номер транзакции",
     "refundDone": "Возврат отмечен",
-    "cancel": "Отмена",
     "actor": "Кто выполнил",
     "action": "Действие",
     "summary": "Описание",
@@ -1069,7 +1145,90 @@
       "export": "Скачать отчёт",
       "exportFailed": "Отчёт не скачался",
       "medicines": "Лекарства",
-      "errorCol": "Ошибка"
-    }
+      "errorCol": "Ошибка",
+      "insufficientData": "Недостаточно данных"
+    },
+    "basePriceHint": "Цена продажи берётся из Lekko по филиалу",
+    "thresholdTooltip": "Остаток ниже этого значения показывается как предупреждение",
+    "lekkoNeedKey": "Сначала введите ключ Lekko",
+    "twoFaBanner": "Для безопасности включите 2FA",
+    "auditStaffOnly": "Только действия сотрудников",
+    "branchHasStaff": "В филиале есть фармацевты: {{names}}. Сначала переведите их или отмените действие.",
+    "cancelOrder": "Отменить заказ",
+    "cancelRefundWarn": "Оплата прошла. При отмене будет создан возврат {{amount}}.",
+    "pharmacistNote": "Комментарий фармацевта",
+    "adminNote": "Комментарий админа",
+    "rxPlatformHint": "Очередь рецептов по платформе (только просмотр). Это не контроль фармацевта.",
+    "rxQueueCount": "В очереди",
+    "rxAvgWait": "Среднее ожидание",
+    "rxByBranch": "По филиалам",
+    "rxLongWaitSignal": "{{count}} заказ(ов) ждут долго — это сигнал платформы"
+  },
+  "orders.active": "Активные",
+  "orders.history": "История",
+  "orders.tabEmpty": "В этом разделе заказов нет",
+  "orders.moreItems": "и ещё {{count}}",
+  "order.pay.cashPickup": "Наличные в филиале при самовывозе",
+  "order.next.review": "Фармацевт проверит рецепт",
+  "order.next.pay": "Оплатите заказ",
+  "order.next.cashWait": "Наличные берутся при доставке",
+  "order.next.paid": "Заказ принят",
+  "order.next.preparing": "Сообщим, когда будет готово",
+  "order.next.readyPickup": "Можно забрать в филиале",
+  "order.next.readyDelivery": "Курьер скоро выедет",
+  "order.next.delivering": "Курьер в пути",
+  "order.next.label": "Следующий шаг",
+  "order.pickupAddress": "Адрес самовывоза: {{place}}",
+  "order.hours": "Часы работы",
+  "order.phone": "Телефон",
+  "order.reorderRx": "Повторный заказ с новым рецептом",
+  "order.rejectReason": "Причина",
+  "promo.rxAction": "Загрузить рецепт",
+  "cart.checkout": "Оформление",
+  "cart.uploadingRx": "Загрузка рецепта... ({{percent}}%)",
+  "cart.creatingOrder": "Создание заказа...",
+  "cart.stockChecking": "Проверяем остаток...",
+  "cart.stockCheckFailed": "Не удалось проверить остаток",
+  "cart.holdCashPickup": "Наличные в филиале при самовывозе",
+  "cart.pickupFree": "Самовывоз — бесплатно",
+  "cart.rxBadge": "Нужен рецепт",
+  "cart.rxFor": "Рецепт для: {{names}}",
+  "cart.lowStock": "Мало осталось",
+  "cart.removed": "Удалено",
+  "cart.undo": "Вернуть",
+  "cart.clear": "Очистить корзину",
+  "cart.clearConfirm": "Удалить все лекарства из корзины?",
+  "cart.promoLogin": "Войдите, чтобы применить промокод",
+  "courier": {
+    "stage": {
+      "assigned": "Передано курьеру",
+      "enRoute": "В пути",
+      "delivered": "Доставлено",
+      "failed": "Не доставлено"
+    },
+    "next": {
+      "assigned": "Курьер заберёт заказ",
+      "enRoute": "Курьер в пути",
+      "failed": "Филиал назначит снова или отменит"
+    },
+    "customer": { "courier": "Курьер", "call": "Позвонить" },
+    "pay": {
+      "cash": "НАЛИЧНЫЕ {{amount}}",
+      "terminal": "КАРТА ТЕРМИНАЛ",
+      "prepaid": "ОПЛАЧЕНО",
+      "cardTerminal": "Картой курьеру",
+      "terminalDue": "Терминал при доставке"
+    },
+    "settings": { "cardTerminal": "Терминал курьера" },
+    "tab": { "active": "Активные", "history": "История", "couriers": "Курьеры", "handovers": "Сдача кассы" },
+    "shift": { "cash": "Наличные на руках", "card": "По карте", "unhanded": "Не сдано", "delivered": "Доставлено сегодня", "handover": "Сдать" },
+    "card": { "call": "Позвонить", "yandex": "Яндекс карты", "google": "Google карты", "pickup": "Забрал", "deliver": "Доставлено", "fail": "Не доставлено" },
+    "deliver": { "title": "Доставлено", "amount": "Полученная сумма", "receipt": "Чек выдан", "photo": "Фото чека", "confirm": "Подтвердить", "prepaidHint": "Оплачено заранее" },
+    "fail": { "title": "Не доставлено", "note": "Комментарий", "submit": "Отправить", "NO_ANSWER": "Клиент не ответил", "ADDRESS_NOT_FOUND": "Адрес не найден", "CUSTOMER_REJECTED": "Клиент отказался", "OTHER": "Другое" },
+    "login": { "title": "Курьер", "hint": "Войдите по телефону и паролю", "submit": "Войти", "failed": "Не удалось войти", "staffOnly": "Это не курьер" },
+    "logout": "Выйти",
+    "empty": "Заказов нет",
+    "loadFailed": "Не удалось загрузить",
+    "panel": { "add": "Добавить курьера", "name": "Имя", "phone": "Телефон", "password": "Пароль", "active": "Активен", "inactive": "Неактивен", "saved": "Сохранено", "assign": "Курьер", "none": "Не назначен", "today": "Сегодня", "confirm": "Подтвердить", "dispute": "Оспорить", "filterFailed": "Не доставлено", "receiptCourier": "Курьер", "handoverEmpty": "Запросов нет", "courierEmpty": "Курьеров нет", "difference": "Разница: {{amount}}" }
   }
 }

@@ -94,7 +94,7 @@ const listOrdersQuerySchema = z
     q: searchQuery,
     paymentProvider: z.preprocess(
       (value) => (value == null || value === "" ? undefined : value),
-      z.enum(["CASH", "CLICK", "PAYME", "MOCK"]).optional()
+      z.enum(["CASH", "CLICK", "PAYME", "MOCK", "CARD_TERMINAL"]).optional()
     ),
     paymentStatus: z.preprocess(
       (value) => (value == null || value === "" ? undefined : value),

@@ -76,6 +76,37 @@ function uploadCatalogFile(req, res, next) {
   });
 }
 
+const PROOF_UPLOAD_DIR = dataPath("public", "uploads", "delivery-proofs");
+fs.mkdirSync(PROOF_UPLOAD_DIR, { recursive: true });
+
+const deliveryProofStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, PROOF_UPLOAD_DIR),
+  filename: (req, file, cb) => {
+    const ext = IMAGE_EXTENSIONS[file.mimetype];
+    cb(null, `proof-${safeIdSegment(req.params.id)}-${Date.now()}${ext}`);
+  },
+});
+
+const deliveryProofMulter = multer({
+  storage: deliveryProofStorage,
+  limits: { fileSize: MAX_IMAGE_BYTES, files: 1 },
+  fileFilter: (_req, file, cb) => {
+    if (!IMAGE_EXTENSIONS[file.mimetype]) {
+      cb(new AppError("Faqat JPEG, PNG yoki WEBP rasm yuklash mumkin", 400, "INVALID_FILE_TYPE"));
+      return;
+    }
+    cb(null, true);
+  },
+});
+
+function uploadDeliveryPhoto(req, res, next) {
+  const type = String(req.headers["content-type"] || "");
+  if (!type.includes("multipart/form-data")) return next();
+  deliveryProofMulter.single("photo")(req, res, (error) => {
+    next(error ? toAppError(error) : undefined);
+  });
+}
+
 function uploadMedicineImage(req, res, next) {
   medicineImageMulter.single("image")(req, res, (error) => {
     next(error ? toAppError(error) : undefined);
@@ -101,6 +132,7 @@ module.exports = {
   MEDICINE_UPLOAD_URL,
   MAX_IMAGE_BYTES,
   uploadMedicineImage,
+  uploadDeliveryPhoto,
   uploadCatalogFile,
   removeUploadedFile,
   removeMedicineImageByUrl,

@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { formatDateTime, formatSom, orderStatusLabel } from "../../lib/format";
-import { fetchBranchOrder, markCashReceived, savePharmacistNote, undoOrderStatus, updateBranchOrderStatus } from "../../services/api";
+import { assignOrderCourier, fetchBranchCouriers, fetchBranchOrder, markCashReceived, savePharmacistNote, undoOrderStatus, updateBranchOrderStatus } from "../../services/api";
 import { ErrorState, LoadingButton, SkeletonLines } from "../ui";
 import OrderCard from "./OrderCard";
 import { apiError, printHtml } from "./panelShared";
 
-const PAYMENT = { PAYME: "Payme", CLICK: "Click", CASH: "Naqd", PENDING: "Kutilmoqda", COMPLETED: "To'langan", FAILED: "Muvaffaqiyatsiz" };
+const PAYMENT = { PAYME: "Payme", CLICK: "Click", CASH: "Naqd", CARD_TERMINAL: "CARD_TERMINAL", PENDING: "Kutilmoqda", COMPLETED: "To'langan", FAILED: "Muvaffaqiyatsiz" };
 
 export default function OrderDetailDrawer({ orderId, readOnly = false, onClose, onToast }) {
   const { t } = useTranslation();
@@ -16,6 +16,7 @@ export default function OrderDetailDrawer({ orderId, readOnly = false, onClose, 
   const [savingNote, setSavingNote] = useState(false);
   const [loading, setLoading] = useState(Boolean(orderId));
   const [error, setError] = useState("");
+  const [couriers, setCouriers] = useState([]);
 
   useEffect(() => {
     if (!orderId) return undefined;
@@ -55,6 +56,19 @@ export default function OrderDetailDrawer({ orderId, readOnly = false, onClose, 
 
   useEffect(() => load(), [orderId]);
 
+  useEffect(() => {
+    if (!orderId || readOnly) return undefined;
+    let active = true;
+    fetchBranchCouriers()
+      .then((list) => {
+        if (active) setCouriers(list);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [orderId, readOnly]);
+
   if (!orderId) return null;
   const address = encodeURIComponent(order?.deliveryAddress || "");
 
@@ -64,11 +78,13 @@ export default function OrderDetailDrawer({ orderId, readOnly = false, onClose, 
     const items = (order.items || []).map((item) => `<p>${item.name} × ${item.quantity} — ${formatSom(item.lineTotal)}</p>`).join("");
     const qr = `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(order.orderNumber)}`;
     const name = order.customerName || order.user?.name || order.customerPhone;
+    const payName = order.payment?.provider === "CARD_TERMINAL" ? t("courier.pay.terminal") : (PAYMENT[order.payment?.provider] || "");
+    const courierLine = order.courier?.name ? `<p>${t("courier.panel.receiptCourier")}: ${order.courier.name}</p>` : "";
     let body = `<h1>${order.branch?.name || "Vita24"}</h1><p>${order.branch?.address || ""}</p><p>${order.orderNumber}</p><p>${formatDateTime(order.createdAt)}</p>`;
     if (kind === "pick") body += items;
-    if (kind === "courier") body += `<p>${name}</p><p>${order.customerPhone}</p><p>${order.deliveryAddress || ""}</p><p>${formatSom(order.totalAmount)} · ${PAYMENT[order.payment?.provider] || ""}</p><img alt="" src="${qr}" width="120" height="120" />`;
+    if (kind === "courier") body += `${courierLine}<p>${name}</p><p>${order.customerPhone}</p><p>${order.deliveryAddress || ""}</p><p>${formatSom(order.totalAmount)} · ${payName}</p><img alt="" src="${qr}" width="120" height="120" />`;
     if (kind === "receipt") {
-      body += `${items}<p>Yetkazib berish: ${formatSom(order.deliveryFee)}</p><p><b>Jami: ${formatSom(order.totalAmount)}</b></p><p>To'lov: ${PAYMENT[order.payment?.provider] || "—"}</p><img alt="" src="${qr}" width="120" height="120" />`;
+      body += `${courierLine}${items}<p>Yetkazib berish: ${formatSom(order.deliveryFee)}</p><p><b>Jami: ${formatSom(order.totalAmount)}</b></p><p>To'lov: ${payName || "—"}</p><img alt="" src="${qr}" width="120" height="120" />`;
     }
     printHtml(`<!doctype html><html><head><meta charset="utf-8"><style>@page{size:${page};margin:6mm}body{font-family:sans-serif;font-size:12px;margin:0}h1{font-size:16px;margin:0 0 6px}p{margin:2px 0}</style></head><body>${body}</body></html>`);
   }
@@ -176,11 +192,13 @@ export default function OrderDetailDrawer({ orderId, readOnly = false, onClose, 
               order={order}
               busy={busy}
               readOnly={readOnly}
+              couriers={couriers}
               onOpen={() => {}}
               onReview={() => {}}
               onStatus={(current, payload) => run(() => updateBranchOrderStatus(current.id, payload))}
               onUndo={(current) => run(() => undoOrderStatus(current.id))}
               onCash={(current) => run(() => markCashReceived(current.id))}
+              onAssign={(current, courierId) => run(() => assignOrderCourier(current.id, courierId))}
             />
             <div className="flex flex-wrap gap-2">
               <button type="button" onClick={() => print("pick")} className="h-10 rounded-xl border px-3 text-sm font-semibold">{t("panel.printPick", "Yig'ish varag'i")}</button>

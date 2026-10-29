@@ -20,6 +20,7 @@ function formFrom(data) {
     paymeEnabled: data.paymeEnabled !== false,
     clickEnabled: data.clickEnabled !== false,
     cashEnabled: data.cashEnabled !== false,
+    cardTerminalEnabled: data.cardTerminalEnabled !== false,
     pickupEnabled: data.pickupEnabled !== false,
     telegramBotToken: "",
     contactPhone: data.contactPhone || "",
@@ -74,6 +75,7 @@ export function SettingsPanel() {
       paymeEnabled: form.paymeEnabled,
       clickEnabled: form.clickEnabled,
       cashEnabled: form.cashEnabled,
+      cardTerminalEnabled: form.cardTerminalEnabled,
       pickupEnabled: form.pickupEnabled,
       contactPhone: form.contactPhone.trim(),
       contactPhoneAlt: form.contactPhoneAlt.trim(),
@@ -115,6 +117,7 @@ export function SettingsPanel() {
             <Check label="Payme" checked={form.paymeEnabled} onChange={(value) => setField("paymeEnabled", value)} />
             <Check label="Click" checked={form.clickEnabled} onChange={(value) => setField("clickEnabled", value)} />
             <Check label={t("admin.settingsCash")} checked={form.cashEnabled} onChange={(value) => setField("cashEnabled", value)} />
+            <Check label={t("courier.settings.cardTerminal")} checked={form.cardTerminalEnabled} onChange={(value) => setField("cardTerminalEnabled", value)} />
             <Check label={t("admin.settingsPickup")} checked={form.pickupEnabled} onChange={(value) => setField("pickupEnabled", value)} />
           </div>
           <Field label={t("admin.settingsTelegram")}>

@@ -79,6 +79,7 @@ app.use("/api/orders", orderRoutes);
 app.use("/api/customers", require("./src/routes/customers"));
 app.use("/api/prescriptions", require("./src/routes/prescriptions"));
 app.use("/api/branch-admin", require("./src/routes/branchAdmin"));
+app.use("/api/courier", require("./src/routes/courier"));
 app.use("/api/admin/medicines", require("./src/routes/adminMedicines"));
 app.use("/api/admin/search", require("./src/routes/adminSearch"));
 app.use("/api/admin", require("./src/routes/admin"));

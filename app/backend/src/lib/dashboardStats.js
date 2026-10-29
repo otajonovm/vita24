@@ -84,7 +84,8 @@ function paidStamp(payment) {
 }
 
 function isCash(provider) {
-  return String(provider || "").toUpperCase() === "CASH";
+  const value = String(provider || "").toUpperCase();
+  return value === "CASH" || value === "CARD_TERMINAL";
 }
 
 function orderAmount(order) {

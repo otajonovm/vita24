@@ -9,6 +9,7 @@ const FALLBACK = {
   paymeEnabled: true,
   clickEnabled: true,
   cashEnabled: true,
+  cardTerminalEnabled: true,
   pickupEnabled: true,
   contactPhone: "1095",
   contactPhoneAlt: "+998 71 200 24 24",

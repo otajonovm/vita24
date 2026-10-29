@@ -3,7 +3,7 @@ import {
   getMockCategories,
   MOCK_BRANCHES,
 } from "../lib/mockData";
-import { useAdminAuth, useAuthStore, usePharmacistAuth } from "../store/useAuthStore";
+import { useAdminAuth, useAuthStore, useCourierAuth, usePharmacistAuth } from "../store/useAuthStore";
 
 const client = axios.create({
   baseURL: import.meta.env.VITE_API_URL || "/api",
@@ -42,15 +42,23 @@ client.interceptors.request.use((config) => {
   const url = String(config.url || "");
   const audience =
     config.audience ||
-    (url.includes("branch-admin") ? "pharmacist" : url.startsWith("/admin") ? "admin" : "customer");
+    (url.startsWith("/courier") ? "courier" : url.includes("branch-admin") ? "pharmacist" : url.startsWith("/admin") ? "admin" : "customer");
   const key =
     audience === "admin"
       ? "vita24-admin"
       : audience === "pharmacist"
         ? "vita24-pharmacist"
-        : "vita24-customer";
+        : audience === "courier"
+          ? "vita24-courier"
+          : "vita24-customer";
   const store =
-    audience === "admin" ? useAdminAuth : audience === "pharmacist" ? usePharmacistAuth : useAuthStore;
+    audience === "admin"
+      ? useAdminAuth
+      : audience === "pharmacist"
+        ? usePharmacistAuth
+        : audience === "courier"
+          ? useCourierAuth
+          : useAuthStore;
   let token = store.getState().token || readStoredToken(key);
   if (
     !token &&
@@ -133,6 +141,15 @@ client.interceptors.response.use(
     if (status === 401 && audience !== "admin" && (audience === "pharmacist" || url.includes("branch-admin"))) {
       usePharmacistAuth.getState().logout();
     }
+    if (status === 401 && (audience === "courier" || url.startsWith("/courier"))) {
+      useCourierAuth.getState().logout();
+    }
+    const customerCall =
+      audience === "customer" ||
+      (!audience && !url.startsWith("/admin") && !url.includes("branch-admin") && url.startsWith("/customers"));
+    if (status === 401 && customerCall && !url.includes("/auth/")) {
+      useAuthStore.getState().logout();
+    }
     return Promise.reject(error);
   }
 );
@@ -203,6 +220,15 @@ function normalizeOrder(raw) {
     allowedStatuses: raw.allowedStatuses || [],
     undoUntil: raw.undoUntil || null,
     statusChangedAt: raw.statusChangedAt || null,
+    deliveryLat: raw.deliveryLat ?? null,
+    deliveryLng: raw.deliveryLng ?? null,
+    courierId: raw.courierId || null,
+    courierStage: raw.courierStage || null,
+    courier: raw.courier || null,
+    deliveryFailReason: raw.deliveryFailReason || null,
+    amountDue: raw.amountDue,
+    paymentMethod: raw.paymentMethod,
+    prepaid: raw.prepaid,
   };
 }
 
@@ -517,6 +543,66 @@ export async function fetchBranchAdminOrders(branchId, params = {}) {
 
 export async function fetchBranchOrder(orderId, { signal } = {}) {
   return normalizeOrder(unwrap(await client.get(`/branch-admin/orders/${orderId}`, { signal })));
+}
+
+export async function fetchBranchCouriers() {
+  const data = unwrap(await client.get("/branch-admin/couriers", { audience: "pharmacist" }));
+  return data?.couriers || [];
+}
+
+export async function createBranchCourier(payload) {
+  return unwrap(await client.post("/branch-admin/couriers", payload, { audience: "pharmacist" }));
+}
+
+export async function updateBranchCourier(id, payload) {
+  return unwrap(await client.patch(`/branch-admin/couriers/${id}`, payload, { audience: "pharmacist" }));
+}
+
+export async function assignOrderCourier(orderId, courierId) {
+  return normalizeOrder(unwrap(await client.patch(`/branch-admin/orders/${orderId}/courier`, { courierId }, { audience: "pharmacist" })));
+}
+
+export async function fetchHandovers() {
+  const data = unwrap(await client.get("/branch-admin/handovers", { audience: "pharmacist" }));
+  return data?.handovers || [];
+}
+
+export async function confirmHandover(id, note) {
+  return unwrap(await client.post(`/branch-admin/handovers/${id}/confirm`, { note }, { audience: "pharmacist" }));
+}
+
+export async function disputeHandover(id, note) {
+  return unwrap(await client.post(`/branch-admin/handovers/${id}/dispute`, { note }, { audience: "pharmacist" }));
+}
+
+export async function fetchCourierOrders(scope) {
+  const data = unwrap(await client.get("/courier/orders", { params: { scope }, audience: "courier" }));
+  return data?.orders || [];
+}
+
+export async function fetchCourierShift() {
+  return unwrap(await client.get("/courier/shift", { audience: "courier" }));
+}
+
+export async function pickupCourierOrder(id) {
+  return unwrap(await client.post(`/courier/orders/${id}/pickup`, {}, { audience: "courier" }));
+}
+
+export async function deliverCourierOrder(id, payload) {
+  const body = new FormData();
+  if (payload.method) body.append("method", payload.method);
+  if (payload.collectedAmount != null && payload.collectedAmount !== "") body.append("collectedAmount", String(payload.collectedAmount));
+  body.append("receiptGiven", payload.receiptGiven ? "true" : "false");
+  if (payload.photo) body.append("photo", payload.photo);
+  return unwrap(await client.post(`/courier/orders/${id}/deliver`, body, { audience: "courier" }));
+}
+
+export async function failCourierOrder(id, payload) {
+  return unwrap(await client.post(`/courier/orders/${id}/fail`, payload, { audience: "courier" }));
+}
+
+export async function submitCourierHandover(payload) {
+  return unwrap(await client.post("/courier/handover", payload, { audience: "courier" }));
 }
 
 export async function updateBranchOrderStatus(orderId, payload) {

@@ -27,6 +27,10 @@ const STATUS_TEXT = {
   COMPLETED: "Buyurtmangiz yetkazildi",
   CANCELLED: "Buyurtmangiz bekor qilindi",
   WAITING_PAYMENT: "Retsept tasdiqlandi, to'lovni amalga oshiring",
+  COURIER_ASSIGNED: "Buyurtmangiz kuryerga berildi",
+  COURIER_PICKED_UP: "Buyurtmangiz yo'lda",
+  COURIER_DELIVERED: "Buyurtmangiz yetkazildi",
+  COURIER_FAILED: "Buyurtmani yetkazib bo'lmadi",
 };
 
 function emitOrder(branchId, order) {

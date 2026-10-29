@@ -26,6 +26,7 @@ const DEFAULTS = {
   paymeEnabled: true,
   clickEnabled: true,
   cashEnabled: true,
+  cardTerminalEnabled: true,
   pickupEnabled: true,
   contactPhone: "1095",
   contactPhoneAlt: "+998 71 200 24 24",
@@ -67,6 +68,7 @@ function normalize(row, tokenPlain) {
     paymeEnabled: row?.paymeEnabled !== false,
     clickEnabled: row?.clickEnabled !== false,
     cashEnabled: row?.cashEnabled !== false,
+    cardTerminalEnabled: row?.cardTerminalEnabled !== false,
     pickupEnabled: row?.pickupEnabled !== false,
     contactPhone: row?.contactPhone || DEFAULTS.contactPhone,
     contactPhoneAlt: row?.contactPhoneAlt || DEFAULTS.contactPhoneAlt,
@@ -151,7 +153,15 @@ function assertPaymentAllowed(settings, method, deliveryType) {
   if (provider === "CASH" && !settings.cashEnabled) {
     throw new AppError("Naqd to'lov hozir o'chiq", 409, "PAYMENT_DISABLED");
   }
-  if (!settings.paymeEnabled && !settings.clickEnabled && !settings.cashEnabled) {
+  if (provider === "CARD_TERMINAL") {
+    if (deliveryType === "PICKUP") {
+      throw new AppError("Karta terminal faqat yetkazib berishda", 409, "PAYMENT_DISABLED");
+    }
+    if (!settings.cardTerminalEnabled) {
+      throw new AppError("Karta terminal hozir o'chiq", 409, "PAYMENT_DISABLED");
+    }
+  }
+  if (!settings.paymeEnabled && !settings.clickEnabled && !settings.cashEnabled && !settings.cardTerminalEnabled) {
     throw new AppError("Hech qanday to'lov yoqilmagan", 409, "PAYMENT_DISABLED");
   }
 }
@@ -174,6 +184,7 @@ async function saveShopSettings(body) {
       paymeEnabled: body.paymeEnabled,
       clickEnabled: body.clickEnabled,
       cashEnabled: body.cashEnabled,
+      cardTerminalEnabled: body.cardTerminalEnabled !== false,
       pickupEnabled: body.pickupEnabled,
       contactPhone: body.contactPhone,
       contactPhoneAlt: body.contactPhoneAlt || "",
@@ -191,6 +202,7 @@ async function saveShopSettings(body) {
       paymeEnabled: body.paymeEnabled,
       clickEnabled: body.clickEnabled,
       cashEnabled: body.cashEnabled,
+      cardTerminalEnabled: body.cardTerminalEnabled !== false,
       pickupEnabled: body.pickupEnabled,
       contactPhone: body.contactPhone,
       contactPhoneAlt: body.contactPhoneAlt || "",

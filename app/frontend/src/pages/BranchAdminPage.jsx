@@ -7,6 +7,8 @@ import PrescriptionReviewModal from "../components/branch-admin/PrescriptionRevi
 import StaffLogin from "../components/branch-admin/StaffLogin";
 import PasswordChangeForm from "../components/auth/PasswordChangeForm";
 import StatsTab from "../components/branch-admin/StatsTab";
+import CouriersTab from "../components/branch-admin/CouriersTab";
+import HandoversTab from "../components/branch-admin/HandoversTab";
 import StockTab from "../components/branch-admin/StockTab";
 import { PanelToast, apiError, beep } from "../components/branch-admin/panelShared";
 import { ErrorState } from "../components/ui";
@@ -367,6 +369,8 @@ export default function BranchAdminPage() {
         />
       )}
       {tab === "stats" && <StatsTab branchId={branchId} onToast={showToast} />}
+      {tab === "couriers" && !readOnly && <CouriersTab onToast={showToast} />}
+      {tab === "handovers" && !readOnly && <HandoversTab onToast={showToast} />}
       {review && (
         <PrescriptionReviewModal
           order={review}

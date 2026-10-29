@@ -1,5 +1,6 @@
-const { spawn } = require("child_process");
+const { spawn, spawnSync } = require("child_process");
 const fs = require("fs");
+const net = require("net");
 const path = require("path");
 
 const root = path.join(__dirname, "..");
@@ -22,10 +23,47 @@ if (action !== "start" && action !== "stop") {
   process.exit(1);
 }
 
-const args =
-  action === "start"
-    ? ["-D", dataDir, "-l", path.join(root, ".postgres", "postgres.log"), "start"]
-    : ["-D", dataDir, "stop"];
+function portOpen(port, host = "127.0.0.1") {
+  return new Promise((resolve) => {
+    const socket = net.connect({ port, host }, () => {
+      socket.end();
+      resolve(true);
+    });
+    socket.on("error", () => resolve(false));
+    socket.setTimeout(800, () => {
+      socket.destroy();
+      resolve(false);
+    });
+  });
+}
 
-const child = spawn(pgCtl, args, { stdio: "inherit" });
-child.on("exit", (code) => process.exit(code || 0));
+async function main() {
+  if (action === "start") {
+    if (await portOpen(5432)) {
+      console.log("PostgreSQL allaqachon 5432-portda ishlayapti");
+      process.exit(0);
+      return;
+    }
+    const child = spawn(
+      pgCtl,
+      ["-D", dataDir, "-l", path.join(root, ".postgres", "postgres.log"), "start"],
+      { stdio: "inherit" }
+    );
+    child.on("exit", (code) => process.exit(code || 0));
+    return;
+  }
+
+  const status = spawnSync(pgCtl, ["-D", dataDir, "status"], { encoding: "utf8" });
+  if (status.status !== 0 && !(await portOpen(5432))) {
+    console.log("PostgreSQL allaqachon to'xtagan");
+    process.exit(0);
+    return;
+  }
+  const child = spawn(pgCtl, ["-D", dataDir, "stop"], { stdio: "inherit" });
+  child.on("exit", (code) => process.exit(code || 0));
+}
+
+main().catch((error) => {
+  console.error(error.message || error);
+  process.exit(1);
+});

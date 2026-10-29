@@ -80,6 +80,12 @@ const promoCheckLimiter = limitRequests({
   windowMs: 10 * 60 * 1000,
 });
 
+const courierActionLimiter = limitRequests({
+  key: (req) => `courier:${req.user?.id || clientIp(req)}`,
+  limit: 60,
+  windowMs: 60 * 1000,
+});
+
 const telegramWebAppLimiter = limitRequests({
   key: (req) => `tg-webapp:${clientIp(req)}`,
   limit: 10,
@@ -141,5 +147,6 @@ module.exports = {
   staffLoginLimiter,
   clearStaffLoginLimits,
   promoCheckLimiter,
+  courierActionLimiter,
   telegramWebAppLimiter,
 };

@@ -262,6 +262,7 @@ const shopSettingsSchema = z
     paymeEnabled: z.boolean(),
     clickEnabled: z.boolean(),
     cashEnabled: z.boolean(),
+    cardTerminalEnabled: z.boolean(),
     pickupEnabled: z.boolean(),
     telegramBotToken: z.string().trim().max(200).optional().or(z.literal("")),
     messageTemplates: z.record(z.string().trim().min(1).max(500)).optional(),
@@ -273,7 +274,7 @@ const shopSettingsSchema = z
   })
   .strict()
   .superRefine((data, ctx) => {
-    if (!data.paymeEnabled && !data.clickEnabled && !data.cashEnabled) {
+    if (!data.paymeEnabled && !data.clickEnabled && !data.cashEnabled && !data.cardTerminalEnabled) {
       ctx.addIssue({ code: "custom", path: ["cashEnabled"], message: "Kamida bitta to'lov turi yoqilishi kerak" });
     }
   });

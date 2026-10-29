@@ -16,6 +16,7 @@ async function main() {
       paymeEnabled: DEFAULTS.paymeEnabled,
       clickEnabled: DEFAULTS.clickEnabled,
       cashEnabled: DEFAULTS.cashEnabled,
+      cardTerminalEnabled: DEFAULTS.cardTerminalEnabled,
       pickupEnabled: DEFAULTS.pickupEnabled,
       contactPhone: DEFAULTS.contactPhone,
       contactPhoneAlt: DEFAULTS.contactPhoneAlt,

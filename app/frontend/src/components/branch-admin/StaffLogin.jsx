@@ -3,7 +3,7 @@ import { Lock, Phone } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { staffLogin } from "../../services/api";
-import { setPharmacistRemember, useAdminAuth, usePharmacistAuth } from "../../store/useAuthStore";
+import { setPharmacistRemember, useAdminAuth, useCourierAuth, usePharmacistAuth } from "../../store/useAuthStore";
 import { apiError } from "./panelShared";
 
 const ADMIN_ROLES = ["BRANCH_ADMIN"];
@@ -20,6 +20,7 @@ export default function StaffLogin() {
   const navigate = useNavigate();
   const setSession = usePharmacistAuth((state) => state.setSession);
   const setAdminSession = useAdminAuth((state) => state.setSession);
+  const setCourierSession = useCourierAuth((state) => state.setSession);
   const [phone, setPhone] = useState("+998");
   const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(true);
@@ -51,6 +52,11 @@ export default function StaffLogin() {
       if (result.user.role === "SUPER_ADMIN") {
         setAdminSession(result.user, result.token, { refreshToken: result.refreshToken });
         navigate("/admin", { replace: true });
+        return;
+      }
+      if (result.user.role === "COURIER") {
+        setCourierSession(result.user, result.token);
+        navigate("/courier", { replace: true });
         return;
       }
       if (!ADMIN_ROLES.includes(result.user.role)) {

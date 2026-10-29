@@ -12,7 +12,7 @@ const ORDER_STATUSES = [
   "CANCELLED",
 ];
 
-const PANEL_ORDER_STATUSES = [...ORDER_STATUSES, "review", "rejected", "cancelled"];
+const PANEL_ORDER_STATUSES = [...ORDER_STATUSES, "review", "rejected", "cancelled", "failed_delivery"];
 
 function blankToUndefined(value) {
   if (value == null) return undefined;

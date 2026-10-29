@@ -49,7 +49,15 @@ const PAYMENT_OPTIONS = [
   { id: "payme", label: "Payme", flag: "paymeEnabled" },
   { id: "click", label: "Click", flag: "clickEnabled" },
   { id: "cash", labelKey: "cart.cash", flag: "cashEnabled" },
+  { id: "card_terminal", labelKey: "courier.pay.cardTerminal", flag: "cardTerminalEnabled", deliveryOnly: true },
 ];
+
+function visiblePayments(shop, deliveryType) {
+  return PAYMENT_OPTIONS.filter((option) => {
+    if (option.deliveryOnly && deliveryType !== "DELIVERY") return false;
+    return !shop || shop[option.flag] !== false;
+  });
+}
 
 export default function CartPage() {
   const { t } = useTranslation();
@@ -90,7 +98,7 @@ export default function CartPage() {
     deliveryFee: shop?.deliveryFee,
     freeFrom: shop?.freeDeliveryFrom,
   });
-  const paymentOptions = PAYMENT_OPTIONS.filter((option) => !shop || shop[option.flag] !== false);
+  const paymentOptions = visiblePayments(shop, deliveryType);
   const paymentOptionsKey = paymentOptions.map((option) => option.id).join(",");
   useEffect(() => {
     loadPublicSettings().then(setShop).catch(() => setShop(peekPublicSettings()));
@@ -98,7 +106,7 @@ export default function CartPage() {
   useEffect(() => {
     if (!shop) return;
     if (deliveryType === "PICKUP" && shop.pickupEnabled === false) setDeliveryType("DELIVERY");
-    const options = PAYMENT_OPTIONS.filter((option) => shop[option.flag] !== false);
+    const options = visiblePayments(shop, deliveryType);
     if (options.length && !options.some((option) => option.id === paymentMethod)) {
       setPaymentMethod(options[0].id);
     }
@@ -344,9 +352,10 @@ export default function CartPage() {
   const stockBlocked = items.some((item) => ["missing", "short"].includes(lineStock(item).kind));
   const showProblem = (key) => Boolean((attempted || touched[key]) && fieldProblems[key]);
   const rxNames = items.filter((item) => item.medicine.isPrescription).map((item) => item.medicine.name);
+  const payOnDelivery = paymentMethod === "cash" || paymentMethod === "card_terminal";
   const holdKey = hasPrescriptionItems
     ? "cart.holdReview"
-    : paymentMethod === "cash"
+    : payOnDelivery
       ? deliveryType === "PICKUP"
         ? "cart.holdCashPickup"
         : "cart.holdCash"
@@ -582,7 +591,7 @@ export default function CartPage() {
 
   const submitLabel = hasPrescriptionItems
     ? t("cart.submitRx")
-    : paymentMethod === "cash"
+    : paymentMethod === "cash" || paymentMethod === "card_terminal"
       ? t("cart.submit")
       : t("cart.pay", { amount: formatSom(totals.totalAmount) });
   const submittingLabel =
@@ -594,7 +603,7 @@ export default function CartPage() {
 
   const submitShort = hasPrescriptionItems
     ? t("cart.submitRxShort")
-    : paymentMethod === "cash"
+    : paymentMethod === "cash" || paymentMethod === "card_terminal"
       ? t("cart.submitShort")
       : t("cart.payShort");
 
@@ -611,17 +620,20 @@ export default function CartPage() {
 
   return (
     <>
-    <form className="lg:pb-0" onSubmit={handleOrder}>
-      <div className="mb-4 flex items-center gap-2">
+    <form
+      className="pb-[calc(var(--bottom-nav-h)+5.25rem+var(--tg-safe-bottom,env(safe-area-inset-bottom)))] lg:pb-0"
+      onSubmit={handleOrder}
+    >
+      <div className="mb-3 flex items-center gap-2 md:mb-4">
         <button
           type="button"
           onClick={() => navigate(-1)}
-          className="grid h-10 w-10 place-items-center rounded-xl bg-white text-slate-700 shadow-sm lg:h-12 lg:w-12"
+          className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white text-slate-700 shadow-sm lg:h-12 lg:w-12"
           aria-label={t("common.back")}
         >
           <ArrowLeft className="h-5 w-5" />
         </button>
-        <h1 className="text-lg font-extrabold leading-tight text-slate-900 md:text-2xl">
+        <h1 className="min-w-0 truncate text-xl font-extrabold leading-tight text-slate-900 md:text-2xl">
           {t("cart.title")}
         </h1>
       </div>
@@ -629,86 +641,95 @@ export default function CartPage() {
       <div className="lg:grid lg:grid-cols-12 lg:items-start lg:gap-8">
         <div className="grid gap-3 lg:col-span-7">
           <section className="rounded-2xl border border-slate-100 bg-white p-3 shadow-sm md:p-5">
-            {items.map((item) => (
+            {items.map((item) => {
+              const stock = lineStock(item);
+              const lineKey = `${item.medicine.id}-${item.selectedUnit}`;
+              return (
               <article
-                key={`${item.medicine.id}-${item.selectedUnit}`}
-                className="flex items-center gap-2 border-b border-slate-100 py-3 last:border-0 last:pb-0 first:pt-0"
+                key={lineKey}
+                className="border-b border-slate-100 py-3 last:border-0 last:pb-0 first:pt-0"
               >
-                {pendingRemove === `${item.medicine.id}-${item.selectedUnit}` ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const removed = removeFromCart(item.medicine.id, item.selectedUnit);
-                      setPendingRemove("");
-                      if (!removed) return;
-                      pushToast(t("cart.removed"), "info", {
-                        duration: 5000,
-                        action: { label: t("cart.undo"), onClick: () => restoreLine(removed) },
-                      });
-                    }}
-                    className="grid h-10 min-w-10 shrink-0 place-items-center rounded-xl bg-red-600 px-2 text-xs font-bold text-white"
-                  >
-                    {t("cart.remove")}
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setPendingRemove(`${item.medicine.id}-${item.selectedUnit}`)}
-                    className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-red-500 hover:bg-red-50"
-                    aria-label={t("cart.remove")}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                )}
-                <div className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-slate-50 text-brand">
-                  <Pill className="h-5 w-5" />
+                <div className="flex gap-3">
+                  <div className="grid h-14 w-14 shrink-0 place-items-center rounded-xl bg-slate-50 text-brand">
+                    <Pill className="h-6 w-6" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="line-clamp-2 text-sm font-bold leading-snug text-slate-900">{item.medicine.name}</h3>
+                    {item.medicine.isPrescription && (
+                      <p className="mt-0.5 text-[11px] font-bold text-red-600">{t("cart.rxBadge")}</p>
+                    )}
+                    <p className="mt-1 text-sm font-extrabold tabular-nums text-slate-900">
+                      {item.quantity > 1
+                        ? `${formatGrouped(Number(item.medicine.price) * unitMultiplier(item.selectedUnit))} × ${item.quantity} = ${formatSom(lineTotal(item))}`
+                        : formatSom(lineTotal(item))}
+                    </p>
+                    {stock.kind === "missing" && <p className="mt-0.5 text-xs font-semibold text-red-600">{t("cart.missingHere")}</p>}
+                    {(stock.kind === "short" || stock.kind === "max") && (
+                      <p className="mt-0.5 text-xs font-semibold text-amber-700">{t("cart.onlyLeft", { count: stock.available })}</p>
+                    )}
+                    {!stock.kind && stock.available > 0 && stock.available <= 5 && (
+                      <p className="mt-0.5 text-xs font-semibold text-amber-700">{t("cart.lowStock")}</p>
+                    )}
+                  </div>
                 </div>
-                <div className="min-w-0 flex-1">
-                  <h3 className="truncate text-sm font-bold text-slate-900">{item.medicine.name}</h3>
-                  {item.medicine.isPrescription && (
-                    <p className="text-[11px] font-bold text-red-600">{t("cart.rxBadge")}</p>
+                <div className="mt-2.5 flex items-center justify-between gap-2">
+                  {pendingRemove === lineKey ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const removed = removeFromCart(item.medicine.id, item.selectedUnit);
+                        setPendingRemove("");
+                        if (!removed) return;
+                        pushToast(t("cart.removed"), "info", {
+                          duration: 5000,
+                          action: { label: t("cart.undo"), onClick: () => restoreLine(removed) },
+                        });
+                      }}
+                      className="inline-flex h-10 items-center rounded-xl bg-red-600 px-3 text-xs font-bold text-white"
+                    >
+                      {t("cart.remove")}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setPendingRemove(lineKey)}
+                      className="inline-flex h-10 items-center gap-1.5 rounded-xl px-2.5 text-xs font-bold text-red-600 hover:bg-red-50"
+                      aria-label={t("cart.remove")}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      <span className="sm:inline">{t("cart.remove")}</span>
+                    </button>
                   )}
-                  <p className="truncate text-xs font-bold tabular-nums text-slate-900">
-                    {item.quantity > 1
-                      ? `${formatGrouped(Number(item.medicine.price) * unitMultiplier(item.selectedUnit))} × ${item.quantity} = ${formatSom(lineTotal(item))}`
-                      : formatSom(lineTotal(item))}
-                  </p>
-                  {(() => {
-                    const stock = lineStock(item);
-                    if (stock.kind === "missing") return <p className="text-xs font-semibold text-red-600">{t("cart.missingHere")}</p>;
-                    if (stock.kind === "short" || stock.kind === "max") return <p className="text-xs font-semibold text-amber-700">{t("cart.onlyLeft", { count: stock.available })}</p>;
-                    if (stock.available > 0 && stock.available <= 5) return <p className="text-xs font-semibold text-amber-700">{t("cart.lowStock")}</p>;
-                    return null;
-                  })()}
-                </div>
-                <div className="inline-flex shrink-0 items-center rounded-full bg-brand-soft p-0.5">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      updateQuantity(item.medicine.id, item.selectedUnit, item.quantity - 1)
-                    }
-                    className="grid h-10 w-10 place-items-center rounded-full bg-white"
-                    aria-label={t("cart.decrease")}
-                  >
-                    <Minus className="h-4 w-4" aria-hidden />
-                  </button>
-                  <span className="min-w-5 text-center text-xs font-bold">{item.quantity}</span>
-                  <button
-                    type="button"
-                    disabled={Boolean(lineStock(item).kind)}
-                    title={lineStock(item).kind ? t("cart.onlyLeft", { count: lineStock(item).available }) : undefined}
-                    onClick={() =>
-                      updateQuantity(item.medicine.id, item.selectedUnit, item.quantity + 1)
-                    }
-                    className="grid h-10 w-10 place-items-center rounded-full bg-white disabled:cursor-not-allowed disabled:opacity-40"
-                    aria-label={t("cart.increase")}
-                  >
-                    <Plus className="h-4 w-4" aria-hidden />
-                  </button>
+                  <div className="inline-flex shrink-0 items-center rounded-full bg-brand-soft p-0.5">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        updateQuantity(item.medicine.id, item.selectedUnit, item.quantity - 1)
+                      }
+                      className="grid h-9 w-9 place-items-center rounded-full bg-white"
+                      aria-label={t("cart.decrease")}
+                    >
+                      <Minus className="h-4 w-4" aria-hidden />
+                    </button>
+                    <span className="min-w-7 text-center text-sm font-bold tabular-nums">{item.quantity}</span>
+                    <button
+                      type="button"
+                      disabled={Boolean(stock.kind)}
+                      title={stock.kind ? t("cart.onlyLeft", { count: stock.available }) : undefined}
+                      onClick={() =>
+                        updateQuantity(item.medicine.id, item.selectedUnit, item.quantity + 1)
+                      }
+                      className="grid h-9 w-9 place-items-center rounded-full bg-white disabled:cursor-not-allowed disabled:opacity-40"
+                      aria-label={t("cart.increase")}
+                    >
+                      <Plus className="h-4 w-4" aria-hidden />
+                    </button>
+                  </div>
                 </div>
               </article>
-            ))}
-            <button type="button" onClick={() => setConfirmClear(true)} className="mt-2 text-left text-sm font-bold text-red-600">
+              );
+            })}
+            <button type="button" onClick={() => setConfirmClear(true)} className="mt-3 text-left text-sm font-bold text-red-600">
               {t("cart.clear")}
             </button>
           </section>
@@ -718,11 +739,11 @@ export default function CartPage() {
             type="button"
             onClick={openModal}
             title={branch ? `${branch.name}. ${t("header.branchHint")}` : t("branch.pick")}
-            className="rounded-2xl border border-slate-100 bg-white p-4 text-left shadow-sm"
+            className="w-full min-w-0 rounded-2xl border border-slate-100 bg-white p-3.5 text-left shadow-sm md:p-4"
           >
             <span className="text-[11px] font-bold uppercase tracking-wide text-[#087B51]">{t("header.branch")}</span>
-            <strong className="mt-1 block text-sm text-slate-900">{branch?.name || t("branch.pick")}</strong>
-            <span className="mt-1 block text-xs text-slate-500">{t("header.branchHint")}</span>
+            <strong className="mt-1 block truncate text-sm text-slate-900">{branch?.name || t("branch.pick")}</strong>
+            <span className="mt-1 block text-xs leading-snug text-slate-500">{t("header.branchHint")}</span>
           </button>
 
           <div className="grid grid-cols-2 gap-2">
@@ -741,9 +762,9 @@ export default function CartPage() {
                 type="button"
                 onClick={() => setDeliveryType(id)}
                 title={t(key)}
-                className={`flex h-11 min-w-0 items-center justify-center truncate rounded-xl border px-2 text-sm font-bold ${deliveryType === id ? "border-brand bg-brand-soft text-brand" : "border-slate-200 bg-white text-slate-700"}`}
+                className={`flex h-11 min-w-0 items-center justify-center rounded-xl border px-2 text-sm font-bold ${deliveryType === id ? "border-brand bg-brand-soft text-brand" : "border-slate-200 bg-white text-slate-700"}`}
               >
-                {t(id === "DELIVERY" ? "cart.deliveryShort" : "cart.pickupShort")}
+                <span className="truncate">{t(id === "DELIVERY" ? "cart.deliveryShort" : "cart.pickupShort")}</span>
               </button>
             ))}
           </div>
@@ -1021,21 +1042,23 @@ export default function CartPage() {
       </div>
 
       <div
-        className={`fixed inset-x-0 z-20 border-t border-slate-200 bg-white px-3 py-2 shadow-[0_-8px_24px_rgba(15,23,42,0.06)] lg:hidden ${keyboard ? "hidden" : ""}`}
+        className={`fixed inset-x-0 z-20 border-t border-slate-200 bg-white/95 px-3 py-2.5 backdrop-blur lg:hidden ${keyboard ? "hidden" : ""}`}
         style={{ bottom: "calc(var(--bottom-nav-h) + var(--tg-safe-bottom, env(safe-area-inset-bottom)))" }}
       >
-        <div className="mx-auto flex max-w-lg items-center gap-2">
-          <div className="min-w-0 shrink">
-            <p className="truncate text-[11px] font-semibold text-slate-500">
+        <div className="mx-auto flex max-w-lg items-center gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[11px] font-semibold leading-tight text-slate-500">
               {(paymentOptions.find((option) => option.id === paymentMethod)?.labelKey
                 ? t(paymentOptions.find((option) => option.id === paymentMethod).labelKey)
                 : paymentOptions.find((option) => option.id === paymentMethod)?.label) || t("cart.payment")}
               {" · "}
               {deliveryType === "PICKUP" ? t("cart.pickupFree") : totals.deliveryFee === 0 ? t("cart.freeNow") : formatSom(totals.deliveryFee)}
             </p>
-            <p className="text-sm font-extrabold tabular-nums text-slate-900">{t("cart.total")}: {formatSom(totals.totalAmount)}</p>
+            <p className="mt-0.5 truncate text-base font-extrabold tabular-nums leading-tight text-slate-900">
+              {formatSom(totals.totalAmount)}
+            </p>
           </div>
-          <div className="min-w-0 flex-1">{payButton(submitShort)}</div>
+          <div className="w-[42%] max-w-[11rem] shrink-0">{payButton(submitShort, "shadow-md")}</div>
         </div>
       </div>
     </form>

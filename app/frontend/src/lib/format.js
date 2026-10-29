@@ -67,12 +67,29 @@ export function formatClock(msLeft) {
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
+const STATUS_I18N = {
+  PENDING_PRESCRIPTION: "order.status.review",
+  PENDING_BRANCH: "order.status.pendingBranch",
+  WAITING_PAYMENT: "order.status.waitingPayment",
+  PAID: "order.status.paid",
+  PREPARING: "order.status.preparing",
+  READY: "order.status.ready",
+  DELIVERING: "order.status.delivering",
+  COMPLETED: "order.status.completed",
+  CANCELLED: "order.status.cancelled",
+};
+
 export function orderStatusLabel(order) {
+  if (order?.courierStage === "FAILED") return i18n.t("courier.stage.failed");
+  if (order?.courierStage === "ASSIGNED" && order?.status === "READY") return i18n.t("courier.stage.assigned");
+  if (order?.courierStage === "PICKED_UP") return i18n.t("courier.stage.enRoute");
+  if (order?.courierStage === "DELIVERED") return i18n.t("courier.stage.delivered");
   const rejected =
     order?.status === "CANCELLED" &&
     (order?.prescription?.status === "REJECTED" || Boolean(order?.prescription?.rejectNote));
-  if (rejected) return "Rad etilgan";
-  return STATUS_LABELS[order?.status] || order?.status || "";
+  if (rejected) return i18n.t("order.status.rxRejected");
+  const key = STATUS_I18N[order?.status];
+  return key ? i18n.t(key) : order?.status || "";
 }
 
 export const STATUS_TONES = {
@@ -87,14 +104,3 @@ export const STATUS_TONES = {
   CANCELLED: "border-red-200 bg-red-50 text-red-700",
 };
 
-export const STATUS_LABELS = {
-  PENDING_PRESCRIPTION: "Retsept kutilmoqda",
-  PENDING_BRANCH: "Filial ko'rigida",
-  WAITING_PAYMENT: "To'lov kutilmoqda",
-  PAID: "To'langan",
-  PREPARING: "Yig'ilmoqda",
-  READY: "Tayyor",
-  DELIVERING: "Yetkazilmoqda",
-  COMPLETED: "Yakunlangan",
-  CANCELLED: "Bekor qilingan",
-};

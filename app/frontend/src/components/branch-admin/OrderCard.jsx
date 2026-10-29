@@ -13,7 +13,7 @@ const NEXT = {
 
 const CANCELABLE = ["PENDING_PRESCRIPTION", "PENDING_BRANCH", "WAITING_PAYMENT", "PAID", "PREPARING", "READY", "DELIVERING"];
 
-export default function OrderCard({ order, highlight, busy, readOnly = false, onOpen, onReview, onStatus, onUndo, onCash }) {
+export default function OrderCard({ order, highlight, busy, readOnly = false, couriers = [], onOpen, onReview, onStatus, onUndo, onCash, onAssign }) {
   const { t } = useTranslation();
   const [now, setNow] = useState(Date.now());
   const [cancelOpen, setCancelOpen] = useState(false);
@@ -22,14 +22,16 @@ export default function OrderCard({ order, highlight, busy, readOnly = false, on
   const [confirmDone, setConfirmDone] = useState(false);
   const end = deadlineMs(order);
   const left = end ? end - now : null;
-  const next = order.status === "READY" && order.deliveryType === "PICKUP"
+  let next = order.status === "READY" && order.deliveryType === "PICKUP"
     ? ["COMPLETED", "panel.pickedUp", "Mijoz olib ketdi"]
     : NEXT[order.status];
+  if (order.deliveryType !== "PICKUP" && order.status === "READY") next = null;
+  if (order.courierStage === "PICKED_UP") next = null;
   const canCancel = CANCELABLE.includes(order.status);
   const undoLeft = order.undoUntil ? new Date(order.undoUntil).getTime() - now : 0;
   const provider = String(order.payment?.provider || "").toUpperCase();
   const paidOnline = order.payment?.status === "COMPLETED" && provider !== "CASH";
-  const cashDue = provider === "CASH" && order.payment?.status !== "COMPLETED" && ["PREPARING", "READY", "DELIVERING"].includes(order.status);
+  const cashDue = provider === "CASH" && order.payment?.status !== "COMPLETED" && ["PREPARING", "READY", "DELIVERING"].includes(order.status) && (order.deliveryType === "PICKUP" || !order.courierId);
   const name = order.customerName || order.user?.name || order.customerPhone;
   const noteRequired = reason === "OTHER" && !note.trim();
 
@@ -61,7 +63,7 @@ export default function OrderCard({ order, highlight, busy, readOnly = false, on
             )}
           </div>
           <p className="mt-1 text-sm text-slate-600">{name} · {order.customerPhone}</p>
-          <p className="text-xs text-slate-400">{formatDateTime(order.createdAt)} · {paymentLabel(provider)}</p>
+          <p className="text-xs text-slate-400">{formatDateTime(order.createdAt)} · {paymentLabel(provider)}{order.courier?.name ? ` · ${order.courier.name}` : ""}</p>
         </div>
         <p className="text-sm font-extrabold tabular-nums">{formatSom(order.totalAmount)}</p>
       </div>
@@ -76,6 +78,22 @@ export default function OrderCard({ order, highlight, busy, readOnly = false, on
           <li key={item.id}>{item.name} × {item.quantity}</li>
         ))}
       </ul>
+      {!readOnly && order.deliveryType !== "PICKUP" && order.status === "READY" && ["UNASSIGNED", "ASSIGNED", "FAILED"].includes(order.courierStage || "UNASSIGNED") && (
+        <label className="grid gap-1 text-sm">
+          {t("courier.panel.assign")}
+          <select
+            value={order.courierId || ""}
+            disabled={busy}
+            onChange={(event) => event.target.value && onAssign?.(order, event.target.value)}
+            className="h-11 rounded-xl border border-slate-200 px-3"
+          >
+            <option value="">{t("courier.panel.none")}</option>
+            {couriers.filter((courier) => courier.active !== false && courier.status !== "SUSPENDED").map((courier) => (
+              <option key={courier.id} value={courier.id}>{courier.name}</option>
+            ))}
+          </select>
+        </label>
+      )}
       <div className="flex flex-wrap gap-2">
         <button type="button" onClick={() => onOpen(order)} className="h-10 rounded-xl border border-slate-200 px-3 text-sm font-semibold">{t("panel.detail", "Tafsilot")}</button>
         {order.prescription && (

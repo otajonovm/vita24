@@ -28,7 +28,7 @@ import { useToastStore } from "../store/useToastStore";
 const POLL_MS = 15000;
 
 function statusKey(order) {
-  return `${order?.status || ""}:${order?.prescription?.status || ""}`;
+  return `${order?.status || ""}:${order?.courierStage || ""}:${order?.prescription?.status || ""}`;
 }
 
 function OrderPrescription({ prescriptionId, fileName }) {
@@ -168,9 +168,9 @@ export default function OrderDetailPage() {
     };
   }, [id, token, telegramAuthPending, t, pushToast]);
 
-  const cashOrder = String(order?.payment?.provider || "").toUpperCase() === "CASH";
+  const payOnDelivery = ["CASH", "CARD_TERMINAL"].includes(String(order?.payment?.provider || "").toUpperCase());
   const reviewing = ["PENDING_PRESCRIPTION", "PENDING_BRANCH"].includes(order?.status);
-  const showPayTimer = order?.status === "WAITING_PAYMENT" && !cashOrder;
+  const showPayTimer = order?.status === "WAITING_PAYMENT" && !payOnDelivery;
   const showReviewTimer = reviewing;
 
   useEffect(() => {
@@ -326,6 +326,12 @@ export default function OrderDetailPage() {
           <p className={`mt-3 inline-flex rounded-full border px-3 py-1 text-sm font-bold ${STATUS_TONES[view.showReupload ? "CANCELLED" : order.status] || ""}`}>
             {t(view.titleKey)}
           </p>
+          {order.courier?.name && (
+            <p className="mt-3 text-sm">
+              {t("courier.customer.courier")}: {order.courier.name}{" "}
+              <a className="font-bold text-brand" href={`tel:${order.courier.phone}`}>{order.courier.phone}</a>
+            </p>
+          )}
           {view.showReupload && (
             <div className="mt-3 grid gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
               <p>{t("order.status.rxRejected")}</p>

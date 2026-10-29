@@ -84,6 +84,9 @@
   "order.status.completed": "Yakunlangan",
   "order.status.cashConfirmed": "Tasdiqlangan",
   "order.status.unknown": "Buyurtma",
+  "order.status.pendingBranch": "Filial ko'rigida",
+  "meta.title": "Vita24 — Onlayn dorixona",
+  "meta.description": "Toshkent bo'ylab 24/7 onlayn dorixona. Filial tanlang, dori buyurtma qiling.",
   "order.reserve.review": "Retsept tekshirilguncha dorilar 2 soat zaxirada turadi",
   "order.reserve.payment": "To'lovga 15 daqiqa vaqtingiz bor",
   "order.pay.cashDue": "Naqd pul · Yetkazilganda to'lanadi",
@@ -1144,6 +1147,98 @@
       "exportFailed": "Hisobot yuklanmadi",
       "medicines": "Dorilar",
       "errorCol": "Xato"
+    }
+  },
+  "courier": {
+    "stage": {
+      "assigned": "Kuryerga berildi",
+      "enRoute": "Yo'lda",
+      "delivered": "Yetkazildi",
+      "failed": "Yetkazib bo'lmadi"
+    },
+    "next": {
+      "assigned": "Kuryer buyurtmani oladi",
+      "enRoute": "Kuryer yo'lda",
+      "failed": "Filial qayta biriktiradi yoki bekor qiladi"
+    },
+    "customer": {
+      "courier": "Kuryer",
+      "call": "Qo'ng'iroq qilish"
+    },
+    "pay": {
+      "cash": "NAQD {{amount}}",
+      "terminal": "KARTA TERMINAL",
+      "prepaid": "TO'LANGAN",
+      "cardTerminal": "Kuryerga karta bilan",
+      "terminalDue": "Karta terminal, yetkazilganda"
+    },
+    "settings": { "cardTerminal": "Kuryerga karta terminal" },
+    "tab": {
+      "active": "Faol",
+      "history": "Tarix",
+      "couriers": "Kuryerlar",
+      "handovers": "Kassa topshirish"
+    },
+    "shift": {
+      "cash": "Qo'ldagi naqd",
+      "card": "Kartadan",
+      "unhanded": "Topshirilmagan",
+      "delivered": "Bugun yetkazilgan",
+      "handover": "Topshirish"
+    },
+    "card": {
+      "call": "Qo'ng'iroq qilish",
+      "yandex": "Yandex xarita",
+      "google": "Google xarita",
+      "pickup": "Oldim",
+      "deliver": "Yetkazildi",
+      "fail": "Yetkazib bo'lmadi"
+    },
+    "deliver": {
+      "title": "Yetkazildi",
+      "amount": "Olingan summa",
+      "receipt": "Chek berildi",
+      "photo": "Chek rasmi",
+      "confirm": "Tasdiqlash",
+      "prepaidHint": "To'lov oldin qilingan"
+    },
+    "fail": {
+      "title": "Yetkazib bo'lmadi",
+      "note": "Izoh",
+      "submit": "Yuborish",
+      "NO_ANSWER": "Mijoz javob bermadi",
+      "ADDRESS_NOT_FOUND": "Manzil topilmadi",
+      "CUSTOMER_REJECTED": "Mijoz rad etdi",
+      "OTHER": "Boshqa"
+    },
+    "login": {
+      "title": "Kuryer",
+      "hint": "Telefon va parol bilan kiring",
+      "submit": "Kirish",
+      "failed": "Kirish amalga oshmadi",
+      "staffOnly": "Bu hisob kuryer emas"
+    },
+    "logout": "Chiqish",
+    "empty": "Buyurtma yo'q",
+    "loadFailed": "Yuklab bo'lmadi",
+    "panel": {
+      "add": "Kuryer qo'shish",
+      "name": "Ism",
+      "phone": "Telefon",
+      "password": "Parol",
+      "active": "Faol",
+      "inactive": "Nofaol",
+      "saved": "Saqlandi",
+      "assign": "Kuryer",
+      "none": "Biriktirilmagan",
+      "today": "Bugun",
+      "confirm": "Tasdiqlash",
+      "dispute": "E'tiroz",
+      "filterFailed": "Yetkazib bo'lmagan",
+      "receiptCourier": "Kuryer",
+      "handoverEmpty": "Topshirish so'rovi yo'q",
+      "courierEmpty": "Kuryer yo'q",
+      "difference": "Farq: {{amount}}"
     }
   }
 }

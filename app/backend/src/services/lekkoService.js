@@ -282,6 +282,8 @@ function mapProduct(row) {
     description: String(row?.description || row?.mnn || row?.tradeMark || name || "").trim(),
     categoryName: row?.pharmGroup || row?.categoryName || row?.category?.name || form || null,
   };
+  const mnn = String(row?.mnn || "").trim();
+  if (mnn && mnn.toLowerCase() !== "null") mapped.activeIngredient = mnn;
   const atcCode = readAtcCode(row);
   if (atcCode) mapped.atcCode = atcCode;
   return mapped;
@@ -653,9 +655,45 @@ async function ensureMedicinesForLots(byDrug) {
   for (let i = 0; i < drugIds.length; i += 500) {
     const rows = await prisma.medicine.findMany({
       where: { externalApiId: { in: drugIds.slice(i, i + 500) } },
-      select: { id: true, externalApiId: true },
+      select: {
+        id: true,
+        externalApiId: true,
+        name: true,
+        dosageForm: true,
+        activeIngredient: true,
+        searchText: true,
+        atcCode: true,
+        isPrescription: true,
+        rxSource: true,
+        rxNeedsReview: true,
+      },
     });
-    for (const row of rows) medicineByDrugId.set(row.externalApiId, row);
+    for (const row of rows) {
+      medicineByDrugId.set(row.externalApiId, row);
+      if (row.rxSource) continue;
+      const { patch } = prescriptionPatch(
+        {
+          name: row.name,
+          dosageForm: row.dosageForm,
+          activeIngredient: row.activeIngredient || undefined,
+          atcCode: row.atcCode || undefined,
+        },
+        row
+      );
+      if (!Object.prototype.hasOwnProperty.call(patch, "isPrescription") && patch.rxNeedsReview !== true) continue;
+      await prisma.medicine.update({
+        where: { id: row.id },
+        data: {
+          ...(Object.prototype.hasOwnProperty.call(patch, "isPrescription")
+            ? {
+                isPrescription: patch.isPrescription,
+                rxSource: patch.rxSource,
+                rxNeedsReview: patch.rxNeedsReview,
+              }
+            : { rxNeedsReview: true }),
+        },
+      });
+    }
   }
 
   const missing = drugIds.filter((drugId) => !medicineByDrugId.has(drugId));

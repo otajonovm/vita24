@@ -18,13 +18,29 @@ const {
   shiftReport,
   setBranchOpen,
   streamEvents,
+  assignCourier,
 } = require("../controllers/branchAdminController");
+const {
+  listCouriers,
+  postCourier,
+  patchCourier,
+  getHandovers,
+  confirmHandover,
+  disputeHandover,
+} = require("../controllers/courierController");
 const {
   authenticateToken,
   requireRole,
   requireBranchAdminWrite,
 } = require("../middlewares/authMiddleware");
 const { validateRequest } = require("../middlewares/validateRequest");
+const {
+  createCourierSchema,
+  updateCourierSchema,
+  assignCourierSchema,
+  handoverNoteSchema,
+  disputeSchema,
+} = require("../validators/courierValidator");
 const {
   branchIdQuerySchema,
   updateStockSchema,
@@ -103,6 +119,38 @@ router.patch(
   updateBranchStock
 );
 router.post("/sync-lekko", requireBranchAdminWrite, validateRequest(syncLekkoSchema, "body"), syncLekko);
+
+router.get("/couriers", requireBranchAdminWrite, listCouriers);
+router.post("/couriers", requireBranchAdminWrite, validateRequest(createCourierSchema), postCourier);
+router.patch(
+  "/couriers/:id",
+  requireBranchAdminWrite,
+  validateRequest(idParamSchema, "params"),
+  validateRequest(updateCourierSchema),
+  patchCourier
+);
+router.patch(
+  "/orders/:id/courier",
+  requireBranchAdminWrite,
+  validateRequest(idParamSchema, "params"),
+  validateRequest(assignCourierSchema),
+  assignCourier
+);
+router.get("/handovers", requireBranchAdminWrite, getHandovers);
+router.post(
+  "/handovers/:id/confirm",
+  requireBranchAdminWrite,
+  validateRequest(idParamSchema, "params"),
+  validateRequest(handoverNoteSchema),
+  confirmHandover
+);
+router.post(
+  "/handovers/:id/dispute",
+  requireBranchAdminWrite,
+  validateRequest(idParamSchema, "params"),
+  validateRequest(disputeSchema),
+  disputeHandover
+);
 
 // Pul qaytarish "bajarildi" — faqat SUPER_ADMIN (platforma egasi)
 router.patch(

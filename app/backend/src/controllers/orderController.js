@@ -120,6 +120,11 @@ function serializeOrder(order, { forCustomer = true } = {}) {
           paidAt: order.payment.paidAt,
         }
       : null,
+    courierStage: order.courierStage || "UNASSIGNED",
+    courier:
+      forCustomer && ["PICKED_UP", "DELIVERED"].includes(order.courierStage) && order.courier
+        ? { name: order.courier.name, phone: order.courier.phone }
+        : null,
     history: serializeHistory(order.history, forCustomer),
     view: getCustomerOrderView(order),
   };
@@ -131,6 +136,7 @@ const orderInclude = {
   items: { include: { medicine: { select: { name: true, slug: true } } } },
   prescription: true,
   payment: true,
+  courier: { select: { name: true, phone: true } },
   history: { orderBy: { createdAt: "asc" } },
 };
 
@@ -306,7 +312,7 @@ const createOrder = asyncHandler(async (req, res) => {
         payment: {
           create: {
             amount: quote.totalAmount,
-            provider: ["PAYME", "CLICK", "CASH"].includes(String(body.paymentMethod || "").toUpperCase())
+            provider: ["PAYME", "CLICK", "CASH", "CARD_TERMINAL"].includes(String(body.paymentMethod || "").toUpperCase())
               ? String(body.paymentMethod).toUpperCase()
               : "CASH",
             status: "PENDING",
@@ -598,8 +604,8 @@ const mockPay = asyncHandler(async (req, res) => {
   const owns = order.userId === req.user.id || order.customerPhone === req.user.phone;
   if (!owns) throw new AppError("Bu buyurtmaga ruxsat yo'q", 403, "FORBIDDEN");
 
-  if (String(order.payment?.provider || "").toUpperCase() === "CASH") {
-    throw new AppError("Naqd buyurtmada online to'lov yo'q", 409, "PAYMENT_NOT_ALLOWED");
+  if (["CASH", "CARD_TERMINAL"].includes(String(order.payment?.provider || "").toUpperCase())) {
+    throw new AppError("Bu buyurtmada online to'lov yo'q", 409, "PAYMENT_NOT_ALLOWED");
   }
 
   if (order.status === "PAID") {

@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
+  assignOrderCourier,
   fetchBranchAdminOrders,
+  fetchBranchCouriers,
   markCashReceived,
   undoOrderStatus,
   updateBranchOrderStatus,
@@ -43,6 +45,7 @@ export default function OrdersTab({ branchId, pulse, focus, readOnly = false, on
   const [status, setStatus] = useState("");
   const [sort, setSort] = useState("urgent");
   const [highlight, setHighlight] = useState([]);
+  const [couriers, setCouriers] = useState([]);
   const ready = useRef(false);
   const from = toIsoDate(fromText);
   const to = toIsoDate(toText);
@@ -50,6 +53,19 @@ export default function OrdersTab({ branchId, pulse, focus, readOnly = false, on
   const filters = useRef({ query, from, to, status, sort });
   const requestGate = useRef(createRequestGate());
   filters.current = { query, from, to, status, sort };
+
+  useEffect(() => {
+    if (!branchId || readOnly) return undefined;
+    let active = true;
+    fetchBranchCouriers()
+      .then((list) => {
+        if (active) setCouriers(list);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [branchId, readOnly, pulse]);
 
   useEffect(() => {
     if (!focus) return;
@@ -172,6 +188,20 @@ export default function OrdersTab({ branchId, pulse, focus, readOnly = false, on
       const updated = await markCashReceived(order.id);
       setOrders((current) => current.map((item) => (item.id === updated.id ? { ...item, ...updated } : item)));
       onToast("Naqd to'lov qabul qilindi");
+    } catch (error) {
+      onToast(apiError(error, t("panel.actionFailed", "Amal bajarilmadi")));
+    } finally {
+      setBusyId("");
+    }
+  }
+
+  async function assign(order, courierId) {
+    if (readOnly) return;
+    setBusyId(order.id);
+    try {
+      const updated = await assignOrderCourier(order.id, courierId);
+      setOrders((current) => current.map((item) => (item.id === updated.id ? { ...item, ...updated } : item)));
+      onToast(t("courier.panel.saved"));
     } catch (error) {
       onToast(apiError(error, t("panel.actionFailed", "Amal bajarilmadi")));
     } finally {
@@ -304,6 +334,8 @@ export default function OrdersTab({ branchId, pulse, focus, readOnly = false, on
             onStatus={changeStatus}
             onUndo={undo}
             onCash={cash}
+            couriers={couriers}
+            onAssign={assign}
           />
         ))}
       </div>

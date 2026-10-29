@@ -171,7 +171,7 @@ export default function MapCheckoutSection({
   };
 
   return (
-    <section className={`overflow-hidden rounded-2xl border bg-white shadow-sm ${invalid ? "border-red-500" : "border-slate-100"}`}>
+    <section className={`min-w-0 overflow-hidden rounded-2xl border bg-white shadow-sm ${invalid ? "border-red-500" : "border-slate-100"}`}>
       <div className="osm-frame relative bg-slate-100">
         <iframe
           key={`${center.lat.toFixed(5)}-${center.lng.toFixed(5)}`}
@@ -198,10 +198,10 @@ export default function MapCheckoutSection({
         </a>
       </p>
 
-      <div className="grid gap-3 p-3">
-        <label className="grid gap-1 text-xs font-semibold text-slate-600">
+      <div className="grid min-w-0 gap-3 p-3">
+        <label className="grid min-w-0 gap-1 text-xs font-semibold text-slate-600">
           {t("address.label")}
-          <span className="relative" ref={suggestRef}>
+          <span className="relative block min-w-0" ref={suggestRef}>
             <MapPin className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
               ref={inputRef}
@@ -221,14 +221,14 @@ export default function MapCheckoutSection({
               }}
               onKeyDown={handleEnter}
               placeholder={t("address.placeholder")}
-              className={`h-12 w-full min-w-0 scroll-mb-40 rounded-xl border bg-white pl-10 pr-14 text-base font-normal outline-none ring-brand/30 focus:ring-2 md:text-sm ${invalid ? "border-red-500" : "border-slate-200"}`}
+              className={`h-12 w-full max-w-full min-w-0 scroll-mb-40 rounded-xl border bg-white pl-10 pr-12 text-base font-normal outline-none ring-brand/30 focus:ring-2 md:text-sm ${invalid ? "border-red-500" : "border-slate-200"}`}
             />
             <button
               type="button"
               onClick={handleLocate}
               disabled={locating}
               aria-label={t("address.mine")}
-              className="absolute right-1 top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-lg bg-brand text-white hover:bg-brand-dark disabled:opacity-60"
+              className="absolute right-1.5 top-1/2 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-lg bg-brand text-white hover:bg-brand-dark disabled:opacity-60"
             >
               {locating ? (
                 <LoaderCircle className="h-4 w-4 animate-spin" />

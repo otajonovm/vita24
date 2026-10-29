@@ -4,9 +4,9 @@
   "private": true,
   "main": "server.js",
   "scripts": {
-    "predev": "node scripts/copy-shared.js",
+    "predev": "node scripts/db-ctl.js start && node scripts/copy-shared.js",
     "dev": "nodemon server.js",
-    "prestart": "node scripts/copy-shared.js",
+    "prestart": "node scripts/db-ctl.js start && node scripts/copy-shared.js",
     "start": "prisma migrate deploy && node server.js",
     "db:generate": "node scripts/prisma-generate.js",
     "postinstall": "node scripts/prisma-generate.js",

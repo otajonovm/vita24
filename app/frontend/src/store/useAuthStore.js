@@ -91,3 +91,4 @@ function createSessionStore(storageKey) {
 export const useAuthStore = createSessionStore("vita24-customer");
 export const usePharmacistAuth = createSessionStore("vita24-pharmacist");
 export const useAdminAuth = createSessionStore("vita24-admin");
+export const useCourierAuth = createSessionStore("vita24-courier");

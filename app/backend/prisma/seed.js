@@ -356,6 +356,27 @@ async function main() {
     },
   });
 
+  const courierHash = await bcrypt.hash("Courier123!", 10);
+  const couriers = [
+    { id: "user-courier-yunusobod", name: "Yunusobod kuryer", phone: "+998901000010", branchId: "branch-yunusobod" },
+    { id: "user-courier-chilonzor", name: "Chilonzor kuryer", phone: "+998901000011", branchId: "branch-chilonzor" },
+    { id: "user-courier-mirzo", name: "Mirzo Ulug'bek kuryer", phone: "+998901000012", branchId: "branch-mirzo-ulugbek" },
+    { id: "user-courier-sergeli", name: "Sergeli kuryer", phone: "+998901000013", branchId: "branch-sergeli" },
+  ];
+  for (const courier of couriers) {
+    await prisma.user.create({
+      data: {
+        id: courier.id,
+        name: courier.name,
+        phone: courier.phone,
+        passwordHash: courierHash,
+        role: "COURIER",
+        status: "ACTIVE",
+        courierBranches: { create: [{ branchId: courier.branchId }] },
+      },
+    });
+  }
+
   await prisma.promoCode.create({
     data: {
       code: "VITA10",
@@ -395,6 +416,7 @@ async function main() {
       paymeEnabled: DEFAULTS.paymeEnabled,
       clickEnabled: DEFAULTS.clickEnabled,
       cashEnabled: DEFAULTS.cashEnabled,
+      cardTerminalEnabled: DEFAULTS.cardTerminalEnabled,
       pickupEnabled: DEFAULTS.pickupEnabled,
       contactPhone: DEFAULTS.contactPhone,
       contactPhoneAlt: DEFAULTS.contactPhoneAlt,
@@ -407,7 +429,7 @@ async function main() {
 
   const rxCount = medicines.filter((item) => item.isPrescription).length;
   console.log(
-    `Vita24 seed yuklandi: ${branches.length} filial, ${categories.length} toifa, ${medicines.length} dori (${rxCount} retseptli), 3 rol, 2 promokod, do'kon sozlamalari`
+    `Vita24 seed yuklandi: ${branches.length} filial, ${categories.length} toifa, ${medicines.length} dori (${rxCount} retseptli), kuryerlar, 2 promokod, do'kon sozlamalari`
   );
 }
 

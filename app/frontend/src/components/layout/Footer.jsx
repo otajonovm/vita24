@@ -77,7 +77,7 @@ export default function Footer() {
   const onCart = pathname === "/cart";
   const onMedicine = pathname.startsWith("/medicine/");
   const clearance = onCart
-    ? "pb-[calc(var(--bottom-nav-h)+4.75rem+var(--tg-safe-bottom,env(safe-area-inset-bottom)))] lg:pb-0"
+    ? "hidden lg:block"
     : onMedicine
       ? "pb-[calc(var(--bottom-nav-h)+4.75rem+var(--tg-safe-bottom,env(safe-area-inset-bottom)))] md:pb-[calc(var(--bottom-nav-h)+var(--tg-safe-bottom,env(safe-area-inset-bottom)))] lg:pb-0"
       : "pb-[calc(var(--bottom-nav-h)+var(--tg-safe-bottom,env(safe-area-inset-bottom)))] lg:pb-0";
@@ -87,7 +87,7 @@ export default function Footer() {
       <div className="mx-auto hidden max-w-7xl grid-cols-4 gap-8 px-6 py-10 lg:grid">
         <div>
           <strong className="text-lg text-white">Vita24</strong>
-          <p className="mt-2 text-sm leading-6 text-[#9cc4b3]">{shop.footerAbout || t("footer.about")}</p>
+          <p className="mt-2 text-sm leading-6 text-[#9cc4b3]">{t("footer.about")}</p>
         </div>
         {sections.map((section) => (
           <div key={section.id}>
@@ -99,28 +99,30 @@ export default function Footer() {
         ))}
       </div>
 
-      <div className="mx-auto max-w-7xl px-4 py-6 lg:hidden">
-        <strong className="text-base text-white">Vita24</strong>
-        <p className="mt-2 text-sm leading-6 text-[#9cc4b3]">{shop.footerShort || t("footer.short")}</p>
-        <div className="mt-4 divide-y divide-white/10 rounded-2xl border border-white/10">
-          {sections.map((section) => {
-            const open = openId === section.id;
-            return (
-              <div key={section.id}>
-                <button
-                  type="button"
-                  onClick={() => setOpenId(open ? "" : section.id)}
-                  className="flex h-12 w-full items-center justify-between px-3 text-left text-sm font-bold text-white"
-                >
-                  {section.title}
-                  <ChevronDown className={`h-4 w-4 transition ${open ? "rotate-180" : ""}`} />
-                </button>
-                {open && <div className="px-3 pb-3">{section.body}</div>}
-              </div>
-            );
-          })}
+      {!onCart && (
+        <div className="mx-auto max-w-7xl px-4 py-6 lg:hidden">
+          <strong className="text-base text-white">Vita24</strong>
+          <p className="mt-2 text-sm leading-6 text-[#9cc4b3]">{t("footer.short")}</p>
+          <div className="mt-4 divide-y divide-white/10 rounded-2xl border border-white/10">
+            {sections.map((section) => {
+              const open = openId === section.id;
+              return (
+                <div key={section.id}>
+                  <button
+                    type="button"
+                    onClick={() => setOpenId(open ? "" : section.id)}
+                    className="flex h-12 w-full items-center justify-between px-3 text-left text-sm font-bold text-white"
+                  >
+                    {section.title}
+                    <ChevronDown className={`h-4 w-4 transition ${open ? "rotate-180" : ""}`} />
+                  </button>
+                  {open && <div className="px-3 pb-3">{section.body}</div>}
+                </div>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      )}
 
       <p className="mx-auto max-w-7xl border-t border-white/10 px-4 py-4 text-sm text-[#9cc4b3] md:px-6">
         {t("footer.rights", { year })}

@@ -21,6 +21,7 @@ export const PAYMENT_LABELS = {
   CASH: "Naqd",
   CLICK: "Click",
   PAYME: "Payme",
+  CARD_TERMINAL: "Karta terminal",
 };
 
 export const STOCK_REASONS = [
@@ -39,6 +40,7 @@ export const ORDER_FILTERS = [
   ["PREPARING", "panel.filters.preparing", "Yig'ilmoqda"],
   ["READY", "panel.filters.ready", "Tayyor"],
   ["DELIVERING", "panel.filters.delivering", "Yetkazilmoqda"],
+  ["failed_delivery", "courier.panel.filterFailed", "Yetkazib bo'lmagan"],
   ["COMPLETED", "panel.filters.done", "Yakunlangan"],
   ["rejected", "panel.filters.rejected", "Rad etilgan"],
   ["cancelled", "panel.filters.cancelled", "Bekor qilingan"],

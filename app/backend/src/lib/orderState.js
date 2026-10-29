@@ -18,12 +18,12 @@ const TRANSITIONS = {
     CANCELLED: ["BRANCH_ADMIN", "SUPER_ADMIN"],
   },
   READY: {
-    DELIVERING: ["BRANCH_ADMIN"],
+    DELIVERING: ["BRANCH_ADMIN", "COURIER"],
     COMPLETED: ["BRANCH_ADMIN"],
     CANCELLED: ["BRANCH_ADMIN", "SUPER_ADMIN"],
   },
   DELIVERING: {
-    COMPLETED: ["BRANCH_ADMIN"],
+    COMPLETED: ["BRANCH_ADMIN", "COURIER"],
     CANCELLED: ["BRANCH_ADMIN", "SUPER_ADMIN"],
   },
 };
@@ -41,36 +41,39 @@ function resolveNextStatus(from, requested) {
 }
 
 function unpaidCash(payment) {
-  return (
-    String(payment?.provider || "").toUpperCase() === "CASH" &&
-    String(payment?.status || "").toUpperCase() !== "COMPLETED"
-  );
+  const provider = String(payment?.provider || "").toUpperCase();
+  if (provider !== "CASH" && provider !== "CARD_TERMINAL") return false;
+  return String(payment?.status || "").toUpperCase() !== "COMPLETED";
 }
 
-function canTransition({ from, to, role, deliveryType, payment }) {
+function canTransition({ from, to, role, deliveryType, payment, userId, courierId, collected }) {
   const next = resolveNextStatus(from, to);
 
-  // Super admin: faqat yakunlanmagan holatdan CANCELLED
+  // Super admin: faqat yakunlanmagan holatdan CANCELLED. Kuryerlar bilan ishlamaydi.
   if (role === "SUPER_ADMIN") {
     if (next !== "CANCELLED") return false;
     if (TERMINAL.has(from)) return false;
     return true;
   }
 
-  if (next === "COMPLETED" && unpaidCash(payment)) return false;
+  if (next === "COMPLETED" && unpaidCash(payment) && !collected) return false;
   if (from === "READY" && next === "COMPLETED" && deliveryType !== "PICKUP") return false;
   if (from === "READY" && next === "DELIVERING" && deliveryType === "PICKUP") return false;
+  if (role === "COURIER") {
+    if (deliveryType === "PICKUP") return false;
+    if (!userId || !courierId || userId !== courierId) return false;
+  }
   const roles = TRANSITIONS[from]?.[next];
   return Boolean(roles && roles.includes(role));
 }
 
-function allowedTransitions({ from, role, deliveryType, payment }) {
+function allowedTransitions({ from, role, deliveryType, payment, userId, courierId, collected }) {
   if (role === "SUPER_ADMIN") {
     return canTransition({ from, to: "CANCELLED", role, deliveryType, payment }) ? ["CANCELLED"] : [];
   }
   const requested = Object.keys(TRANSITIONS[from] || {});
   if (from === "PENDING_PRESCRIPTION" || from === "PENDING_BRANCH") requested.push("REJECTED");
-  return requested.filter((to) => canTransition({ from, to, role, deliveryType, payment }));
+  return requested.filter((to) => canTransition({ from, to, role, deliveryType, payment, userId, courierId, collected }));
 }
 
 function customerCanCancel(from) {

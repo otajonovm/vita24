@@ -80,6 +80,9 @@
   "order.status.completed": "Якунланган",
   "order.status.cashConfirmed": "Тасдиқланган",
   "order.status.unknown": "Буюртма",
+  "order.status.pendingBranch": "Филиал кўригида",
+  "meta.title": "Vita24 — Онлайн дорихона",
+  "meta.description": "Тошкент бўйлаб 24/7 онлайн дорихона. Филиал танланг, дори буюртма қилинг.",
   "order.reserve.review": "Рецепт текширилгунча дорилар 2 соат захирада туради",
   "order.reserve.payment": "Тўловга 15 дақиқа вақтингиз бор",
   "order.pay.cashDue": "Нақд пул · Етказилганда тўланади",
@@ -193,7 +196,8 @@
   "header": {
     "brand": "Онлайн дорихона",
     "home": "Vita24 бош саҳифа",
-    "branch": "Филиал"
+    "branch": "Филиал",
+    "branchHint": "Дори мавжудлиги ва олиб кетиш шу филиал бўйича"
   },
   "footer": {
     "contact": "24/7 алоқа",
@@ -228,7 +232,10 @@
     "emptyCategory": "Бу каталогда дорилар топилмади",
     "emptyBranch": "Бу филиал омборида ҳозирча дори йўқ",
     "defaultBranch": "Асосий филиал кўрсатилмоқда. Бошқа филиални танлаш",
-    "loadFailed": "Дорилар юкланмади"
+    "loadFailed": "Дорилар юкланмади",
+    "allMedicines": "Барча дорилар",
+    "heroTitle": "Vita24 — онлайн дорихона. Буюртма беринг, етказиб берамиз ёки филиалдан олиб кетинг.",
+    "heroSteps": "Дорини топинг → Саватчага қўшинг → Етказиб бериш ёки олиб кетишни танланг"
   },
   "catalog": {
     "title": "Каталог",
@@ -238,11 +245,13 @@
       "stock": "Омборда борлар",
       "cheap": "Нарх: арзон",
       "expensive": "Нарх: қиммат",
-      "name": "Ном"
+      "name": "Ном",
+      "popular": "Машҳурлик"
     },
     "empty": "Бу каталогда дорилар топилмади.",
     "more": "Яна кўрсатиш",
-    "loadFailed": "Каталог юкланмади"
+    "loadFailed": "Каталог юкланмади",
+    "inStockOnly": "Фақат мавжудлар"
   },
   "medicine": {
     "missing": "Дори топилмади",
@@ -272,7 +281,13 @@
     "favOn": "Севимлиларга қўшилди",
     "favOff": "Севимлилардан олинди",
     "decrease": "Камайтириш",
-    "increase": "Кўпайтириш"
+    "increase": "Кўпайтириш",
+    "packValue": "{{count}} {{unit}}",
+    "unitPiece": "дона",
+    "unitCapsule": "капсула",
+    "unitTablet": "таблетка",
+    "low": "Кам қолди",
+    "rxNote": "Рецепт суратини саватчада юклайсиз — фармацевт текшириб тасдиқлайди"
   },
   "favorites": {
     "title": "Севимлилар",
@@ -297,7 +312,7 @@
     "other": "Тоифа"
   },
   "cart": {
-    "title": "Етказиб бериш манзили ва расмийлаштириш",
+    "title": "Саватча",
     "empty": "Саватча бўш",
     "emptyHint": "Керакли дориларни каталогдан қўшинг.",
     "browse": "Дориларни кўриш",
@@ -376,7 +391,15 @@
     "apt": "Квартира",
     "floor": "Қават",
     "intercom": "Домофон",
-    "title": "Манзил"
+    "title": "Манзил",
+    "aptPh": "Квартира (ихтиёрий)",
+    "entrance": "Подъезд",
+    "entrancePh": "Подъезд",
+    "floorPh": "Қават",
+    "landmark": "Мўлжал",
+    "landmarkPh": "Мўлжал",
+    "intercomPh": "Домофон (ихтиёрий)",
+    "mapCredit": "Харита: OpenStreetMap"
   },
   "rx": {
     "title": "Рецептни юкланг",
@@ -422,7 +445,12 @@
     "codeFailed": "Код юборилмади",
     "codeWrong": "Код нотўғри",
     "nameRequired": "Исм-фамилияни киритинг",
-    "saveFailed": "Сақланмади"
+    "saveFailed": "Сақланмади",
+    "phoneIncomplete": "Телефон рақамини тўлиқ киритинг",
+    "botTarget": "Код Telegramдаги @{{bot}} ботига юборилади",
+    "botTargetPlain": "Код Telegram ботига юборилади",
+    "botStart": "Аввал ботни очинг ва /start босинг",
+    "codeSentWait": "Код юборилди. 1 дақиқадан сўнг қайта сўраш мумкин"
   },
   "profile": {
     "kicker": "Шахсий кабинет",
@@ -470,7 +498,8 @@
     "saveFailed": "Сақлашда хатолик юз берди",
     "addressSaved": "Манзил сақланди",
     "addressFailed": "Манзилни сақлашда хатолик",
-    "extra": "Қўшимча манзил {{n}}"
+    "extra": "Қўшимча манзил {{n}}",
+    "logoutConfirm": "Тизимдан чиқасизми?"
   },
   "orders": {
     "loadFailed": "Буюртмалар юкланмади"
@@ -551,7 +580,21 @@
     "confirm": "Тасдиқлаш",
     "retry": "Қайта уриниш",
     "refresh": "Янгилаш",
-    "search": "Қидириш",
+    "search": {
+      "title": "Қидирув ва синонимлар",
+      "hint": "Натижасиз сўровни синоним қилиб қўшиш мумкин. 90 кундан эски журнал ўчади.",
+      "top": "Энг кўп қидирилганлар",
+      "zero": "Натижасиз қидирувлар",
+      "conversion": "Қидирувдан саватга",
+      "addSynonym": "Синоним сифатида қўшиш",
+      "term": "Сўз",
+      "canonical": "Асосий ном",
+      "type": "Тури",
+      "save": "Сақлаш",
+      "edit": "Таҳрирлаш",
+      "delete": "Ўчириш",
+      "empty": "Ҳали ёзув йўқ"
+    },
     "sort": "Саралаш",
     "sortNewest": "Аввал янгилари",
     "sortOldest": "Аввал эскилари",
@@ -574,7 +617,11 @@
     "branchHint": "Манзил, иш вақти, харита ва LEKKO калити.",
     "branchFilterCurrent": "Архивдан ташқари",
     "archivedStatus": "Архив",
-    "branchStatus": { "active": "Фаол", "inactive": "Нофаол", "archived": "Архив" },
+    "branchStatus": {
+      "active": "Фаол",
+      "inactive": "Нофаол",
+      "archived": "Архив"
+    },
     "pharmacists": "Фармацевтлар",
     "todayOrders": "Бугунги буюртма",
     "todayRevenue": "Бугунги тушум",
@@ -601,7 +648,15 @@
     "mapPoint": "Харитадаги нуқта",
     "mapHint": "Харитани босинг, нуқта шу ерга тушади",
     "radius": "Етказиш радиуси, км",
-    "days": { "mon": "Душ", "tue": "Сеш", "wed": "Чор", "thu": "Пай", "fri": "Жума", "sat": "Шан", "sun": "Як" },
+    "days": {
+      "mon": "Душ",
+      "tue": "Сеш",
+      "wed": "Чор",
+      "thu": "Пай",
+      "fri": "Жума",
+      "sat": "Шан",
+      "sun": "Як"
+    },
     "phone": "Телефон",
     "password": "Парол",
     "loginTitle": "Супер админ кириши",
@@ -610,11 +665,19 @@
     "checking": "Текширилмоқда...",
     "loginFailed": "Кириш амалга ошмади",
     "superOnly": "Фақат супер-админ кира олади",
-    "role": { "SUPER_ADMIN": "Супер админ", "BRANCH_ADMIN": "Фармацевт", "MANAGER": "Менежер", "CUSTOMER": "Мижоз" },
+    "role": {
+      "SUPER_ADMIN": "Супер админ",
+      "BRANCH_ADMIN": "Фармацевт",
+      "MANAGER": "Менежер",
+      "CUSTOMER": "Мижоз"
+    },
     "colRole": "Рол",
     "allRoles": "Барча роллар",
     "lastLogin": "Охирги кириш",
-    "userStatus": { "ACTIVE": "Фаол", "SUSPENDED": "Тўхтатилган" },
+    "userStatus": {
+      "ACTIVE": "Фаол",
+      "SUSPENDED": "Тўхтатилган"
+    },
     "staffHint": "Фармацевт ва менежер ҳисоблари.",
     "newStaff": "Янги ходим",
     "editStaff": "Ходимни таҳрирлаш",
@@ -654,21 +717,6 @@
       "settings": "Созламалар",
       "audit": "Аудит журнали"
     },
-    "search": {
-      "title": "Қидирув ва синонимлар",
-      "hint": "Натижасиз сўровни синоним қилиб қўшиш мумкин. 90 кундан эски журнал ўчади.",
-      "top": "Энг кўп қидирилганлар",
-      "zero": "Натижасиз қидирувлар",
-      "conversion": "Қидирувдан саватга",
-      "addSynonym": "Синоним сифатида қўшиш",
-      "term": "Сўз",
-      "canonical": "Асосий ном",
-      "type": "Тури",
-      "save": "Сақлаш",
-      "edit": "Таҳрирлаш",
-      "delete": "Ўчириш",
-      "empty": "Ҳали ёзув йўқ"
-    },
     "validation": {
       "required": "Бу майдонни тўлдиринг",
       "password": "Парол камида 6 та белги",
@@ -687,7 +735,10 @@
       "CANCELLED": "Бекор қилинган",
       "REJECTED": "Рад этилган"
     },
-    "refund": { "PENDING": "Кутилмоқда", "DONE": "Қайтарилган" },
+    "refund": {
+      "PENDING": "Кутилмоқда",
+      "DONE": "Қайтарилган"
+    },
     "dashboardTitle": "Бошқарув",
     "dashboardHint": "Филиаллар, буюртмалар ва ходимлар бўйича қисқа ҳолат.",
     "uncovered": "Фармацевти йўқ филиаллар: {{names}}. Рецептлар супер админ навбатида қолади.",
@@ -703,7 +754,10 @@
     "colSpent": "Умумий харид",
     "colLastOrder": "Охирги буюртма",
     "openCard": "Карта",
-    "customerStatus": { "ACTIVE": "Фаол", "SUSPENDED": "Блокланган" },
+    "customerStatus": {
+      "ACTIVE": "Фаол",
+      "SUSPENDED": "Блокланган"
+    },
     "block": "Блоклаш",
     "unblock": "Блокдан чиқариш",
     "blockHint": "Сабаб ёзилади. Блокланган мижоз буюртма бера олмайди.",
@@ -714,14 +768,25 @@
     "noCustomerOrders": "Буюртма йўқ",
     "addresses": "Манзиллар",
     "noAddresses": "Манзил йўқ",
-    "addressSource": { "primary": "Асосий", "saved": "Сақланган", "order": "Буюртмадан" },
+    "addressSource": {
+      "primary": "Асосий",
+      "saved": "Сақланган",
+      "order": "Буюртмадан"
+    },
     "noPrescriptions": "Рецепт йўқ",
-    "rxStatus": { "PENDING": "Кутилмоқда", "APPROVED": "Тасдиқланган", "REJECTED": "Рад этилган" },
+    "rxStatus": {
+      "PENDING": "Кутилмоқда",
+      "APPROVED": "Тасдиқланган",
+      "REJECTED": "Рад этилган"
+    },
     "promoUse": "Промокодлар",
     "noPromos": "Промокод ишлатилмаган",
     "blockHistory": "Блоклаш тарихи",
     "noBlockHistory": "Блоклаш ёзуви йўқ",
-    "blockAction": { "BLOCK": "Блокланди", "UNBLOCK": "Блокдан чиқарилди" },
+    "blockAction": {
+      "BLOCK": "Блокланди",
+      "UNBLOCK": "Блокдан чиқарилди"
+    },
     "promosEmpty": "Промокодлар йўқ",
     "promosEmptyBody": "Янги промокод қўшинг.",
     "promoHint": "Код, чегирма, муддат, лимит ва филиаллар.",
@@ -922,9 +987,21 @@
     "allPaymentStatuses": "Барча тўлов ҳолатлари",
     "deliveryType": "Етказиш",
     "allDeliveries": "Барча етказишлар",
-    "pay": { "CASH": "Нақд", "CLICK": "Click", "PAYME": "Payme", "MOCK": "Синов" },
-    "payState": { "PENDING": "Кутилмоқда", "COMPLETED": "Тўланган", "FAILED": "Муваффақиятсиз" },
-    "delivery": { "DELIVERY": "Етказиб бериш", "PICKUP": "Олиб кетиш" },
+    "pay": {
+      "CASH": "Нақд",
+      "CLICK": "Click",
+      "PAYME": "Payme",
+      "MOCK": "Синов"
+    },
+    "payState": {
+      "PENDING": "Кутилмоқда",
+      "COMPLETED": "Тўланган",
+      "FAILED": "Муваффақиятсиз"
+    },
+    "delivery": {
+      "DELIVERY": "Етказиб бериш",
+      "PICKUP": "Олиб кетиш"
+    },
     "customer": "Мижоз",
     "amounts": "Сумма",
     "medicines": "Дорилар",
@@ -953,7 +1030,6 @@
     "transactionId": "Транзакция рақами",
     "transactionRequired": "Транзакция рақамини киритинг",
     "refundDone": "Пул қайтарилди деб белгиланди",
-    "cancel": "Бекор қилиш",
     "actor": "Бажарувчи",
     "action": "Амал",
     "summary": "Тафсилот",
@@ -1069,7 +1145,90 @@
       "export": "Ҳисоботни юклаб олиш",
       "exportFailed": "Ҳисобот юкланмади",
       "medicines": "Дорилар",
-      "errorCol": "Хато"
-    }
+      "errorCol": "Хато",
+      "insufficientData": "Маълумот етарли эмас"
+    },
+    "basePriceHint": "Сотув нархи филиал бўйича Lekko’dan олинади",
+    "thresholdTooltip": "Бу қийматдан кам қолдиқ огоҳлантириш сифатида кўрсатилади",
+    "lekkoNeedKey": "Аввал Lekko калитини киритинг",
+    "twoFaBanner": "Хавфсизлик учун 2FA’ни ёқинг",
+    "auditStaffOnly": "Фақат ходим амаллари",
+    "branchHasStaff": "Филиалда фармацевтлар бор: {{names}}. Аввал уларни бошқа филиалга ўтказинг ёки амални бекор қилинг.",
+    "cancelOrder": "Буюртмани бекор қилиш",
+    "cancelRefundWarn": "Тўлов қилинган. Бекор қилинса {{amount}} қайтариш яратилади.",
+    "pharmacistNote": "Фармацевт изоҳи",
+    "adminNote": "Админ изоҳи",
+    "rxPlatformHint": "Платформа бўйича рецепт навбати (фақат кўриш). Фармацевт назорати эмас.",
+    "rxQueueCount": "Навбатдаги",
+    "rxAvgWait": "Ўртача кутиш",
+    "rxByBranch": "Филиал бўйича",
+    "rxLongWaitSignal": "{{count}} та буюртма узоқ кутмоқда — бу платформа муаммоси"
+  },
+  "orders.active": "Фаол",
+  "orders.history": "Тарих",
+  "orders.tabEmpty": "Бу бўлимда буюртма йўқ",
+  "orders.moreItems": "ва яна {{count}} та",
+  "order.pay.cashPickup": "Нақд пул филиалда, олиб кетаётганда тўланади",
+  "order.next.review": "Фармацевт рецептни текширади",
+  "order.next.pay": "Тўловни амалга оширинг",
+  "order.next.cashWait": "Нақд пул етказилганда олинади",
+  "order.next.paid": "Буюртма қабул қилинди",
+  "order.next.preparing": "Тайёр бўлганда хабар берамиз",
+  "order.next.readyPickup": "Филиалга келиб олишингиз мумкин",
+  "order.next.readyDelivery": "Курьер тез орада йўлга чиқади",
+  "order.next.delivering": "Курьер йўлда",
+  "order.next.label": "Кейинги қадам",
+  "order.pickupAddress": "Олиб кетиш манзили: {{place}}",
+  "order.hours": "Иш вақти",
+  "order.phone": "Телефон",
+  "order.reorderRx": "Янги рецепт билан қайта буюртма",
+  "order.rejectReason": "Сабаб",
+  "promo.rxAction": "Рецепт юклаш",
+  "cart.checkout": "Расмийлаштириш",
+  "cart.uploadingRx": "Рецепт юкланмоқда... ({{percent}}%)",
+  "cart.creatingOrder": "Буюртма яратилмоқда...",
+  "cart.stockChecking": "Қолдиқ текширилмоқда...",
+  "cart.stockCheckFailed": "Қолдиқни текшириб бўлмади",
+  "cart.holdCashPickup": "Нақд пул филиалда, олиб кетаётганда тўланади",
+  "cart.pickupFree": "Олиб кетиш — бепул",
+  "cart.rxBadge": "Рецепт керак",
+  "cart.rxFor": "Рецепт шу дорилар учун: {{names}}",
+  "cart.lowStock": "Кам қолди",
+  "cart.removed": "Ўчирилди",
+  "cart.undo": "Қайтариш",
+  "cart.clear": "Саватни тозалаш",
+  "cart.clearConfirm": "Саватчадаги барча дорилар ўчирилсинми?",
+  "cart.promoLogin": "Промокод ишлатиш учун тизимга киринг",
+  "courier": {
+    "stage": {
+      "assigned": "Курерга берилди",
+      "enRoute": "Йўлда",
+      "delivered": "Етказилди",
+      "failed": "Етказиб бўлмади"
+    },
+    "next": {
+      "assigned": "Курер буюртмани олади",
+      "enRoute": "Курер йўлда",
+      "failed": "Филиал қайта бириктиради ёки бекор қилади"
+    },
+    "customer": { "courier": "Курер", "call": "Қўнғироқ қилиш" },
+    "pay": {
+      "cash": "НАҚД {{amount}}",
+      "terminal": "КАРТА ТЕРМИНАЛ",
+      "prepaid": "ТЎЛАНГАН",
+      "cardTerminal": "Курерга карта билан",
+      "terminalDue": "Карта терминал, етказилганда"
+    },
+    "settings": { "cardTerminal": "Курерга карта терминал" },
+    "tab": { "active": "Фаол", "history": "Тарих", "couriers": "Курерлар", "handovers": "Касса топшириш" },
+    "shift": { "cash": "Қўлдаги нақд", "card": "Картадан", "unhanded": "Топширилмаган", "delivered": "Бугун етказилган", "handover": "Топшириш" },
+    "card": { "call": "Қўнғироқ қилиш", "yandex": "Яндекс харита", "google": "Google харита", "pickup": "Олдим", "deliver": "Етказилди", "fail": "Етказиб бўлмади" },
+    "deliver": { "title": "Етказилди", "amount": "Олинган сумма", "receipt": "Чек берилди", "photo": "Чек расми", "confirm": "Тасдиқлаш", "prepaidHint": "Тўлов олдин қилинган" },
+    "fail": { "title": "Етказиб бўлмади", "note": "Изоҳ", "submit": "Юбориш", "NO_ANSWER": "Мижоз жавоб бермади", "ADDRESS_NOT_FOUND": "Манзил топилмади", "CUSTOMER_REJECTED": "Мижоз рад этди", "OTHER": "Бошқа" },
+    "login": { "title": "Курер", "hint": "Телефон ва парол билан киринг", "submit": "Кириш", "failed": "Кириш амалга ошмади", "staffOnly": "Бу ҳисоб курер эмас" },
+    "logout": "Чиқиш",
+    "empty": "Буюртма йўқ",
+    "loadFailed": "Юклаб бўлмади",
+    "panel": { "add": "Курер қўшиш", "name": "Исм", "phone": "Телефон", "password": "Парол", "active": "Фаол", "inactive": "Нофаол", "saved": "Сақланди", "assign": "Курер", "none": "Бириктирилмаган", "today": "Бугун", "confirm": "Тасдиқлаш", "dispute": "Эътироз", "filterFailed": "Етказиб бўлмаган", "receiptCourier": "Курер", "handoverEmpty": "Топшириш сўрови йўқ", "courierEmpty": "Курер йўқ", "difference": "Фарқ: {{amount}}" }
   }
 }

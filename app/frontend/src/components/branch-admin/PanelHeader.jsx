@@ -27,6 +27,12 @@ export default function PanelHeader({
     ["orders", t("panel.orders", "Buyurtmalar")],
     ["stock", t("panel.stock", "Ombor")],
     ["stats", t("panel.stats", "Statistika")],
+    ...(!readOnly
+      ? [
+          ["couriers", t("courier.tab.couriers")],
+          ["handovers", t("courier.tab.handovers")],
+        ]
+      : []),
   ];
 
   return (

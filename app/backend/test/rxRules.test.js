@@ -23,6 +23,24 @@ test("sinxron MANUAL true ni false qilmaydi", () => {
   assert.equal(Object.prototype.hasOwnProperty.call(patch, "isPrescription"), false);
 });
 
+test("hali belgilanmagan Lekko dori qoidadan o'tadi", () => {
+  const product = mapProduct({
+    id: 3,
+    name: "амоксициллин таб. 500мг №20",
+    form: "таб.",
+    dose: "500мг",
+  });
+  const { patch, decision } = prescriptionPatch(product, {
+    isPrescription: false,
+    rxSource: null,
+    name: product.name,
+    dosageForm: product.dosageForm,
+  });
+  assert.equal(decision.write, true);
+  assert.equal(patch.isPrescription, true);
+  assert.equal(patch.rxSource, "RULE");
+});
+
 test("Lekko Rx bermasa update mavjud qiymatni saqlaydi", () => {
   const product = mapProduct({
     id: 2,

@@ -31,6 +31,7 @@ const { reclaimPromo, releasePromo } = require("../lib/promo");
 const { writeAudit } = require("../lib/audit");
 const { formatWorkingHours } = require("../lib/branchProfile");
 const { applyOrderStatusChange } = require("../services/orderStatusService");
+const { assignOrderCourier } = require("../services/courierService");
 
 const REVIEW_STATUSES = ["PENDING_PRESCRIPTION", "PENDING_BRANCH"];
 const PAID_LIKE = ["PAID", "PREPARING", "READY", "DELIVERING", "COMPLETED"];
@@ -47,6 +48,7 @@ const orderInclude = {
   },
   prescription: true,
   payment: true,
+  courier: { select: { id: true, name: true, phone: true, status: true } },
   user: { select: { id: true, name: true, phone: true, role: true } },
   history: { orderBy: { createdAt: "desc" }, take: 30 },
 };
@@ -168,6 +170,15 @@ function serializeBranchOrder(order, viewerId) {
       createdAt: row.createdAt,
     })),
     cancelReason: rejectNote || cancelNote,
+    courierId: order.courierId || null,
+    courierStage: order.courierStage || "UNASSIGNED",
+    assignedAt: order.assignedAt || null,
+    pickedUpAt: order.pickedUpAt || null,
+    deliveredAt: order.deliveredAt || null,
+    deliveryFailReason: order.deliveryFailReason || null,
+    courier: order.courier
+      ? { id: order.courier.id, name: order.courier.name, phone: order.courier.phone, status: order.courier.status }
+      : null,
   };
 }
 
@@ -273,6 +284,9 @@ function withStatus(where, status) {
     next.AND.push({
       OR: [{ prescription: null }, { prescription: { status: { not: "REJECTED" } } }],
     });
+  } else if (status === "failed_delivery") {
+    next.status = "READY";
+    next.courierStage = "FAILED";
   } else {
     next.status = status;
   }
@@ -290,13 +304,17 @@ async function statusCounts(where) {
     where: { ...where, status: "CANCELLED", prescription: { status: "REJECTED" } },
   });
   const cancelledAll = byStatus.CANCELLED || 0;
+  const failedDelivery = await prisma.order.count({
+    where: { ...where, status: "READY", courierStage: "FAILED" },
+  });
   return {
     all: grouped.reduce((sum, row) => sum + row._count._all, 0),
     review: (byStatus.PENDING_PRESCRIPTION || 0) + (byStatus.PENDING_BRANCH || 0),
     WAITING_PAYMENT: byStatus.WAITING_PAYMENT || 0,
     PAID: byStatus.PAID || 0,
     PREPARING: byStatus.PREPARING || 0,
-    READY: byStatus.READY || 0,
+    READY: Math.max((byStatus.READY || 0) - failedDelivery, 0),
+    failed_delivery: failedDelivery,
     DELIVERING: byStatus.DELIVERING || 0,
     COMPLETED: byStatus.COMPLETED || 0,
     rejected,
@@ -421,7 +439,8 @@ const verifyPrescription = asyncHandler(async (req, res) => {
     }
 
     // Retsept yo'li — to'g'ridan-to'g'ri status API orqali emas
-    const cash = String(current.payment?.provider || "").toUpperCase() === "CASH";
+    const payLater = ["CASH", "CARD_TERMINAL"].includes(String(current.payment?.provider || "").toUpperCase());
+    const cash = payLater;
     const nextStatus = approved ? (cash ? "PREPARING" : "WAITING_PAYMENT") : "CANCELLED";
     const reopening = current.status === "CANCELLED";
 
@@ -1116,7 +1135,8 @@ const shiftReport = asyncHandler(async (req, res) => {
     if (order.refundStatus === "PENDING" || order.refundStatus === "DONE") refunds += 1;
     if (PAID_LIKE.includes(order.status)) {
       const amount = settledTotals(order).totalAmount;
-      const cash = String(order.payment?.provider || "").toUpperCase() === "CASH";
+      const provider = String(order.payment?.provider || "").toUpperCase();
+      const cash = provider === "CASH" || provider === "CARD_TERMINAL";
       if (cash) {
         if (order.payment?.status === "COMPLETED") cashRevenue += amount;
       } else {
@@ -1179,6 +1199,16 @@ const setBranchOpen = asyncHandler(async (req, res) => {
   return sendSuccess(res, publicBranch(updated), updated.isOpen ? "Filial ochiq" : "Filial yopiq");
 });
 
+const assignCourier = asyncHandler(async (req, res) => {
+  const updated = await assignOrderCourier({
+    orderId: req.params.id,
+    courierId: req.body.courierId,
+    user: req.user,
+    req,
+  });
+  return sendSuccess(res, serializeBranchOrder(updated, req.user.id), "Kuryer biriktirildi");
+});
+
 const streamEvents = asyncHandler(async (req, res) => {
   const scopedBranchId = assertBranchAccess(req, req.query.branchId);
   const branch = await requireActiveBranch(scopedBranchId || req.query.branchId);
@@ -1216,4 +1246,6 @@ module.exports = {
   shiftReport,
   setBranchOpen,
   streamEvents,
+  assignCourier,
+  serializeBranchOrder,
 };

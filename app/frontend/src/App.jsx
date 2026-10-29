@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { BrowserRouter, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { isTelegramFormField, setTelegramClosingConfirmation, syncTelegramBackButton } from "./lib/telegram";
 import { useCartStore } from "./store/useCartStore";
@@ -22,6 +23,7 @@ import ProfilePage from "./pages/ProfilePage";
 
 const BranchAdminPage = lazy(() => import("./pages/BranchAdminPage"));
 const SuperAdminPage = lazy(() => import("./pages/SuperAdminPage"));
+const CourierPage = lazy(() => import("./pages/CourierPage"));
 
 function TelegramBridge() {
   const location = useLocation();
@@ -31,7 +33,8 @@ function TelegramBridge() {
     const inner =
       location.pathname !== "/" &&
       !location.pathname.startsWith("/admin") &&
-      !location.pathname.startsWith("/branch-admin");
+      !location.pathname.startsWith("/branch-admin") &&
+      !location.pathname.startsWith("/courier");
     return syncTelegramBackButton(inner, () => navigate(-1));
   }, [location.pathname, navigate]);
 
@@ -113,16 +116,18 @@ function StoreToasts() {
 }
 
 function AppRoutes() {
+  const { t } = useTranslation();
   const location = useLocation();
   const isPharmacist = location.pathname.startsWith("/branch-admin");
   const isAdmin = location.pathname.startsWith("/admin");
-  const Shell = isPharmacist ? PharmacistShell : isAdmin ? AdminShell : StorefrontShell;
+  const isCourier = location.pathname.startsWith("/courier");
+  const Shell = isPharmacist || isCourier ? PharmacistShell : isAdmin ? AdminShell : StorefrontShell;
 
   return (
     <Shell>
       <PageMeta
-        title="Vita24 — Onlayn dorixona"
-        description="Toshkent bo'ylab 24/7 onlayn dorixona. Filial tanlang, dori buyurtma qiling."
+        title={t("meta.title")}
+        description={t("meta.description")}
         path={location.pathname}
       />
       <Suspense fallback={<SkeletonPage />}>
@@ -137,6 +142,14 @@ function AppRoutes() {
           <Route path="/orders/:id" element={<OrderDetailPage />} />
           <Route path="/terms" element={<LegalPage kind="terms" />} />
           <Route path="/privacy" element={<LegalPage kind="privacy" />} />
+          <Route
+            path="/courier"
+            element={
+              <ProtectedRoute role="COURIER">
+                <CourierPage />
+              </ProtectedRoute>
+            }
+          />
           <Route
             path="/branch-admin"
             element={
@@ -156,7 +169,7 @@ function AppRoutes() {
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </Suspense>
-      {!isAdmin && !isPharmacist && <StoreToasts />}
+      {!isAdmin && !isPharmacist && !isCourier && <StoreToasts />}
       <TelegramBridge />
     </Shell>
   );
