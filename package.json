@@ -10,7 +10,8 @@
     "dev:frontend": "npm run dev --prefix app/frontend",
     "start": "npm run start --prefix app/backend",
     "start:frontend": "npm run preview --prefix app/frontend",
-    "build": "npm run build --prefix app/frontend",
+    "build": "npm install --prefix app/backend",
+    "build:frontend": "npm run build --prefix app/frontend",
     "seed:orders": "npm run seed:orders --prefix app/backend"
   },
   "devDependencies": {
