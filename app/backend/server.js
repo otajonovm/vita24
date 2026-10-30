@@ -40,11 +40,41 @@ app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 app.use("/uploads", express.static(dataPath("public", "uploads")));
 
 app.get("/api/health", async (_req, res) => {
+  const version =
+    process.env.RAILWAY_GIT_COMMIT_SHA ||
+    process.env.COMMIT_SHA ||
+    process.env.npm_package_version ||
+    "dev";
   try {
     await prisma.$queryRaw`SELECT 1`;
-    return sendSuccess(res, { status: "ok", database: "connected" }, "API ishlayapti");
-  } catch {
-    return sendSuccess(res, { status: "ok", database: "disconnected" }, "API ishlayapti");
+    const [searchTextEmpty, synonyms] = await Promise.all([
+      prisma.medicine.count({ where: { searchText: "" } }),
+      prisma.searchSynonym.count(),
+    ]);
+    return sendSuccess(
+      res,
+      {
+        status: "ok",
+        version,
+        database: "connected",
+        searchTextEmpty,
+        synonyms,
+      },
+      "API ishlayapti"
+    );
+  } catch (err) {
+    return sendSuccess(
+      res,
+      {
+        status: "ok",
+        version,
+        database: "disconnected",
+        searchTextEmpty: -1,
+        synonyms: 0,
+        error: err.message,
+      },
+      "API ishlayapti"
+    );
   }
 });
 
@@ -155,6 +185,13 @@ encryptStoredLekkoKeys()
           });
       } catch (error) {
         console.error("[telegram] Bot ishga tushmadi:", error.message);
+      }
+      try {
+        require("./scripts/ensure-search")
+          .ensureSearch()
+          .catch((error) => console.error("[ensure-search] Xatolik:", error.message));
+      } catch (error) {
+        console.error("[ensure-search] Yuklanmadi:", error.message);
       }
     });
   });

@@ -109,6 +109,15 @@ function scoreRow(row, query) {
     }
   }
 
+  const actNorm = row.activeIngredient ? normalizeSearch(row.activeIngredient) : "";
+  if (score < 60 && query.normalized && actNorm && actNorm.includes(query.normalized)) {
+    score = 60;
+    if (matchGroup === "name") {
+      matchReason = "Ta'sir etuvchi modda: " + row.activeIngredient;
+      matchGroup = "ingredient";
+    }
+  }
+
   const similarity = Number(row.similarity || 0);
   const fuzzy = similarity > 0.35 ? 40 * similarity : 0;
   if (fuzzy > score) {
@@ -165,6 +174,16 @@ async function findCandidates(query, { categoryId, featured, includeInactive, in
     query.normalized.length >= 3
       ? Prisma.sql`OR ${query.normalized}::text <% m."searchText"`
       : Prisma.empty;
+
+  const rawTerm = String(query.raw || "").trim();
+  const rawLike = rawTerm ? `%${escapeLike(rawTerm)}%` : null;
+  const normLike = query.normalized ? `%${escapeLike(query.normalized)}%` : null;
+  const fallbackCond = rawLike
+    ? Prisma.sql`(m.name ILIKE ${rawLike} ESCAPE ${"\\"} OR COALESCE(m."activeIngredient", '') ILIKE ${rawLike} ESCAPE ${"\\"})`
+    : normLike
+      ? Prisma.sql`(m.name ILIKE ${normLike} ESCAPE ${"\\"} OR COALESCE(m."activeIngredient", '') ILIKE ${normLike} ESCAPE ${"\\"})`
+      : Prisma.empty;
+  const fallbackSql = fallbackCond !== Prisma.empty ? Prisma.sql`OR ${fallbackCond}` : Prisma.empty;
   const doseSql = query.numbers.length && !query.normalized
     ? Prisma.sql`OR (${Prisma.join(
         query.numbers.map((number) => Prisma.sql`COALESCE(m.dosage, '') ILIKE ${`%${escapeLike(number)}%`}`),
@@ -186,20 +205,29 @@ async function findCandidates(query, { categoryId, featured, includeInactive, in
         m.id,
         m.name,
         m.dosage,
+        COALESCE(m."activeIngredient", '') AS "activeIngredient",
         m."searchText" AS "searchText",
-        word_similarity(${query.normalized}, m."searchText") AS similarity
+        GREATEST(
+          word_similarity(${query.normalized}, m."searchText"),
+          word_similarity(${query.normalized}, m.name)
+        ) AS similarity
       FROM "Medicine" m
       WHERE (
         ${likeSql}
         ${trigramSql}
         ${doseSql}
+        ${fallbackSql}
       )
       ${activeSql}
       ${categorySql}
       ${featuredSql}
       ORDER BY
         CASE WHEN (${likeSql}) THEN 1 ELSE 0 END DESC,
-        word_similarity(${query.normalized}, m."searchText") DESC
+        CASE WHEN (${fallbackCond !== Prisma.empty ? fallbackCond : Prisma.sql`FALSE`}) THEN 1 ELSE 0 END DESC,
+        GREATEST(
+          word_similarity(${query.normalized}, m."searchText"),
+          word_similarity(${query.normalized}, m.name)
+        ) DESC
       LIMIT ${CANDIDATE_LIMIT}
     `;
   });

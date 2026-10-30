@@ -20,6 +20,7 @@
     "db:search-backfill": "node scripts/backfill-search-text.js",
     "rx:backfill": "node scripts/rx-backfill.cjs",
     "db:search-synonyms": "node scripts/seed-search-synonyms.js",
+    "db:search-ensure": "node scripts/ensure-search.js",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate deploy",
     "db:migrate:dev": "prisma migrate dev",

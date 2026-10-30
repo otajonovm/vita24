@@ -1,15 +1,19 @@
 const prisma = require("../src/lib/prisma");
 const { buildSearchText } = require("../src/lib/searchText");
 
+const BATCH_SIZE = 200;
+
 async function main() {
   const total = await prisma.medicine.count();
-  let skip = 0;
+  let cursor = null;
   let updated = 0;
-  const take = 200;
-  while (skip < total) {
+
+  console.log(`[backfill-search-text] Jami ${total} ta dori yangilanadi...`);
+
+  while (true) {
     const rows = await prisma.medicine.findMany({
-      skip,
-      take,
+      take: BATCH_SIZE,
+      ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
       orderBy: { id: "asc" },
       select: {
         id: true,
@@ -20,18 +24,24 @@ async function main() {
         description: true,
       },
     });
+
     if (!rows.length) break;
-    for (const row of rows) {
-      await prisma.medicine.update({
-        where: { id: row.id },
-        data: { searchText: buildSearchText(row) },
-      });
-      updated += 1;
-    }
-    skip += rows.length;
-    console.log(`${updated}/${total}`);
+
+    await prisma.$transaction(
+      rows.map((row) =>
+        prisma.medicine.update({
+          where: { id: row.id },
+          data: { searchText: buildSearchText(row) },
+        })
+      )
+    );
+
+    updated += rows.length;
+    cursor = rows[rows.length - 1].id;
+    console.log(`[backfill-search-text] ${updated}/${total}`);
   }
-  console.log(`searchText yangilandi: ${updated}`);
+
+  console.log(`[backfill-search-text] Barcha ${updated} ta dori muvaffaqiyatli yangilandi.`);
   await prisma.$disconnect();
 }
 
