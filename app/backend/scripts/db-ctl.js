@@ -11,6 +11,7 @@ const pgCtl = path.join(binDir, pgCtlName);
 const action = process.argv[2];
 
 if (!fs.existsSync(pgCtl)) {
+  if (process.env.NODE_ENV === 'production' || process.env.RAILWAY_ENVIRONMENT) process.exit(0);
   console.error(
     "Lokal PostgreSQL topilmadi. Windowsda app/backend/.postgres/pgsql kerak. " +
       "Docker bo'lsa: npm run db:up"
