@@ -49,3 +49,4 @@ test("bo'sh searchText bo'lganda ham fallback orqali qidiruv natija qaytaradi", 
   const foundByIng = byIngredient.hits.some((h) => h.id === created.id);
   assert.ok(foundByIng, "Bo'sh searchText li dori activeIngredient fallback orqali topilishi kerak");
 });
+
