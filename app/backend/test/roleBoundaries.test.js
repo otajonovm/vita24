@@ -80,9 +80,26 @@ test("ENABLE_DEV_OTP yo'q bo'lsa devCode qaytmaydi", () => {
 
 test("ENABLE_DEV_OTP=true bo'lsa devCode bor", () => {
   resetOtpStore();
+  const prev = process.env.NODE_ENV;
+  process.env.NODE_ENV = "test";
   process.env.ENABLE_DEV_OTP = "true";
   const issued = issueOtp("+998901110002");
   assert.equal(issued.devCode, issued.code);
+  process.env.NODE_ENV = prev;
+});
+
+test("productionda OTP kodi javobga qo'shilmaydi", () => {
+  resetOtpStore();
+  const prevEnv = process.env.NODE_ENV;
+  const prevOtp = process.env.ENABLE_DEV_OTP;
+  process.env.NODE_ENV = "production";
+  process.env.ENABLE_DEV_OTP = "true";
+  const { devOtpAllowed } = require("../src/lib/otpStore");
+  const issued = issueOtp("+998901110099");
+  assert.equal(devOtpAllowed(), false);
+  assert.equal(issued.devCode, undefined);
+  process.env.NODE_ENV = prevEnv;
+  process.env.ENABLE_DEV_OTP = prevOtp;
 });
 
 test("productionda ENABLE_MOCK_PAY yoki ENABLE_DEV_OTP serverni to'xtatadi", () => {

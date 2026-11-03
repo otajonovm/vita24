@@ -24,3 +24,5 @@ app/package-lock.json
 !**/.env.example
 app/backend/.seed-credentials.local
 app/backend/tmp
+
+vita24

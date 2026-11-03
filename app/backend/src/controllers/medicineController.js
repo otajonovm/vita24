@@ -94,6 +94,9 @@ const listCategories = asyncHandler(async (req, res) => {
     select: {
       id: true,
       name: true,
+      nameUz: true,
+      nameUzCyrl: true,
+      nameRu: true,
       slug: true,
       icon: true,
       sortOrder: true,
@@ -109,7 +112,10 @@ const listCategories = asyncHandler(async (req, res) => {
     res,
     categories.map((category) => ({
       id: category.id,
-      name: category.name,
+      name: category.nameUz || category.name,
+      nameUz: category.nameUz || category.name,
+      nameUzCyrl: category.nameUzCyrl || "",
+      nameRu: category.nameRu || "",
       slug: category.slug,
       icon: category.icon,
       sortOrder: category.sortOrder,
@@ -189,7 +195,7 @@ const listMedicines = asyncHandler(async (req, res) => {
   const variants = search ? searchVariants(search) : [];
   const medicineWhere = {
     isActive: true,
-    ...(featured ? { showOnHome: true } : {}),
+    ...(featured ? { showOnHome: true, hiddenFromShowcase: false } : {}),
     stocks: { some: stockFilter },
     ...(categoryId ? { categoryId } : {}),
     ...(variants.length
@@ -349,7 +355,7 @@ async function searchMiss(branchId, search) {
       select: { name: true },
     }),
     prisma.medicine.findMany({
-      where: { isActive: true, showOnHome: true, stocks: { some: { branchId, stockCount: { gt: 0 } } } },
+      where: { isActive: true, showOnHome: true, hiddenFromShowcase: false, stocks: { some: { branchId, stockCount: { gt: 0 } } } },
       include: stockInclude,
       orderBy: [{ homeSortOrder: "asc" }, { name: "asc" }],
       take: 8,
@@ -366,6 +372,7 @@ async function searchMiss(branchId, search) {
     const more = await prisma.medicine.findMany({
       where: {
         isActive: true,
+        hiddenFromShowcase: false,
         stocks: { some: { branchId, stockCount: { gt: 0 } } },
         id: { notIn: popular.map((item) => item.id) },
       },

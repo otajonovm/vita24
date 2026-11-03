@@ -28,7 +28,7 @@ const pickup = asyncHandler(async (req, res) => {
 
 const deliver = asyncHandler(async (req, res) => {
   const receiptGiven = req.body.receiptGiven === true || req.body.receiptGiven === "true" || req.body.receiptGiven === "1";
-  const photoPath = req.file ? `/uploads/delivery-proofs/${req.file.filename}` : null;
+  const photoPath = req.file ? req.file.path : null;
   try {
     const order = await deliverOrder({
       orderId: req.params.id,
@@ -38,6 +38,8 @@ const deliver = asyncHandler(async (req, res) => {
         method: req.body.method,
         collectedAmount: req.body.collectedAmount,
         receiptGiven,
+        discrepancyReason: req.body.discrepancyReason,
+        terminalRef: req.body.terminalRef,
         photoPath,
       },
     });

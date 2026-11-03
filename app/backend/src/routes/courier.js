@@ -25,7 +25,9 @@ const deliverSchema = z.object({
   method: z.enum(["CASH", "CARD_TERMINAL", "PREPAID"]).optional(),
   collectedAmount: z.union([z.string(), z.number()]).optional(),
   receiptGiven: z.union([z.boolean(), z.string()]).optional(),
-}).passthrough();
+  discrepancyReason: z.string().trim().max(300).optional(),
+  terminalRef: z.string().trim().max(32).optional(),
+}).strict();
 
 const failSchema = z.object({
   reason: z.enum(["NO_ANSWER", "ADDRESS_NOT_FOUND", "CUSTOMER_REJECTED", "OTHER"]),

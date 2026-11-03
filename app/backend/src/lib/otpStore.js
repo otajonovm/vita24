@@ -15,6 +15,11 @@ function purge(phone) {
   }
 }
 
+function devOtpAllowed() {
+  if (process.env.NODE_ENV === "production") return false;
+  return String(process.env.ENABLE_DEV_OTP || "").toLowerCase() === "true";
+}
+
 function issueOtp(phone) {
   purge(phone);
   const code = String(crypto.randomInt(100000, 1000000));
@@ -25,9 +30,7 @@ function issueOtp(phone) {
   });
 
   const payload = { code, expiresInSec: Math.floor(TTL_MS / 1000) };
-  if (String(process.env.ENABLE_DEV_OTP || "").toLowerCase() === "true") {
-    payload.devCode = code;
-  }
+  if (devOtpAllowed()) payload.devCode = code;
   return payload;
 }
 
@@ -70,4 +73,5 @@ module.exports = {
   verifyOtp,
   dropOtp,
   resetOtpStore,
+  devOtpAllowed,
 };

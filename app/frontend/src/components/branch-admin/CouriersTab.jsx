@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { createBranchCourier, fetchBranchCouriers, updateBranchCourier } from "../../services/api";
 import { formatSom } from "../../lib/format";
-import { LoadingButton } from "../ui";
+import { ErrorState, LoadingButton } from "../ui";
 import { apiError } from "./panelShared";
 
 export default function CouriersTab({ onToast }) {
@@ -10,12 +10,19 @@ export default function CouriersTab({ onToast }) {
   const [rows, setRows] = useState([]);
   const [form, setForm] = useState({ name: "", phone: "+998", password: "" });
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   function load() {
+    setError("");
+    setLoading(true);
     return fetchBranchCouriers()
-      .then(setRows)
-      .catch((err) => setError(apiError(err, t("courier.loadFailed"))));
+      .then((list) => {
+        setRows(list);
+        setError("");
+      })
+      .catch((err) => setError(apiError(err, t("courier.loadFailed"))))
+      .finally(() => setLoading(false));
   }
 
   useEffect(() => {
@@ -58,8 +65,9 @@ export default function CouriersTab({ onToast }) {
         <input type="password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} placeholder={t("courier.panel.password")} className="h-12 rounded-xl border border-slate-200 px-3" required />
         <LoadingButton type="submit" loading={busy} className="h-12 rounded-xl bg-brand font-bold text-white disabled:opacity-50">{t("courier.panel.add")}</LoadingButton>
       </form>
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      {!rows.length && <p className="rounded-2xl bg-white p-4 text-sm text-slate-500">{t("courier.panel.courierEmpty")}</p>}
+      {error && <ErrorState title={error} onRetry={load} />}
+      {loading && !rows.length && !error && <p className="rounded-2xl bg-white p-4 text-sm text-slate-500">{t("common.loading")}</p>}
+      {!loading && !error && !rows.length && <p className="rounded-2xl bg-white p-4 text-sm text-slate-500">{t("courier.panel.courierEmpty")}</p>}
       <div className="grid gap-2">
         {rows.map((row) => (
           <article key={row.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-white p-4">

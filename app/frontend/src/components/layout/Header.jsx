@@ -19,8 +19,6 @@ export default function Header() {
   const branch = useBranchStore((state) => state.branch);
   const setBranch = useBranchStore((state) => state.setBranch);
   const openModal = useBranchStore((state) => state.openModal);
-  const hydrated = useBranchStore((state) => state.hydrated);
-  const skipped = useBranchStore((state) => state.skipped);
   const user = useAuthStore((state) => state.user);
   const branchLocked =
     location.pathname.startsWith("/branch-admin") && user?.role === "BRANCH_ADMIN";
@@ -69,11 +67,6 @@ export default function Header() {
       window.clearTimeout(timer);
     };
   }, []);
-
-  useEffect(() => {
-    if (!hydrated || branch || branchLocked || skipped) return;
-    openModal();
-  }, [hydrated, branch, branchLocked, skipped, openModal]);
 
   useEffect(() => {
     const needle = query.trim();

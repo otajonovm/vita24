@@ -29,6 +29,9 @@ export function userError(error, t, fallbackKey = "error.generic") {
   if (error?.code === "INVALID_RESPONSE") {
     return error.message || t("error.invalidResponse");
   }
+  if (error?.code === "ECONNABORTED" || /timeout/i.test(String(error?.message || ""))) {
+    return t("error.timeout");
+  }
   if (isTransportError(error)) {
     return t(fallbackKey);
   }
@@ -39,7 +42,7 @@ export function userError(error, t, fallbackKey = "error.generic") {
   if (code === "PROMO_INVALID" || code === "RATE_LIMIT") {
     return error?.response?.data?.error?.message || t("cart.promoInvalid");
   }
-  if (code && CODES.includes(code) && i18n.exists(`error.${code}`)) {
+  if (code && i18n.exists(`error.${code}`)) {
     return t(`error.${code}`);
   }
   const serverMessage = error?.response?.data?.error?.message;

@@ -1,3 +1,4 @@
+const crypto = require("crypto");
 const path = require("path");
 const fs = require("fs");
 const multer = require("multer");
@@ -76,14 +77,14 @@ function uploadCatalogFile(req, res, next) {
   });
 }
 
-const PROOF_UPLOAD_DIR = dataPath("public", "uploads", "delivery-proofs");
+const PROOF_UPLOAD_DIR = dataPath("private", "delivery-proofs");
 fs.mkdirSync(PROOF_UPLOAD_DIR, { recursive: true });
 
 const deliveryProofStorage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, PROOF_UPLOAD_DIR),
-  filename: (req, file, cb) => {
+  filename: (_req, file, cb) => {
     const ext = IMAGE_EXTENSIONS[file.mimetype];
-    cb(null, `proof-${safeIdSegment(req.params.id)}-${Date.now()}${ext}`);
+    cb(null, `${crypto.randomUUID()}${ext}`);
   },
 });
 
@@ -131,6 +132,7 @@ function removeMedicineImageByUrl(imageUrl) {
 module.exports = {
   MEDICINE_UPLOAD_URL,
   MAX_IMAGE_BYTES,
+  PROOF_UPLOAD_DIR,
   uploadMedicineImage,
   uploadDeliveryPhoto,
   uploadCatalogFile,

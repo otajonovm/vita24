@@ -13,21 +13,14 @@ export function formatSom(value) {
 }
 
 export function normalizePhoneInput(value) {
-  const digits = String(value || "").replace(/\D/g, "");
-
-  if (digits.startsWith("998") && digits.length >= 12) {
+  let digits = String(value || "").replace(/\D/g, "");
+  // Pasted/typed "+998..." must not get a second country code.
+  while (digits.startsWith("998998")) digits = digits.slice(3);
+  if (digits.startsWith("998")) {
     return `+${digits.slice(0, 12)}`;
   }
-
-  if (digits.length >= 9) {
-    return `+998${digits.slice(-9)}`;
-  }
-
-  if (digits.length > 0) {
-    return `+998${digits}`;
-  }
-
-  return "";
+  if (!digits) return "";
+  return `+998${digits.slice(0, 9)}`;
 }
 
 export function isValidUzbekPhone(value) {

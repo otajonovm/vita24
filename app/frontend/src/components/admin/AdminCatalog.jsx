@@ -374,7 +374,7 @@ export function CatalogManager() {
         </div>
       </div>
       <div className="flex flex-wrap gap-2">
-        <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t("admin.search")} aria-label={t("admin.search")} className="h-11 min-w-52 rounded-xl border border-slate-200 px-3 text-sm" />
+        <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t("admin.searchPlaceholder")} aria-label={t("admin.searchPlaceholder")} className="h-11 min-w-52 rounded-xl border border-slate-200 px-3 text-sm" />
         <select aria-label={t("admin.colStatus")} value={active} onChange={(event) => setActive(event.target.value)} className="h-11 rounded-xl border border-slate-200 px-3 text-sm">
           <option value="active">{t("admin.customerStatus.ACTIVE")}</option>
           <option value="inactive">{t("admin.inactive")}</option>
@@ -445,7 +445,7 @@ export function CatalogManager() {
                     <p className="text-xs text-slate-500">{[row.dosage, row.manufacturer, row.rxSource].filter(Boolean).join(" · ")}</p>
                   </td>
                   <td className="py-3 pr-3">{row.category?.name || "—"}</td>
-                  <td className="py-3 pr-3">{formatSom(row.basePrice)}</td>
+                  <td className="py-3 pr-3">{Number(row.basePrice) > 0 ? formatSom(row.basePrice) : "—"}</td>
                   <td className="py-3 pr-3">
                     <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${row.isActive ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>
                       {row.isActive ? t("admin.customerStatus.ACTIVE") : t("admin.inactive")}

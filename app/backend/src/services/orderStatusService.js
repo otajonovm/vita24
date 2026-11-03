@@ -105,7 +105,7 @@ async function applyOrderStatusChange({
       payment: currentOrder.payment,
       userId: user.id,
       courierId: currentOrder.courierId,
-      collected: Boolean(settledProof?.markPaid) || Boolean(settledProof && !unpaidCash(currentOrder.payment)),
+      collected: Boolean(settledProof) || Boolean(settledProof?.markPaid),
     })
   ) {
     throw new AppError("Bu holatga o'tishga ruxsat yo'q", 409, "INVALID_STATUS");
@@ -188,6 +188,10 @@ async function applyOrderStatusChange({
           courierId: user.id,
           method: settledProof.method,
           collectedAmount: settledProof.collectedAmount,
+          discrepancy: settledProof.discrepancy ?? null,
+          discrepancyReason: settledProof.discrepancyReason || null,
+          discrepancyOpen: Boolean(settledProof.discrepancyOpen),
+          terminalRef: settledProof.terminalRef || null,
           receiptGiven: Boolean(settledProof.receiptGiven),
           photoPath: settledProof.photoPath || null,
         },

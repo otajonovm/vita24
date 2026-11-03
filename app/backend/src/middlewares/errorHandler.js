@@ -5,8 +5,8 @@ function notFoundHandler(req, res) {
   return sendError(
     res,
     404,
-    "NOT_FOUND",
-    `Marshrut topilmadi: ${req.method} ${req.originalUrl}`
+    "ROUTE_NOT_FOUND",
+    "ROUTE_NOT_FOUND"
   );
 }
 

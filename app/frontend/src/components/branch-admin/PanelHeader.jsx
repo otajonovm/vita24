@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { formatSom } from "../../lib/format";
+import LanguageSwitcher from "../layout/LanguageSwitcher";
 import { LoadingButton } from "../ui";
 
 export default function PanelHeader({
@@ -41,7 +42,7 @@ export default function PanelHeader({
         <div>
           <p className="text-xs font-bold uppercase tracking-wide text-brand">{t("panel.title", "Vita24 Farmatsevt")}</p>
           <h1 className="flex items-center gap-2 text-xl font-extrabold text-slate-900">
-            <span className={`inline-block h-2.5 w-2.5 rounded-full ${link === "live" ? "bg-emerald-500" : "bg-amber-400"}`} title={link === "live" ? "Jonli" : "Qayta ulanmoqda"} />
+            <span className={`inline-block h-2.5 w-2.5 rounded-full ${link === "live" ? "bg-emerald-500" : "bg-amber-400"}`} title={link === "live" ? t("panel.live", "Jonli") : t("panel.reconnecting", "Qayta ulanmoqda")} />
             {branch?.name || t("panel.branch", "Filial")}
           </h1>
         </div>
@@ -71,16 +72,17 @@ export default function PanelHeader({
           <LoadingButton type="button" loading={refreshing} loadingText={t("panel.refreshing", "Yangilanmoqda...")} onClick={onRefresh} className="h-10 rounded-xl border border-slate-200 px-3 text-sm font-semibold disabled:opacity-50">
             {t("panel.refresh", "Yangilash")}
           </LoadingButton>
+          <LanguageSwitcher />
           <button type="button" onClick={onLogout} className="h-10 rounded-xl px-3 text-sm font-semibold text-slate-500">
             {t("panel.logout", "Chiqish")}
           </button>
         </div>
       </div>
       <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-        <Stat label={t("panel.todayOrders", "Bugungi buyurtmalar")} value={summary?.todayOrders ?? "–"} onClick={onOpenToday} />
-        <Stat label={t("panel.todayRevenue", "Tushum")} value={summary ? formatSom(summary.revenue || 0) : "–"} />
-        <Stat label={t("panel.rxQueue", "Retsept navbati")} value={summary?.review ?? "–"} onClick={onOpenQueue} />
-        <Stat label={t("panel.lowStock", "Kam qoldiq")} value={summary?.lowStock ?? "–"} onClick={onOpenLowStock} />
+        <Stat label={t("panel.todayOrders", "Bugungi buyurtmalar")} value={summary ? summary.todayOrders ?? 0 : "…"} onClick={onOpenToday} />
+        <Stat label={t("panel.todayRevenue", "Tushum")} value={summary ? formatSom(summary.revenue || 0) : "…"} />
+        <Stat label={t("panel.rxQueue", "Retsept navbati")} value={summary ? summary.review ?? 0 : "…"} onClick={onOpenQueue} />
+        <Stat label={t("panel.lowStock", "Kam qoldiq")} value={summary ? summary.lowStock ?? 0 : "…"} onClick={onOpenLowStock} />
       </div>
       <div className="flex gap-2">
         {tabs.map(([id, label]) => (

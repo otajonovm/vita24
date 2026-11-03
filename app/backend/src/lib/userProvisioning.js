@@ -2,15 +2,15 @@ const crypto = require("crypto");
 const { AppError } = require("./response");
 
 function normalizePhone(raw) {
-  const value = String(raw || "").trim();
-  const digits = value.replace(/\D/g, "");
+  let digits = String(raw || "").replace(/\D/g, "");
+  while (digits.startsWith("998") && digits.length > 12) digits = digits.slice(3);
 
   if (digits.startsWith("998") && digits.length === 12) {
     return `+${digits}`;
   }
 
-  if (digits.length === 9) {
-    return `+998${digits}`;
+  if (digits.length >= 9) {
+    return `+998${digits.slice(-9)}`;
   }
 
   throw new AppError(

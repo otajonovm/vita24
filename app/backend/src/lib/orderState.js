@@ -59,6 +59,14 @@ function canTransition({ from, to, role, deliveryType, payment, userId, courierI
   if (next === "COMPLETED" && unpaidCash(payment) && !collected) return false;
   if (from === "READY" && next === "COMPLETED" && deliveryType !== "PICKUP") return false;
   if (from === "READY" && next === "DELIVERING" && deliveryType === "PICKUP") return false;
+  if (
+    courierId &&
+    role !== "COURIER" &&
+    deliveryType !== "PICKUP" &&
+    (next === "DELIVERING" || next === "COMPLETED")
+  ) {
+    return false;
+  }
   if (role === "COURIER") {
     if (deliveryType === "PICKUP") return false;
     if (!userId || !courierId || userId !== courierId) return false;

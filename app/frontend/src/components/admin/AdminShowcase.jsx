@@ -242,7 +242,7 @@ export function ShowcasePanel() {
               onChange={(event) => setSearch(event.target.value.slice(0, 80))}
               onPaste={onPaste}
               placeholder={t("admin.showcaseSearch")}
-              aria-label={t("admin.search")}
+              aria-label={t("admin.searchPlaceholder")}
               className="h-11 w-full rounded-xl border border-slate-200 pl-10 pr-3 text-sm outline-none ring-brand/30 focus:ring-2"
             />
           </div>

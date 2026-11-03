@@ -767,6 +767,7 @@
     "searchPlaceholder": "Qidirish",
     "validation": {
       "required": "Bu maydonni to'ldiring",
+      "phone": "Telefon +998 va 9 ta raqam bo'lishi kerak",
       "password": "Parol kamida 6 ta belgi",
       "staffPassword": "Parol kamida 8 belgi, harf va raqam bilan bo'lishi kerak",
       "code": "Kod 6 ta raqam bo'lishi kerak"

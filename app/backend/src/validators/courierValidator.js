@@ -13,9 +13,12 @@ const updateCourierSchema = z
   })
   .refine((data) => data.name != null || data.status != null, { message: "O'zgarish yo'q" });
 
-const assignCourierSchema = z.object({
-  courierId: z.string().trim().min(1),
-});
+const assignCourierSchema = z
+  .object({
+    courierId: z.string().trim().min(1).nullable().optional(),
+    remove: z.boolean().optional(),
+  })
+  .refine((data) => data.remove === true || Boolean(data.courierId), { message: "Kuryerni tanlang" });
 
 const handoverNoteSchema = z.object({
   note: z.string().trim().max(300).optional(),

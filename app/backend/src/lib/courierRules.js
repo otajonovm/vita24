@@ -22,14 +22,25 @@ function ownsCourierOrder(order, userId) {
 function courierIsAssignable(user, branchId) {
   if (!user || user.role !== "COURIER" || user.status !== "ACTIVE" || user.deletedAt) return false;
   const links = user.courierBranches || user.branches || [];
-  return links.some((row) => String(row.branchId || row) === String(branchId));
+  return links.some((row) => {
+    const id = String(row.branchId || row);
+    if (id !== String(branchId)) return false;
+    return row.active !== false;
+  });
 }
 
 function assignAllowed(order) {
   if (!order || order.deliveryType === "PICKUP") return false;
+  if (order.status === "DELIVERING") return true;
   if (order.status !== "READY") return false;
   const stage = order.courierStage || "UNASSIGNED";
   return stage === "UNASSIGNED" || stage === "ASSIGNED" || stage === "FAILED";
+}
+
+function unassignAllowed(order) {
+  if (!order || order.deliveryType === "PICKUP") return false;
+  if (!order.courierId) return false;
+  return order.status === "READY" || order.status === "DELIVERING";
 }
 
 function canPickup(order, userId) {
@@ -38,20 +49,65 @@ function canPickup(order, userId) {
   return { ok: true, status: "DELIVERING", courierStage: "PICKED_UP" };
 }
 
+function orderDueAmount(order) {
+  if (order?.payment?.amount != null && order.payment.amount !== "") {
+    return Math.round(Number(order.payment.amount));
+  }
+  if (order?.totalAmount != null && order.totalAmount !== "") {
+    return Math.round(Number(order.totalAmount));
+  }
+  const { settledTotals } = require("./pricing");
+  return Math.round(settledTotals(order).totalAmount);
+}
+
+function parseCollectedAmount(raw) {
+  if (raw == null || raw === "") return null;
+  const amount = typeof raw === "number" ? raw : Number(String(raw).trim());
+  if (!Number.isInteger(amount) || amount < 0) return null;
+  return amount;
+}
+
 function proofForDeliver(order, proof) {
   const provider = providerOf(order?.payment);
   if (isCollectOnDelivery(order?.payment)) {
     if (!proof || !proof.method) return { ok: false, code: "CASH_NOT_RECEIVED" };
     if (String(proof.method).toUpperCase() !== provider) return { ok: false, code: "VALIDATION_ERROR" };
-    const amount = Number(proof.collectedAmount);
-    if (!Number.isFinite(amount) || amount < 0) return { ok: false, code: "VALIDATION_ERROR" };
+    const amount = parseCollectedAmount(proof.collectedAmount);
+    if (amount == null) return { ok: false, code: "VALIDATION_ERROR" };
+    const due = orderDueAmount(order);
+    const terminalRef = String(proof.terminalRef || proof.receiptNumber || "").trim().slice(0, 32) || null;
+    if (provider === "CARD_TERMINAL") {
+      if (amount !== due) return { ok: false, code: "AMOUNT_MISMATCH" };
+      return {
+        ok: true,
+        method: provider,
+        collectedAmount: amount,
+        discrepancy: 0,
+        discrepancyReason: null,
+        discrepancyOpen: false,
+        terminalRef,
+        receiptGiven: Boolean(proof.receiptGiven),
+        photoPath: proof.photoPath || null,
+        markPaid: true,
+      };
+    }
+    const discrepancy = due - amount;
+    const reason = String(proof.discrepancyReason || "").trim();
+    if (discrepancy !== 0 && reason.length < 3) {
+      return { ok: false, code: "DISCREPANCY_REASON_REQUIRED" };
+    }
+    const shortfall = discrepancy > 0;
     return {
       ok: true,
       method: provider,
-      collectedAmount: Math.round(amount * 100) / 100,
+      collectedAmount: amount,
+      discrepancy,
+      discrepancyReason: discrepancy === 0 ? null : reason,
+      discrepancyOpen: shortfall,
+      terminalRef: null,
       receiptGiven: Boolean(proof.receiptGiven),
       photoPath: proof.photoPath || null,
-      markPaid: true,
+      markPaid: !shortfall,
     };
   }
   if (String(order?.payment?.status || "").toUpperCase() !== "COMPLETED") {
@@ -148,6 +204,8 @@ module.exports = {
   ownsCourierOrder,
   courierIsAssignable,
   assignAllowed,
+  unassignAllowed,
+  orderDueAmount,
   canPickup,
   canDeliver,
   canFail,

@@ -12,7 +12,8 @@
     "prebuild": "node scripts/copy-shared.cjs",
     "build": "npx vite build",
     "preview": "npx vite preview",
-    "test": "npx vitest run"
+    "test": "npx vitest run && node ../../scripts/i18n-check.cjs",
+    "lint": "node ../../scripts/i18n-check.cjs"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",

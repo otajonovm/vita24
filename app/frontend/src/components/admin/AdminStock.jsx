@@ -132,7 +132,7 @@ export function NetworkStock() {
       {tab === "network" ? (
         <>
           <div className="flex flex-wrap gap-2">
-            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t("admin.search")} aria-label={t("admin.search")} className="h-11 min-w-52 rounded-xl border border-slate-200 px-3 text-sm" />
+            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t("admin.searchPlaceholder")} aria-label={t("admin.searchPlaceholder")} className="h-11 min-w-52 rounded-xl border border-slate-200 px-3 text-sm" />
             <select aria-label={t("admin.colStatus")} value={filter} onChange={(event) => setFilter(event.target.value)} className="h-11 rounded-xl border border-slate-200 px-3 text-sm">
               <option value="all">{t("admin.allStock")}</option>
               <option value="low">{t("admin.lowStock")}</option>
@@ -173,7 +173,7 @@ export function NetworkStock() {
                     <tr key={row.id} className="border-t border-slate-100">
                       <td className="sticky left-0 bg-white py-3 pr-3">
                         <p className="font-semibold text-slate-900">{row.name}</p>
-                        <p className="text-xs text-slate-500">{t("admin.basePrice")}: {formatSom(row.basePrice)}</p>
+                        <p className="text-xs text-slate-500">{t("admin.basePrice")}: {Number(row.basePrice) > 0 ? formatSom(row.basePrice) : "—"}</p>
                       </td>
                       {branches.map((branch) => {
                         const cell = row.cells?.[branch.id];
@@ -209,7 +209,7 @@ export function NetworkStock() {
       ) : (
         <>
           <div className="flex flex-wrap gap-2">
-            <input value={moveSearch} onChange={(event) => setMoveSearch(event.target.value)} placeholder={t("admin.search")} aria-label={t("admin.search")} className="h-11 min-w-52 rounded-xl border border-slate-200 px-3 text-sm" />
+            <input value={moveSearch} onChange={(event) => setMoveSearch(event.target.value)} placeholder={t("admin.searchPlaceholder")} aria-label={t("admin.searchPlaceholder")} className="h-11 min-w-52 rounded-xl border border-slate-200 px-3 text-sm" />
             <select aria-label={t("admin.colBranch")} value={moveBranch} onChange={(event) => setMoveBranch(event.target.value)} className="h-11 rounded-xl border border-slate-200 px-3 text-sm">
               <option value="">{t("admin.allBranches")}</option>
               {branchOptions.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}

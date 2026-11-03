@@ -31,6 +31,7 @@ function assertRuntimeSecrets() {
       throw new Error("ENABLE_MOCK_PAY productionda yoqilishi mumkin emas");
     }
     if (envFlag("ENABLE_DEV_OTP")) {
+      console.warn("[secrets] ENABLE_DEV_OTP productionda e'tiborsiz. OTP kodi API javobida qaytmaydi.");
       throw new Error("ENABLE_DEV_OTP productionda yoqilishi mumkin emas");
     }
   }

@@ -23,12 +23,21 @@ const {
 const { usesAdminSession } = require("../lib/permissions");
 const { isStaffPassword, STAFF_PASSWORD_MESSAGE } = require("../lib/staffPassword");
 const { writeAudit } = require("../lib/audit");
+const {
+  COOKIE,
+  cookieHeader,
+  issueCustomerRefresh,
+  readCookie,
+  revokeCustomerRefresh,
+  rotateCustomerRefresh,
+} = require("../lib/customerSession");
 
 const BCRYPT_ROUNDS = 10;
 
 function accessExpiresIn(role, override) {
   if (override) return override;
   if (usesAdminSession(role)) return process.env.ADMIN_JWT_EXPIRES_IN || "12h";
+  if (role === "CUSTOMER") return "1h";
   return process.env.JWT_EXPIRES_IN || "7d";
 }
 
@@ -81,17 +90,17 @@ const login = asyncHandler(async (req, res) => {
   });
 
   if (!user || !user.passwordHash) {
-    throw new AppError("Telefon yoki parol noto'g'ri", 401, "UNAUTHORIZED");
+    throw new AppError("Telefon yoki parol noto'g'ri", 401, "INVALID_CREDENTIALS");
   }
 
   // Mehmon (guest:) xeshlar bilan login qilish mumkin emas
   if (user.passwordHash.startsWith("guest:")) {
-    throw new AppError("Telefon yoki parol noto'g'ri", 401, "UNAUTHORIZED");
+    throw new AppError("Telefon yoki parol noto'g'ri", 401, "INVALID_CREDENTIALS");
   }
 
   const matches = await bcrypt.compare(password, user.passwordHash);
   if (!matches) {
-    throw new AppError("Telefon yoki parol noto'g'ri", 401, "UNAUTHORIZED");
+    throw new AppError("Telefon yoki parol noto'g'ri", 401, "INVALID_CREDENTIALS");
   }
 
   if (user.deletedAt || user.status === "SUSPENDED") {
@@ -120,6 +129,11 @@ const login = asyncHandler(async (req, res) => {
         token: signAccessToken(user),
         expiresIn: accessExpiresIn(user.role),
       };
+
+  if (user.role === "CUSTOMER") {
+    const refreshToken = await issueCustomerRefresh(user);
+    res.setHeader("Set-Cookie", cookieHeader(refreshToken));
+  }
 
   await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
   clearStaffLoginLimits(req);
@@ -182,7 +196,7 @@ const requestOtp = asyncHandler(async (req, res) => {
     );
   }
 
-  if (sent.code === "NOT_CONFIGURED" && String(process.env.ENABLE_DEV_OTP || "").toLowerCase() === "true") {
+  if (sent.code === "NOT_CONFIGURED" && require("../lib/otpStore").devOtpAllowed()) {
     resetOtpVerify(phone);
     return sendSuccess(res, { expiresInSec: issued.expiresInSec, devCode: issued.code }, "Tasdiqlash kodi (dev) tayyor");
   }
@@ -223,12 +237,14 @@ const telegramWebAppLogin = asyncHandler(async (req, res) => {
   }
 
   const accessToken = signAccessToken(user);
+  const refreshToken = await issueCustomerRefresh(user);
+  res.setHeader("Set-Cookie", cookieHeader(refreshToken));
   return sendSuccess(
     res,
     {
       token: accessToken,
       tokenType: "Bearer",
-      expiresIn: process.env.JWT_EXPIRES_IN || "7d",
+      expiresIn: "1h",
       user: serializeAuthUser(user),
       isNew: false,
     },
@@ -258,6 +274,8 @@ const verifyOtpLogin = asyncHandler(async (req, res) => {
   });
 
   const token = signAccessToken(user);
+  const refreshToken = await issueCustomerRefresh(user);
+  res.setHeader("Set-Cookie", cookieHeader(refreshToken));
   await writeAudit(prisma, {
     req,
     user,
@@ -272,7 +290,7 @@ const verifyOtpLogin = asyncHandler(async (req, res) => {
     {
       token,
       tokenType: "Bearer",
-      expiresIn: process.env.JWT_EXPIRES_IN || "7d",
+      expiresIn: "1h",
       user: serializeAuthUser(user),
       isNew: !fullName && user.name === "Mijoz",
     },
@@ -314,17 +332,35 @@ async function hashPassword(plain) {
 }
 
 const refreshSession = asyncHandler(async (req, res) => {
-  const rotated = await rotateAdminSession(req.body.refreshToken);
+  const bodyToken = String(req.body?.refreshToken || "");
+  if (bodyToken) {
+    const rotated = await rotateAdminSession(bodyToken);
+    if (!rotated) {
+      throw new AppError("Sessiya yopilgan yoki muddati tugagan", 401, "UNAUTHORIZED");
+    }
+    return sendSuccess(
+      res,
+      {
+        token: rotated.token,
+        refreshToken: rotated.refreshToken,
+        tokenType: "Bearer",
+        expiresIn: rotated.expiresIn,
+        user: serializeAuthUser(rotated.user),
+      },
+      "Sessiya yangilandi"
+    );
+  }
+  const rotated = await rotateCustomerRefresh(readCookie(req, COOKIE));
   if (!rotated) {
     throw new AppError("Sessiya yopilgan yoki muddati tugagan", 401, "UNAUTHORIZED");
   }
+  res.setHeader("Set-Cookie", cookieHeader(rotated.refreshToken));
   return sendSuccess(
     res,
     {
-      token: rotated.token,
-      refreshToken: rotated.refreshToken,
+      token: signAccessToken(rotated.user),
       tokenType: "Bearer",
-      expiresIn: rotated.expiresIn,
+      expiresIn: "1h",
       user: serializeAuthUser(rotated.user),
     },
     "Sessiya yangilandi"
@@ -335,6 +371,8 @@ const logoutSession = asyncHandler(async (req, res) => {
   if (req.auth?.sid && req.user?.id) {
     await revokeAdminSession(req.user.id, req.auth.sid);
   }
+  await revokeCustomerRefresh(readCookie(req, COOKIE));
+  res.setHeader("Set-Cookie", cookieHeader("", true));
   if (req.user?.id) {
     await writeAudit(prisma, {
       req,

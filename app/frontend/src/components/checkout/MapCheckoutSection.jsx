@@ -5,9 +5,45 @@ import { geocodePlace, getAccurateLocation, reverseGeocode, searchPlaces } from 
 
 const DEFAULT_CENTER = { lat: 41.3111, lng: 69.2797 };
 
-function mapSrc(lat, lng) {
-  const pad = 0.006;
-  return `https://www.openstreetmap.org/export/embed.html?bbox=${lng - pad}%2C${lat - pad * 0.65}%2C${lng + pad}%2C${lat + pad * 0.65}&layer=mapnik&marker=${lat}%2C${lng}`;
+const TILE_Z = 15;
+
+function lonToX(lon) {
+  return ((lon + 180) / 360) * 2 ** TILE_Z;
+}
+
+function latToY(lat) {
+  const rad = (lat * Math.PI) / 180;
+  return ((1 - Math.log(Math.tan(rad) + 1 / Math.cos(rad)) / Math.PI) / 2) * 2 ** TILE_Z;
+}
+
+function MapTiles({ lat, lng, label, onFail }) {
+  const cx = lonToX(lng);
+  const cy = latToY(lat);
+  const tileX = Math.floor(cx);
+  const tileY = Math.floor(cy);
+  const tiles = [];
+  for (let dx = -1; dx <= 1; dx += 1) {
+    for (let dy = -1; dy <= 1; dy += 1) tiles.push({ x: tileX + dx, y: tileY + dy });
+  }
+  return (
+    <div className="relative h-full w-full" aria-label={label}>
+      {tiles.map((tile) => (
+        <img
+          key={`${tile.x}-${tile.y}`}
+          alt=""
+          draggable={false}
+          src={`https://tile.openstreetmap.org/${TILE_Z}/${tile.x}/${tile.y}.png`}
+          onError={onFail}
+          className="absolute h-64 w-64 max-w-none"
+          style={{
+            left: `calc(50% + ${(tile.x - cx) * 256}px)`,
+            top: `calc(50% + ${(tile.y - cy) * 256}px)`,
+          }}
+        />
+      ))}
+      <span className="pointer-events-none absolute left-1/2 top-1/2 z-10 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-[#087B51] shadow" />
+    </div>
+  );
 }
 
 export default function MapCheckoutSection({
@@ -39,6 +75,7 @@ export default function MapCheckoutSection({
   const [status, setStatus] = useState("");
   const [suggesting, setSuggesting] = useState(false);
   const [mapOn, setMapOn] = useState(false);
+  const [mapFailed, setMapFailed] = useState(false);
 
   useEffect(() => {
     if (Number.isFinite(lat) && Number.isFinite(lng)) {
@@ -172,14 +209,12 @@ export default function MapCheckoutSection({
 
   return (
     <section className={`min-w-0 overflow-hidden rounded-2xl border bg-white shadow-sm ${invalid ? "border-red-500" : "border-slate-100"}`}>
-      <div className="osm-frame relative bg-slate-100">
-        <iframe
-          key={`${center.lat.toFixed(5)}-${center.lng.toFixed(5)}`}
-          title={t("address.map")}
-          src={mapSrc(center.lat, center.lng)}
-          loading="lazy"
-          className={mapOn ? "" : "pointer-events-none md:pointer-events-auto"}
-        />
+      <div className="osm-frame relative h-52 overflow-hidden bg-slate-100">
+        {mapFailed ? (
+          <p className="grid h-full place-items-center px-4 text-center text-sm font-semibold text-slate-600">{t("address.mapFailed")}</p>
+        ) : (
+          <MapTiles lat={center.lat} lng={center.lng} label={t("address.map")} onFail={() => setMapFailed(true)} />
+        )}
         {!mapOn && (
           <button
             type="button"

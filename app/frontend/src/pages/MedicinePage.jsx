@@ -147,12 +147,15 @@ export default function MedicinePage() {
         {image ? (
           <img src={image} alt={medicine.name} className="h-full w-full object-contain p-4" />
         ) : (
-          <Pill className="h-16 w-16 text-[#087B51]" aria-hidden />
+          <span className="grid place-items-center gap-2 text-[#087B51]">
+            <Pill className="h-16 w-16" aria-hidden />
+            {shown(medicine.dosageForm) ? <span className="text-xs font-bold">{medicine.dosageForm}</span> : null}
+          </span>
         )}
       </div>
       <div>
         <h1 className="text-2xl font-extrabold text-slate-900">{medicine.name}</h1>
-        {shown(medicine.description) ? <p className="mt-2 text-sm text-slate-600">{medicine.description}</p> : null}
+        {shown(medicine.description) && !sameText(medicine.description, medicine.name) ? <p className="mt-2 text-sm text-slate-600">{medicine.description}</p> : null}
         {medicine.isPrescription && (
           <p className="mt-3 inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2 py-1 text-xs font-bold text-red-600">
             <FileText className="h-3.5 w-3.5" aria-hidden /> {t("medicine.rxRequired")}

@@ -276,7 +276,14 @@ function mapProduct(row) {
     ikpuCode: variant?.ikpuCode || row?.ikpuCode || row?.ikpu || row?.mxik || null,
     quantityInPack: toInt(row?.quantityInPack || row?.packSize || row?.unitsInPack) || 1,
     manufacturer: String(
-      variant?.producer || row?.manufacturer || row?.producer || row?.tradeMark || "Noma'lum"
+      variant?.producer ||
+        variant?.producerName ||
+        row?.manufacturer ||
+        row?.producer ||
+        row?.producerName ||
+        row?.manufacturerName ||
+        row?.tradeMark ||
+        ""
     ).trim(),
     dosageForm: [form, dose].filter(Boolean).join(" ") || "Noma'lum",
     description: String(row?.description || row?.mnn || row?.tradeMark || name || "").trim(),
@@ -710,7 +717,7 @@ async function ensureMedicinesForLots(byDrug) {
         name,
         slug: `lekko-${drugId}`,
         description: name,
-        manufacturer: lot.manufacturer || "Noma'lum",
+        manufacturer: lot.manufacturer || "",
         dosageForm,
         imageEmoji: "-",
         externalApiId: drugId,
@@ -722,7 +729,7 @@ async function ensureMedicinesForLots(byDrug) {
         searchText: buildSearchText({
           name,
           description: name,
-          manufacturer: lot.manufacturer || "Noma'lum",
+          manufacturer: lot.manufacturer || "",
           dosageForm,
         }),
       },

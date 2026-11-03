@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import Spinner from "./Spinner";
 
 export default function LoadingButton({
@@ -10,6 +11,7 @@ export default function LoadingButton({
   onClick,
   ...rest
 }) {
+  const { t } = useTranslation();
   const busy = Boolean(loading);
 
   function handleClick(event) {
@@ -29,7 +31,7 @@ export default function LoadingButton({
       className={`inline-flex items-center justify-center gap-2 ${className}`}
       {...rest}
     >
-      {busy ? <Spinner className="h-4 w-4" label={loadingText || "Yuklanmoqda..."} /> : null}
+      {busy ? <Spinner className="h-4 w-4" label={loadingText || t("common.loading")} /> : null}
       <span>{busy && loadingText ? loadingText : children}</span>
     </button>
   );

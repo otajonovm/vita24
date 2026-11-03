@@ -20,6 +20,10 @@ import { SearchAdminPanel } from "../components/admin/AdminSearch";
 import { ConfirmProvider } from "../components/admin/ui";
 import PasswordChangeForm from "../components/auth/PasswordChangeForm";
 import { can } from "../lib/permissions";
+import LanguageSwitcher from "../components/layout/LanguageSwitcher";
+import PhoneInput from "../components/ui/PhoneInput";
+import { isValidUzbekPhone, normalizePhoneInput } from "../lib/format";
+import { userError } from "../lib/userError";
 import { staffLogin } from "../services/api";
 import { useAdminAuth } from "../store/useAuthStore";
 
@@ -40,8 +44,9 @@ function StaffGate({ permission, children }) {
 
 function SuperLogin() {
   const { t } = useTranslation();
-  const [phone, setPhone] = useState("");
+  const [phone, setPhone] = useState("+998");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [totp, setTotp] = useState("");
   const [needs2fa, setNeeds2fa] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -51,8 +56,9 @@ function SuperLogin() {
 
   async function handleSubmit(event) {
     event.preventDefault();
+    const nextPhone = normalizePhoneInput(phone);
     const next = {};
-    if (!phone.trim()) next.phone = t("admin.validation.required");
+    if (!isValidUzbekPhone(nextPhone)) next.phone = t("admin.validation.phone");
     if (password.trim().length < 6) next.password = t("admin.validation.password");
     if (needs2fa && !/^\d{6}$/.test(totp)) next.totp = t("admin.validation.code");
     setFields(next);
@@ -61,7 +67,7 @@ function SuperLogin() {
     setLoading(true);
     setError("");
     try {
-      const result = await staffLogin({ phone, password, totp: needs2fa ? totp : undefined });
+      const result = await staffLogin({ phone: nextPhone, password, totp: needs2fa ? totp : undefined });
       if (result?.requires2fa) {
         setNeeds2fa(true);
         return;
@@ -71,7 +77,7 @@ function SuperLogin() {
       }
       setSession(result.user, result.token, { refreshToken: result.refreshToken });
     } catch (err) {
-      setError(err.response?.data?.error?.message || err.message || t("admin.loginFailed"));
+      setError(userError(err, t, "admin.loginFailed"));
     } finally {
       setLoading(false);
     }
@@ -80,21 +86,19 @@ function SuperLogin() {
   return (
     <div className="grid min-h-dvh place-items-center bg-canvas p-4">
       <section className="grid w-full max-w-md gap-4 rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-wide text-brand">{t("admin.role.SUPER_ADMIN")}</p>
-          <h1 className="mt-1 text-xl font-extrabold text-slate-900">{t("admin.loginTitle")}</h1>
-          <p className="mt-1 text-sm text-slate-500">{t("admin.loginHint")}</p>
+        <div className="flex items-center justify-between gap-3">
+          <h1 className="text-xl font-extrabold text-slate-900">{t("admin.loginTitle")}</h1>
+          <LanguageSwitcher />
         </div>
         <form noValidate onSubmit={handleSubmit} className="grid gap-3">
           <label className="grid gap-1.5">
             <span className="text-xs font-semibold text-slate-600">{t("admin.phone")}</span>
             <span className="relative">
               <Phone className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-brand" />
-              <input
-                type="tel"
+              <PhoneInput
                 value={phone}
-                onChange={(event) => {
-                  setPhone(event.target.value);
+                onChange={(value) => {
+                  setPhone(value);
                   setFields((current) => ({ ...current, phone: "" }));
                 }}
                 aria-invalid={Boolean(fields.phone)}
@@ -108,15 +112,18 @@ function SuperLogin() {
             <span className="relative">
               <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-brand" />
               <input
-                type="password"
+                type={showPassword ? "text" : "password"}
                 value={password}
                 onChange={(event) => {
                   setPassword(event.target.value);
                   setFields((current) => ({ ...current, password: "" }));
                 }}
                 aria-invalid={Boolean(fields.password)}
-                className={fieldClass(fields.password)}
+                className={`${fieldClass(fields.password)} pr-16`}
               />
+              <button type="button" onClick={() => setShowPassword((value) => !value)} className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-500">
+                {showPassword ? t("auth.hidePassword") : t("auth.showPassword")}
+              </button>
             </span>
             {fields.password && <span className="text-xs font-medium text-red-600">{fields.password}</span>}
           </label>

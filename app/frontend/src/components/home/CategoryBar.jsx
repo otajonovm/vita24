@@ -68,6 +68,13 @@ const PRESETS = [
   },
 ];
 
+function localizedCategoryName(category, language) {
+  const code = String(language || "uz");
+  if (code.startsWith("ru") && category.nameRu) return category.nameRu;
+  if (code === "uz-Cyrl" && category.nameUzCyrl) return category.nameUzCyrl;
+  return category.nameUz || category.name || "";
+}
+
 function resolveItems(categories = []) {
   return categories.map((category) => {
     const slug = String(category.slug || "").toLowerCase();
@@ -82,6 +89,9 @@ function resolveItems(categories = []) {
       id: category.id,
       presetId: preset?.id || "",
       name: category.name || preset?.name || "",
+      nameUz: category.nameUz || "",
+      nameUzCyrl: category.nameUzCyrl || "",
+      nameRu: category.nameRu || "",
       shortName: preset?.shortName || category.name || "",
       Icon: preset?.Icon || Pill,
       color: preset?.color || "#087b51",
@@ -122,8 +132,10 @@ function CategoryCard({ category, active, onSelect, compact = false }) {
 }
 
 export default function CategoryBar({ categories = [], activeId, onSelect }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const items = resolveItems(categories).map((item) => {
+    const localized = localizedCategoryName(item, i18n.language);
+    if (localized) return { ...item, name: localized, shortName: localized };
     if (!item.presetId) {
       return {
         ...item,

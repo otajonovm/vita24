@@ -23,7 +23,7 @@ export const useCartStore = create(
       pendingOrder: null,
       reservationUntil: null,
       checkoutHoldUntil: null,
-      paymentMethod: "payme",
+      paymentMethod: "",
       deliveryType: "DELIVERY",
       promo: null,
       savedAddress: {
@@ -195,7 +195,7 @@ export const useCartStore = create(
     }),
     {
       name: "vita24-cart",
-      version: 6,
+      version: 7,
       migrate: (persisted) => {
         const cap = Date.now() + RESERVATION_MS;
         const now = Date.now();
@@ -204,6 +204,7 @@ export const useCartStore = create(
 
         return {
           ...persisted,
+          paymentMethod: "",
           deliveryType: persisted.deliveryType === "PICKUP" ? "PICKUP" : "DELIVERY",
           promo: persisted.promo || null,
           savedAddress: {
@@ -233,7 +234,6 @@ export const useCartStore = create(
         pendingOrder: state.pendingOrder,
         reservationUntil: state.reservationUntil,
         checkoutHoldUntil: state.checkoutHoldUntil,
-        paymentMethod: state.paymentMethod,
         deliveryType: state.deliveryType,
         promo: state.promo,
         savedAddress: state.savedAddress,

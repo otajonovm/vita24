@@ -6,8 +6,13 @@ const { seedSearchSynonyms } = require("../scripts/seed-search-synonyms");
 const report = [];
 
 async function ensureFixture(slug, name, ingredient, dosage) {
-  const category = await prisma.category.findFirst({ select: { id: true } });
-  if (!category) throw new Error("Test uchun kategoriya yo'q");
+  let category = await prisma.category.findFirst({ select: { id: true } });
+  if (!category) {
+    category = await prisma.category.create({
+      data: { name: "Search test", slug: "vita-search-test", icon: "pill" },
+      select: { id: true },
+    });
+  }
   const data = {
     name,
     description: name,

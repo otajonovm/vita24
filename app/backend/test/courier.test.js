@@ -121,7 +121,72 @@ test("topshirilgan summa farqi belgilanadi", () => {
 test("nofaol kuryerga buyurtma biriktirilmaydi", () => {
   const active = { role: "COURIER", status: "ACTIVE", courierBranches: [{ branchId: "b1" }] };
   const suspended = { ...active, status: "SUSPENDED" };
+  const branchOff = { role: "COURIER", status: "ACTIVE", courierBranches: [{ branchId: "b1", active: false }] };
   assert.equal(courierIsAssignable(active, "b1"), true);
   assert.equal(courierIsAssignable(suspended, "b1"), false);
   assert.equal(courierIsAssignable(active, "b2"), false);
+  assert.equal(courierIsAssignable(branchOff, "b1"), false);
+});
+
+test("naqd 0 summa kamomad sababisiz yopilmaydi", () => {
+  assert.equal(canDeliver(cashOrder, "courier-a", { method: "CASH", collectedAmount: 0 }).code, "DISCREPANCY_REASON_REQUIRED");
+  const closed = canDeliver(cashOrder, "courier-a", {
+    method: "CASH",
+    collectedAmount: 0,
+    discrepancyReason: "Mijoz qisman to'ladi",
+  });
+  assert.equal(closed.ok, true);
+  assert.equal(closed.proof.discrepancy, 85000);
+  assert.equal(closed.proof.discrepancyOpen, true);
+  assert.equal(closed.proof.markPaid, false);
+  assert.equal(canDeliver(cashOrder, "courier-a", { method: "CASH", collectedAmount: 10.5 }).code, "VALIDATION_ERROR");
+});
+
+test("terminal summasi buyurtma summasiga teng bo'lishi shart", () => {
+  const terminal = { ...cashOrder, payment: { provider: "CARD_TERMINAL", status: "PENDING", amount: 85000 } };
+  assert.equal(
+    canDeliver(terminal, "courier-a", { method: "CARD_TERMINAL", collectedAmount: 999999999 }).code,
+    "AMOUNT_MISMATCH"
+  );
+  const ok = canDeliver(terminal, "courier-a", { method: "CARD_TERMINAL", collectedAmount: 85000, terminalRef: "1234" });
+  assert.equal(ok.ok, true);
+  assert.equal(ok.proof.terminalRef, "1234");
+  assert.equal(ok.proof.markPaid, true);
+});
+
+test("biriktirilgan kuryerli buyurtmani farmatsevt yetkazilmoqda qila olmaydi", () => {
+  const { canTransition } = require("../src/lib/orderState");
+  const { unassignAllowed } = require("../src/lib/courierRules");
+  assert.equal(
+    canTransition({
+      from: "READY",
+      to: "DELIVERING",
+      role: "BRANCH_ADMIN",
+      deliveryType: "DELIVERY",
+      courierId: "courier-a",
+    }),
+    false
+  );
+  assert.equal(
+    canTransition({
+      from: "DELIVERING",
+      to: "COMPLETED",
+      role: "BRANCH_ADMIN",
+      deliveryType: "DELIVERY",
+      courierId: "courier-a",
+      payment: { provider: "CLICK", status: "COMPLETED" },
+    }),
+    false
+  );
+  assert.equal(
+    canTransition({
+      from: "READY",
+      to: "DELIVERING",
+      role: "BRANCH_ADMIN",
+      deliveryType: "DELIVERY",
+    }),
+    true
+  );
+  assert.equal(unassignAllowed({ ...cashOrder, status: "DELIVERING", courierId: "courier-a" }), true);
+  assert.equal(unassignAllowed({ ...cashOrder, status: "READY", courierId: null }), false);
 });

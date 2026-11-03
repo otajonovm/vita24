@@ -16,6 +16,7 @@ const {
   courierScopeWhere,
   handoverDifference,
   serializeCourierOrder,
+  unassignAllowed,
 } = require("../lib/courierRules");
 
 const courierOrderInclude = {
@@ -146,12 +147,19 @@ async function failOrder({ orderId, user, req, reason }) {
   return serializeCourierOrder(updated);
 }
 
-async function lockedOrderIds(courierId, statuses) {
-  const rows = await prisma.cashHandover.findMany({
+const HANDOVER_LOCK_STATUSES = ["PENDING", "CONFIRMED", "DISPUTED"];
+
+function handoverOrderIds(row) {
+  const linked = (row?.orders || []).map((item) => item.orderId).filter(Boolean);
+  return [...new Set([...(linked.length ? linked : []), ...(row?.orderIds || [])])];
+}
+
+async function lockedOrderIds(courierId, statuses, db = prisma) {
+  const rows = await db.cashHandover.findMany({
     where: { courierId, status: { in: statuses } },
-    select: { orderIds: true },
+    select: { orderIds: true, orders: { select: { orderId: true } } },
   });
-  return new Set(rows.flatMap((row) => row.orderIds || []));
+  return new Set(rows.flatMap((row) => handoverOrderIds(row)));
 }
 
 function cashProofSum(proofs) {
@@ -169,19 +177,28 @@ async function shiftSummary(courierId) {
       where: { courierId, courierStage: "DELIVERED", deliveredAt: { gte: start } },
     }),
     prisma.deliveryProof.findMany({
-      where: { courierId },
-      select: { orderId: true, method: true, collectedAmount: true, createdAt: true },
+      where: { courierId, createdAt: { gte: start } },
+      select: {
+        orderId: true,
+        method: true,
+        collectedAmount: true,
+        discrepancy: true,
+        discrepancyOpen: true,
+        createdAt: true,
+      },
     }),
-    lockedOrderIds(courierId, ["PENDING", "CONFIRMED"]),
+    lockedOrderIds(courierId, HANDOVER_LOCK_STATUSES),
     lockedOrderIds(courierId, ["CONFIRMED"]),
   ]);
   let cashOnHand = 0;
   let cardCollected = 0;
   let unhanded = 0;
+  let discrepancy = 0;
   const unhandedOrderIds = [];
   for (const proof of proofs) {
     const amount = Number(proof.collectedAmount || 0);
-    if (proof.method === "CARD_TERMINAL" && proof.createdAt >= start) cardCollected += amount;
+    if (proof.method === "CARD_TERMINAL") cardCollected += amount;
+    if (proof.method === "CASH") discrepancy += Number(proof.discrepancy || 0);
     if (proof.method !== "CASH") continue;
     if (!confirmedOnly.has(proof.orderId)) cashOnHand += amount;
     if (!pendingOrConfirmed.has(proof.orderId)) {
@@ -194,6 +211,7 @@ async function shiftSummary(courierId) {
     cashOnHand: money(cashOnHand),
     cardCollected: money(cardCollected),
     unhanded: money(unhanded),
+    discrepancy: money(discrepancy),
     unhandedOrderIds,
   };
 }
@@ -222,20 +240,47 @@ async function createHandover({ courierId, orderIds, amount }) {
       throw new AppError("Tasdiqlanmagan naqd buyurtma topshirilmaydi", 409, "CASH_NOT_RECEIVED");
     }
   }
-  const locked = await lockedOrderIds(courierId, ["PENDING", "CONFIRMED"]);
-  if (ids.some((id) => locked.has(id))) {
-    throw new AppError("Bu buyurtmalar allaqachon topshirilgan", 409, "INVALID_STATUS");
-  }
   const expected = money(orders.reduce((sum, order) => sum + cashProofSum(order.deliveryProofs), 0));
-  const created = await prisma.cashHandover.create({
-    data: {
-      courierId,
-      branchId: orders[0].branchId,
-      amount: money(submitted),
-      orderIds: ids,
-      status: "PENDING",
-    },
-  });
+  let created;
+  try {
+    created = await runDbTransaction(
+      prisma,
+      async (tx) => {
+        await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${courierId} FOR UPDATE`;
+        const pending = await tx.cashHandover.findFirst({
+          where: { courierId, status: "PENDING" },
+          select: { id: true },
+        });
+        if (pending) throw new AppError("Avvalgi topshirish yopilmagan", 409, "HANDOVER_PENDING");
+        const locked = await lockedOrderIds(courierId, HANDOVER_LOCK_STATUSES, tx);
+        if (ids.some((id) => locked.has(id))) {
+          throw new AppError("Bu buyurtmalar allaqachon topshirilgan", 409, "INVALID_STATUS");
+        }
+        const row = await tx.cashHandover.create({
+          data: {
+            courierId,
+            branchId: orders[0].branchId,
+            amount: money(submitted),
+            orderIds: ids,
+            status: "PENDING",
+            orders: { create: ids.map((orderId) => ({ orderId })) },
+          },
+        });
+        await tx.deliveryProof.updateMany({
+          where: { orderId: { in: ids }, method: "CASH", handoverId: null },
+          data: { handoverId: row.id },
+        });
+        return row;
+      },
+      { isolationLevel: "Serializable" }
+    );
+  } catch (error) {
+    if (error instanceof AppError) throw error;
+    if (error?.code === "P2002" || error?.code === "P2034") {
+      throw new AppError("Topshirish allaqachon yuborilgan", 409, "HANDOVER_PENDING");
+    }
+    throw error;
+  }
   return { ...created, amount: money(created.amount), ...handoverDifference(created.amount, expected) };
 }
 
@@ -246,15 +291,18 @@ function assertPassword(password) {
   }
 }
 
-function publicCourier(user, stats) {
+function publicCourier(user, stats, link) {
+  const branchActive = link ? link.active !== false : true;
   return {
     id: user.id,
     name: user.name,
     phone: user.phone,
     status: user.status,
-    active: user.status === "ACTIVE",
+    active: user.status === "ACTIVE" && branchActive,
+    branchActive,
     todayDelivered: stats?.delivered || 0,
     todayCash: stats?.cash || 0,
+    todayDiscrepancy: stats?.discrepancy || 0,
   };
 }
 
@@ -264,27 +312,42 @@ async function listBranchCouriers(branchId) {
     include: { courier: { select: { id: true, name: true, phone: true, status: true, role: true, deletedAt: true } } },
     orderBy: { createdAt: "asc" },
   });
-  const couriers = links.map((row) => row.courier).filter((user) => user && user.role === "COURIER" && !user.deletedAt);
-  const ids = couriers.map((user) => user.id);
+  const rows = links.filter((row) => row.courier && row.courier.role === "COURIER" && !row.courier.deletedAt);
+  const ids = rows.map((row) => row.courier.id);
   const start = startOfToday();
-  const delivered = ids.length
-    ? await prisma.order.findMany({
-        where: { branchId, courierId: { in: ids }, courierStage: "DELIVERED", deliveredAt: { gte: start } },
-        select: { courierId: true, payment: { select: { provider: true, amount: true, status: true } } },
-      })
-    : [];
+  const [delivered, proofs] = ids.length
+    ? await Promise.all([
+        prisma.order.findMany({
+          where: { branchId, courierId: { in: ids }, courierStage: "DELIVERED", deliveredAt: { gte: start } },
+          select: { courierId: true },
+        }),
+        prisma.deliveryProof.findMany({
+          where: { courierId: { in: ids }, createdAt: { gte: start }, order: { branchId } },
+          select: { courierId: true, method: true, collectedAmount: true, discrepancy: true },
+        }),
+      ])
+    : [[], []];
   const stats = new Map();
   for (const order of delivered) {
-    const bucket = stats.get(order.courierId) || { delivered: 0, cash: 0 };
+    const bucket = stats.get(order.courierId) || { delivered: 0, cash: 0, discrepancy: 0 };
     bucket.delivered += 1;
-    if (String(order.payment?.provider || "").toUpperCase() === "CASH" && order.payment.status === "COMPLETED") {
-      bucket.cash += Number(order.payment.amount || 0);
-    }
     stats.set(order.courierId, bucket);
   }
-  return couriers.map((user) => {
-    const bucket = stats.get(user.id) || { delivered: 0, cash: 0 };
-    return publicCourier(user, { delivered: bucket.delivered, cash: money(bucket.cash) });
+  for (const proof of proofs) {
+    const bucket = stats.get(proof.courierId) || { delivered: 0, cash: 0, discrepancy: 0 };
+    if (proof.method === "CASH") {
+      bucket.cash += Number(proof.collectedAmount || 0);
+      bucket.discrepancy += Number(proof.discrepancy || 0);
+    }
+    stats.set(proof.courierId, bucket);
+  }
+  return rows.map((row) => {
+    const bucket = stats.get(row.courier.id) || { delivered: 0, cash: 0, discrepancy: 0 };
+    return publicCourier(
+      row.courier,
+      { delivered: bucket.delivered, cash: money(bucket.cash), discrepancy: money(bucket.discrepancy) },
+      row
+    );
   });
 }
 
@@ -332,31 +395,88 @@ async function updateCourier({ branchId, courierId, body, req }) {
     if (name.length < 2) throw new AppError("Ismni kiriting", 400, "VALIDATION_ERROR");
     data.name = name;
   }
+  let nextLink = link;
   if (body.status != null) {
     if (body.status !== "ACTIVE" && body.status !== "SUSPENDED") {
       throw new AppError("Holat noto'g'ri", 400, "VALIDATION_ERROR");
     }
-    data.status = body.status;
+    nextLink = await prisma.courierBranch.update({
+      where: { courierId_branchId: { courierId, branchId } },
+      data: { active: body.status === "ACTIVE" },
+    });
   }
-  if (!Object.keys(data).length) throw new AppError("O'zgarish yo'q", 400, "VALIDATION_ERROR");
-  const user = await prisma.user.update({ where: { id: courierId }, data });
+  if (!Object.keys(data).length && body.status == null) throw new AppError("O'zgarish yo'q", 400, "VALIDATION_ERROR");
+  const user = Object.keys(data).length
+    ? await prisma.user.update({ where: { id: courierId }, data })
+    : link.courier;
   await writeAudit(prisma, {
     req,
     action: "COURIER_UPDATED",
     entityType: "User",
     entityId: user.id,
     branchId,
-    summary: `${user.name} ${user.status}`,
-    before: { status: link.courier.status, name: link.courier.name },
-    after: { status: user.status, name: user.name },
+    summary: `${user.name} ${nextLink.active === false ? "SUSPENDED" : "ACTIVE"}`,
+    before: { branchActive: link.active !== false, name: link.courier.name, status: link.courier.status },
+    after: { branchActive: nextLink.active !== false, name: user.name, status: user.status },
   });
-  return publicCourier(user);
+  return publicCourier(user, undefined, nextLink);
 }
 
-async function assignOrderCourier({ orderId, courierId, user, req }) {
+async function assignOrderCourier({ orderId, courierId, remove, user, req }) {
   const order = await prisma.order.findUnique({ where: { id: orderId } });
   if (!order) throw new AppError("Buyurtma topilmadi", 404, "NOT_FOUND");
   if (order.branchId !== user.branchId) throw new AppError("Boshqa filial ma'lumotlariga ruxsat yo'q", 403, "FORBIDDEN");
+  if (remove || !courierId) {
+    if (!unassignAllowed(order)) {
+      throw new AppError("Kuryerni bu holatda olib tashlab bo'lmaydi", 409, "INVALID_STATUS");
+    }
+    const previousCourierId = order.courierId;
+    const updated = await runDbTransaction(prisma, async (tx) => {
+      await tx.order.update({
+        where: { id: order.id },
+        data: {
+          courierId: null,
+          courierStage: "UNASSIGNED",
+          status: order.status === "DELIVERING" ? "READY" : order.status,
+          assignedAt: null,
+          pickedUpAt: null,
+          deliveryFailReason: null,
+          statusChangedAt: new Date(),
+        },
+      });
+      await writeHistory(tx, {
+        orderId: order.id,
+        fromStatus: order.status,
+        toStatus: order.status === "DELIVERING" ? "READY" : order.status,
+        userId: user.id,
+        note: "courier:removed",
+      });
+      await writeAudit(tx, {
+        req,
+        action: "COURIER_UNASSIGNED",
+        entityType: "Order",
+        entityId: order.id,
+        branchId: order.branchId,
+        summary: `${order.orderNumber || ""} kuryer olib tashlandi`,
+        before: { courierId: previousCourierId, courierStage: order.courierStage, status: order.status },
+        after: { courierId: null, courierStage: "UNASSIGNED", status: order.status === "DELIVERING" ? "READY" : order.status },
+      });
+      return tx.order.findUnique({
+        where: { id: order.id },
+        include: {
+          ...courierOrderInclude,
+          courier: { select: { id: true, name: true, phone: true, status: true } },
+          branch: { select: { id: true, name: true, district: true, address: true, phone: true, workingHours: true, isOpen: true } },
+          prescription: true,
+          user: { select: { id: true, name: true, phone: true, role: true } },
+          history: { orderBy: { createdAt: "desc" }, take: 30 },
+        },
+      });
+    });
+    emitOrder(updated.branchId, updated);
+    if (previousCourierId) emitCourier(previousCourierId, updated);
+    return updated;
+  }
   if (!assignAllowed(order)) {
     throw new AppError("Kuryerni faqat tayyor, biriktirilgan yoki yetkazilmagan buyurtmaga qo'yish mumkin", 409, "INVALID_STATUS");
   }
@@ -374,9 +494,11 @@ async function assignOrderCourier({ orderId, courierId, user, req }) {
       data: {
         courierId: courier.id,
         courierStage: "ASSIGNED",
+        status: order.status === "DELIVERING" ? "READY" : order.status,
         assignedAt: new Date(),
         deliveryFailReason: null,
         pickedUpAt: null,
+        statusChangedAt: new Date(),
       },
     });
     await writeHistory(tx, {
@@ -418,8 +540,10 @@ async function assignOrderCourier({ orderId, courierId, user, req }) {
 }
 
 async function expectedCash(handover) {
+  const ids = handoverOrderIds(handover);
+  if (!ids.length) return 0;
   const proofs = await prisma.deliveryProof.findMany({
-    where: { courierId: handover.courierId, orderId: { in: handover.orderIds || [] }, method: "CASH" },
+    where: { courierId: handover.courierId, orderId: { in: ids }, method: "CASH" },
   });
   return cashProofSum(proofs);
 }
@@ -432,8 +556,13 @@ function serializeHandover(row, expected, orders) {
     courierName: row.courier?.name || "",
     branchId: row.branchId,
     amount: money(row.amount),
-    orderIds: row.orderIds || [],
-    orders: (orders || []).map((order) => ({ id: order.id, orderNumber: order.orderNumber })),
+    orderIds: handoverOrderIds(row),
+    orders: (orders || []).map((order) => ({
+      id: order.id,
+      orderNumber: order.orderNumber,
+      discrepancy: order.discrepancy || 0,
+      discrepancyOpen: Boolean(order.discrepancyOpen),
+    })),
     status: row.status,
     confirmedAt: row.confirmedAt,
     note: row.note || "",
@@ -447,27 +576,49 @@ function serializeHandover(row, expected, orders) {
 async function listHandovers(branchId) {
   const rows = await prisma.cashHandover.findMany({
     where: { branchId },
-    include: { courier: { select: { id: true, name: true, phone: true } } },
+    include: {
+      courier: { select: { id: true, name: true, phone: true } },
+      orders: { select: { orderId: true } },
+    },
     orderBy: { createdAt: "desc" },
     take: 100,
   });
-  const ids = [...new Set(rows.flatMap((row) => row.orderIds || []))];
+  const ids = [...new Set(rows.flatMap((row) => handoverOrderIds(row)))];
   const orders = ids.length
-    ? await prisma.order.findMany({ where: { id: { in: ids } }, select: { id: true, orderNumber: true } })
+    ? await prisma.order.findMany({
+        where: { id: { in: ids } },
+        select: {
+          id: true,
+          orderNumber: true,
+          deliveryProofs: { select: { discrepancy: true, discrepancyOpen: true, method: true }, orderBy: { createdAt: "desc" }, take: 1 },
+        },
+      })
     : [];
-  const byId = new Map(orders.map((order) => [order.id, order]));
+  const byId = new Map(
+    orders.map((order) => [
+      order.id,
+      {
+        id: order.id,
+        orderNumber: order.orderNumber,
+        discrepancy: Number(order.deliveryProofs?.[0]?.discrepancy || 0),
+        discrepancyOpen: Boolean(order.deliveryProofs?.[0]?.discrepancyOpen),
+      },
+    ])
+  );
   const result = [];
   for (const row of rows) {
     const expected = await expectedCash(row);
-    result.push(serializeHandover(row, expected, (row.orderIds || []).map((id) => byId.get(id)).filter(Boolean)));
+    result.push(serializeHandover(row, expected, handoverOrderIds(row).map((id) => byId.get(id)).filter(Boolean)));
   }
   return result;
 }
 
 async function settleHandover({ id, branchId, user, req, mode, note }) {
-  const handover = await prisma.cashHandover.findUnique({ where: { id }, include: { courier: { select: { name: true } } } });
+  const handover = await prisma.cashHandover.findUnique({
+    where: { id },
+    include: { courier: { select: { name: true } }, orders: { select: { orderId: true } } },
+  });
   if (!handover || handover.branchId !== branchId) throw new AppError("Topshirish topilmadi", 404, "NOT_FOUND");
-  if (handover.status !== "PENDING") throw new AppError("Bu so'rov allaqachon yopilgan", 409, "INVALID_STATUS");
   const expected = await expectedCash(handover);
   const diff = handoverDifference(handover.amount, expected);
   const text = String(note || "").trim();
@@ -481,27 +632,90 @@ async function settleHandover({ id, branchId, user, req, mode, note }) {
     status = "DISPUTED";
     nextNote = [`Summa farqi: ${diff.delta}`, text].filter(Boolean).join(". ");
   }
-  const updated = await prisma.cashHandover.update({
-    where: { id: handover.id },
-    data: {
-      status,
-      note: nextNote,
-      confirmedById: user.id,
-      confirmedAt: new Date(),
-    },
-    include: { courier: { select: { name: true } } },
-  });
-  await writeAudit(prisma, {
-    req,
-    action: status === "CONFIRMED" ? "HANDOVER_CONFIRMED" : "HANDOVER_DISPUTED",
-    entityType: "CashHandover",
-    entityId: handover.id,
-    branchId,
-    summary: `${handover.courier?.name || ""} ${money(handover.amount)} ${status}${diff.flagged ? ` farq ${diff.delta}` : ""}`,
-    before: { status: "PENDING", amount: money(handover.amount) },
-    after: { status, expected: diff.expected, difference: diff.delta, flagged: diff.flagged },
+  const updated = await runDbTransaction(prisma, async (tx) => {
+    const claimed = await tx.cashHandover.updateMany({
+      where: { id: handover.id, status: "PENDING" },
+      data: {
+        status,
+        note: nextNote,
+        confirmedById: user.id,
+        confirmedAt: new Date(),
+      },
+    });
+    if (claimed.count !== 1) throw new AppError("Bu so'rov allaqachon yopilgan", 409, "INVALID_STATUS");
+    await writeAudit(tx, {
+      req,
+      action: status === "CONFIRMED" ? "HANDOVER_CONFIRMED" : "HANDOVER_DISPUTED",
+      entityType: "CashHandover",
+      entityId: handover.id,
+      branchId,
+      summary: `${handover.courier?.name || ""} ${money(handover.amount)} ${status}${diff.flagged ? ` farq ${diff.delta}` : ""}`,
+      before: { status: "PENDING", amount: money(handover.amount) },
+      after: { status, expected: diff.expected, difference: diff.delta, flagged: diff.flagged },
+    });
+    return tx.cashHandover.findUnique({
+      where: { id: handover.id },
+      include: { courier: { select: { name: true } }, orders: { select: { orderId: true } } },
+    });
   });
   return serializeHandover(updated, expected, []);
+}
+
+async function resolveDiscrepancy({ orderId, user, req }) {
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: {
+      ...courierOrderInclude,
+      payment: true,
+      deliveryProofs: { orderBy: { createdAt: "desc" }, take: 1 },
+      courier: { select: { id: true, name: true, phone: true, status: true } },
+      branch: { select: { id: true, name: true, district: true, address: true, phone: true, workingHours: true, isOpen: true } },
+      prescription: true,
+      user: { select: { id: true, name: true, phone: true, role: true } },
+      history: { orderBy: { createdAt: "desc" }, take: 30 },
+    },
+  });
+  if (!order) throw new AppError("Buyurtma topilmadi", 404, "NOT_FOUND");
+  if (order.branchId !== user.branchId) throw new AppError("Boshqa filial ma'lumotlariga ruxsat yo'q", 403, "FORBIDDEN");
+  const proof = order.deliveryProofs?.[0];
+  if (!proof?.discrepancyOpen) throw new AppError("Ochiq kamomad yo'q", 409, "INVALID_STATUS");
+  await runDbTransaction(prisma, async (tx) => {
+    const claimed = await tx.deliveryProof.updateMany({
+      where: { id: proof.id, discrepancyOpen: true },
+      data: { discrepancyOpen: false },
+    });
+    if (claimed.count !== 1) throw new AppError("Kamomad allaqachon yopilgan", 409, "INVALID_STATUS");
+    if (order.payment?.id) {
+      await tx.paymentTransaction.update({
+        where: { id: order.payment.id },
+        data: { status: "COMPLETED", paidAt: new Date() },
+      });
+    }
+    await writeAudit(tx, {
+      req,
+      action: "PAYMENT_DISCREPANCY_RESOLVED",
+      entityType: "Order",
+      entityId: order.id,
+      branchId: order.branchId,
+      summary: `${order.orderNumber || ""} kamomad tasdiqlandi`,
+      before: { discrepancyOpen: true, collectedAmount: Number(proof.collectedAmount || 0) },
+      after: { discrepancyOpen: false, payment: "COMPLETED" },
+    });
+  });
+  const updated = await prisma.order.findUnique({
+    where: { id: order.id },
+    include: {
+      ...courierOrderInclude,
+      payment: true,
+      deliveryProofs: { orderBy: { createdAt: "desc" }, take: 1 },
+      courier: { select: { id: true, name: true, phone: true, status: true } },
+      branch: { select: { id: true, name: true, district: true, address: true, phone: true, workingHours: true, isOpen: true } },
+      prescription: true,
+      user: { select: { id: true, name: true, phone: true, role: true } },
+      history: { orderBy: { createdAt: "desc" }, take: 30 },
+    },
+  });
+  return updated;
 }
 
 module.exports = {
@@ -517,4 +731,5 @@ module.exports = {
   assignOrderCourier,
   listHandovers,
   settleHandover,
+  resolveDiscrepancy,
 };

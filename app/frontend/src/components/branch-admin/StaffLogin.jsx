@@ -2,18 +2,14 @@ import { useState } from "react";
 import { Lock, Phone } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
+import LanguageSwitcher from "../layout/LanguageSwitcher";
+import { normalizePhoneInput } from "../../lib/format";
+import PhoneInput from "../ui/PhoneInput";
 import { staffLogin } from "../../services/api";
 import { setPharmacistRemember, useAdminAuth, useCourierAuth, usePharmacistAuth } from "../../store/useAuthStore";
 import { apiError } from "./panelShared";
 
 const ADMIN_ROLES = ["BRANCH_ADMIN"];
-
-function normalizePhoneInput(value) {
-  const digits = String(value || "").replace(/\D/g, "");
-  if (digits.startsWith("998")) return `+${digits.slice(0, 12)}`;
-  if (digits) return `+998${digits.slice(0, 9)}`;
-  return "+998";
-}
 
 export default function StaffLogin() {
   const { t } = useTranslation();
@@ -74,8 +70,11 @@ export default function StaffLogin() {
   return (
     <section className="mx-auto grid min-h-[70vh] w-full max-w-md place-content-center gap-4">
     <div className="grid gap-4 rounded-2xl border border-slate-100 bg-white p-5 shadow-sm md:p-6">
-      <div>
+      <div className="flex items-start justify-between gap-3">
         <p className="text-xs font-bold uppercase tracking-wide text-brand">{t("panel.title", "Vita24 Farmatsevt")}</p>
+        <LanguageSwitcher />
+      </div>
+      <div>
         <h1 className="mt-1 text-xl font-extrabold text-slate-900">{t("panel.login", "Kirish")}</h1>
         <p className="mt-1 text-sm text-slate-500">{t("panel.loginHint", "Filial farmatsevti hisobi bilan kiring.")}</p>
       </div>
@@ -84,7 +83,7 @@ export default function StaffLogin() {
           <span className="text-xs font-semibold text-slate-600">{t("panel.phone", "Telefon")}</span>
           <span className="relative">
             <Phone className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-brand" />
-            <input value={phone} onChange={(event) => setPhone(normalizePhoneInput(event.target.value))} inputMode="tel" className={`h-12 w-full rounded-xl border pl-10 pr-3 text-sm outline-none ring-brand/30 focus:ring-2 ${phoneError ? "border-red-500" : "border-slate-200"}`} />
+            <PhoneInput value={phone} onChange={setPhone} className={`h-12 w-full rounded-xl border pl-10 pr-3 text-sm outline-none ring-brand/30 focus:ring-2 ${phoneError ? "border-red-500" : "border-slate-200"}`} />
           </span>
           {phoneError && <span className="text-xs text-red-600">{phoneError}</span>}
         </label>
@@ -94,7 +93,7 @@ export default function StaffLogin() {
             <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-brand" />
             <input type={showPassword ? "text" : "password"} value={password} onChange={(event) => setPassword(event.target.value)} className={`h-12 w-full rounded-xl border pl-10 pr-16 text-sm outline-none ring-brand/30 focus:ring-2 ${passwordError ? "border-red-500" : "border-slate-200"}`} />
             <button type="button" onClick={() => setShowPassword((value) => !value)} className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-500">
-              {showPassword ? "Yashirish" : "Ko'rsatish"}
+              {showPassword ? t("auth.hidePassword", "Yashirish") : t("auth.showPassword", "Ko'rsatish")}
             </button>
           </span>
           {passwordError && <span className="text-xs text-red-600">{passwordError}</span>}

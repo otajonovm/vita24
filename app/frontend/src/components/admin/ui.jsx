@@ -173,8 +173,8 @@ export function DataTable({ rows, columns, searchText, rowKey, emptyTitle, empty
           setQuery(event.target.value);
           setPage(1);
         }}
-        placeholder={t("admin.search")}
-        aria-label={t("admin.search")}
+        placeholder={t("admin.searchPlaceholder")}
+        aria-label={t("admin.searchPlaceholder")}
         className="h-11 w-full max-w-sm rounded-xl border border-slate-200 px-3 text-sm outline-none ring-brand/30 focus:ring-2"
       />
       {slice.length === 0 ? (

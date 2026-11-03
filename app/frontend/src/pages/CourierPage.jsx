@@ -11,7 +11,8 @@ import {
 } from "../services/api";
 import { useCourierAuth } from "../store/useAuthStore";
 import { formatSom } from "../lib/format";
-import { LoadingButton } from "../components/ui";
+import LanguageSwitcher from "../components/layout/LanguageSwitcher";
+import { LoadingButton, PhoneInput } from "../components/ui";
 
 const FAIL_REASONS = ["NO_ANSWER", "ADDRESS_NOT_FOUND", "CUSTOMER_REJECTED", "OTHER"];
 
@@ -57,6 +58,7 @@ function CourierLogin() {
   const setSession = useCourierAuth((state) => state.setSession);
   const [phone, setPhone] = useState("+998");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -80,18 +82,26 @@ function CourierLogin() {
 
   return (
     <form onSubmit={submit} className="mx-auto grid w-full max-w-md gap-4 rounded-2xl bg-white p-5 shadow-sm">
-      <div>
+      <div className="flex items-start justify-between gap-3">
         <p className="text-xs font-bold uppercase tracking-wide text-brand">Vita24</p>
+        <LanguageSwitcher />
+      </div>
+      <div>
         <h1 className="mt-1 text-2xl font-extrabold">{t("courier.login.title")}</h1>
         <p className="mt-1 text-sm text-slate-500">{t("courier.login.hint")}</p>
       </div>
       <label className="grid gap-1 text-sm font-semibold">
         {t("courier.panel.phone")}
-        <input value={phone} onChange={(event) => setPhone(event.target.value)} inputMode="tel" className="h-14 rounded-xl border border-slate-200 px-3 text-lg" />
+        <PhoneInput value={phone} onChange={setPhone} className="h-14 rounded-xl border border-slate-200 px-3 text-lg" />
       </label>
       <label className="grid gap-1 text-sm font-semibold">
         {t("courier.panel.password")}
-        <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} className="h-14 rounded-xl border border-slate-200 px-3 text-lg" />
+        <span className="relative">
+          <input type={showPassword ? "text" : "password"} value={password} onChange={(event) => setPassword(event.target.value)} className="h-14 w-full rounded-xl border border-slate-200 px-3 pr-24 text-lg" />
+          <button type="button" onClick={() => setShowPassword((value) => !value)} className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-500">
+            {showPassword ? t("auth.hidePassword") : t("auth.showPassword")}
+          </button>
+        </span>
       </label>
       {error && <p className="text-sm text-red-600">{error}</p>}
       <LoadingButton type="submit" loading={loading} className="h-14 rounded-xl bg-brand text-lg font-bold text-white disabled:opacity-50">
@@ -173,9 +183,12 @@ function CourierBoard() {
           <p className="text-xs font-bold uppercase tracking-wide text-brand">Vita24</p>
           <h1 className="text-2xl font-extrabold">{t("courier.login.title")}</h1>
         </div>
-        <button type="button" onClick={logout} className="h-12 rounded-xl px-3 text-sm font-semibold text-slate-500">
+        <div className="flex items-center gap-2">
+          <LanguageSwitcher />
+          <button type="button" onClick={logout} className="h-12 rounded-xl px-3 text-sm font-semibold text-slate-500">
           {t("courier.logout")}
-        </button>
+          </button>
+        </div>
       </div>
       <div className="rounded-2xl bg-slate-900 px-4 py-3 text-white">
         <p className="text-xs font-semibold uppercase text-slate-300">{t("courier.shift.cash")}</p>

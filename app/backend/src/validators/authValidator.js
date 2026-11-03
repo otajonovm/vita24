@@ -21,10 +21,7 @@ const loginSchema = z
 
 const refreshSchema = z
   .object({
-    refreshToken: z
-      .string({ required_error: "Refresh token yaroqsiz" })
-      .trim()
-      .min(20, "Refresh token yaroqsiz"),
+    refreshToken: z.string().trim().min(20, "Refresh token yaroqsiz").optional(),
   })
   .strict();
 
