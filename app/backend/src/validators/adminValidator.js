@@ -263,10 +263,16 @@ const shopSettingsSchema = z
     clickEnabled: z.boolean(),
     cashEnabled: z.boolean(),
     cardTerminalEnabled: z.boolean(),
+    cardTransferEnabled: z.boolean().optional().default(false),
+    cardTransferNumber: z.string().trim().max(32).optional().or(z.literal("")),
+    cardTransferHolder: z.string().trim().max(120).optional().or(z.literal("")),
+    cardTransferBank: z.string().trim().max(120).optional().or(z.literal("")),
+    cardTransferTimeoutMin: z.coerce.number().int().min(5).max(180).optional().default(30),
     pickupEnabled: z.boolean(),
     telegramBotToken: z.string().trim().max(200).optional().or(z.literal("")),
     messageTemplates: z.record(z.string().trim().min(1).max(500)).optional(),
-    contactPhone: z.string().trim().min(3).max(40),
+    contactPhone: z.string().trim().regex(/^\+998\d{9}$/, "Telefon +998XXXXXXXXX bo'lishi kerak"),
+    localizedCopy: z.record(z.any()).optional(),
     contactPhoneAlt: z.string().trim().max(40).optional().or(z.literal("")),
     footerAbout: z.string().trim().min(2).max(500),
     footerLicensed: z.string().trim().min(2).max(300),
@@ -274,8 +280,37 @@ const shopSettingsSchema = z
   })
   .strict()
   .superRefine((data, ctx) => {
-    if (!data.paymeEnabled && !data.clickEnabled && !data.cashEnabled && !data.cardTerminalEnabled) {
+    if (
+      !data.paymeEnabled &&
+      !data.clickEnabled &&
+      !data.cashEnabled &&
+      !data.cardTerminalEnabled &&
+      !data.cardTransferEnabled
+    ) {
       ctx.addIssue({ code: "custom", path: ["cashEnabled"], message: "Kamida bitta to'lov turi yoqilishi kerak" });
+    }
+    const digits = String(data.cardTransferNumber || "").replace(/\D/g, "");
+    if (data.cardTransferEnabled) {
+      if (digits.length !== 16) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["cardTransferNumber"],
+          message: "Karta raqami 16 ta raqamdan iborat bo'lishi kerak",
+        });
+      }
+      if (!String(data.cardTransferHolder || "").trim()) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["cardTransferHolder"],
+          message: "Karta egasining ismi majburiy",
+        });
+      }
+    } else if (digits && digits.length !== 16) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["cardTransferNumber"],
+        message: "Karta raqami 16 ta raqamdan iborat bo'lishi kerak",
+      });
     }
   });
 
@@ -304,6 +339,14 @@ const auditQuerySchema = z
     entityType: optionalQueryText(40),
     from: dateQuery,
     to: dateQuery,
+    staffOnly: z
+      .union([z.boolean(), z.string()])
+      .optional()
+      .transform((value) => {
+        if (value == null || value === "") return undefined;
+        if (typeof value === "boolean") return value;
+        return value === "true" || value === "1";
+      }),
   })
   .strict();
 

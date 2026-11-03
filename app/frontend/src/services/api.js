@@ -8,6 +8,7 @@ import { useAdminAuth, useAuthStore, useCourierAuth, usePharmacistAuth } from ".
 const client = axios.create({
   baseURL: import.meta.env.VITE_API_URL || "/api",
   timeout: 20000,
+  withCredentials: true,
 });
 
 export function invalidPayloadError(message = "Server kutilgan javobni bermadi. Keyinroq urinib ko'ring.") {
@@ -147,8 +148,20 @@ client.interceptors.response.use(
     const customerCall =
       audience === "customer" ||
       (!audience && !url.startsWith("/admin") && !url.includes("branch-admin") && url.startsWith("/customers"));
-    if (status === 401 && customerCall && !url.includes("/auth/")) {
-      useAuthStore.getState().logout();
+    if (status === 401 && customerCall && !error.config?._retry && !url.includes("/auth/")) {
+      error.config._retry = true;
+      try {
+        const refreshed = unwrap(await client.post("/auth/refresh", {}, { audience: "customer" }));
+        if (refreshed?.token) {
+          const current = useAuthStore.getState();
+          current.setSession(refreshed.user || current.user, refreshed.token);
+          error.config.headers = error.config.headers || {};
+          error.config.headers.Authorization = `Bearer ${refreshed.token}`;
+          return client(error.config);
+        }
+      } catch {
+        useAuthStore.getState().logout();
+      }
     }
     return Promise.reject(error);
   }
@@ -559,7 +572,8 @@ export async function updateBranchCourier(id, payload) {
 }
 
 export async function assignOrderCourier(orderId, courierId) {
-  return normalizeOrder(unwrap(await client.patch(`/branch-admin/orders/${orderId}/courier`, { courierId }, { audience: "pharmacist" })));
+  const body = courierId ? { courierId } : { remove: true };
+  return normalizeOrder(unwrap(await client.patch(`/branch-admin/orders/${orderId}/courier`, body, { audience: "pharmacist" })));
 }
 
 export async function fetchHandovers() {
@@ -982,6 +996,42 @@ export async function mockPay(orderId) {
   );
 }
 
+export async function uploadOrderReceipt(orderId, file, onProgress) {
+  const formData = new FormData();
+  formData.append("file", file);
+  return unwrap(
+    await client.post(`/orders/${orderId}/receipt`, formData, {
+      audience: "customer",
+      timeout: 30000,
+      onUploadProgress: onProgress
+        ? (event) => {
+            const total = Number(event.total) || 0;
+            if (total > 0) onProgress(Math.round((event.loaded / total) * 100));
+          }
+        : undefined,
+    })
+  );
+}
+
+export async function loadReceiptObjectUrl(receiptId, audience = "customer") {
+  const response = await client.get(`/orders/receipts/${receiptId}/file`, {
+    responseType: "blob",
+    audience,
+  });
+  const blob = response.data;
+  return { url: URL.createObjectURL(blob), type: blob.type || "" };
+}
+
+export async function approveOrderReceipt(orderId) {
+  return unwrap(await client.post(`/branch-admin/orders/${orderId}/receipt/approve`, {}, { audience: "branch" }));
+}
+
+export async function rejectOrderReceipt(orderId, reason) {
+  return unwrap(
+    await client.post(`/branch-admin/orders/${orderId}/receipt/reject`, { reason }, { audience: "branch" })
+  );
+}
+
 export async function requestCustomerOtp(phone) {
   return unwrap(await client.post("/auth/otp/request", { phone }));
 }
@@ -1071,7 +1121,7 @@ export async function staffUpdateOrderStatus(orderId, status, cancelReason = "",
 }
 
 export async function staffLogin({ phone, password, totp }) {
-  const data = unwrap(await client.post("/auth/login", { phone, password, ...(totp ? { totp } : {}) }));
+  const data = unwrap(await client.post("/auth/login", { phone, password, ...(totp ? { totp } : {}) }, { timeout: 15000 }));
   return {
     token: data?.token || null,
     refreshToken: data?.refreshToken || null,

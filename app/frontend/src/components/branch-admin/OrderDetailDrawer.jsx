@@ -6,7 +6,7 @@ import { ErrorState, LoadingButton, SkeletonLines } from "../ui";
 import OrderCard from "./OrderCard";
 import { apiError, printHtml } from "./panelShared";
 
-const PAYMENT = { PAYME: "Payme", CLICK: "Click", CASH: "Naqd", CARD_TERMINAL: "CARD_TERMINAL", PENDING: "Kutilmoqda", COMPLETED: "To'langan", FAILED: "Muvaffaqiyatsiz" };
+const PAYMENT = { PAYME: "Payme", CLICK: "Click", CASH: "Naqd", CARD_TERMINAL: "CARD_TERMINAL", CARD_TRANSFER: "Kartaga o'tkazma", PENDING: "Kutilmoqda", COMPLETED: "To'langan", FAILED: "Muvaffaqiyatsiz" };
 
 export default function OrderDetailDrawer({ orderId, readOnly = false, onClose, onToast }) {
   const { t } = useTranslation();
@@ -96,9 +96,9 @@ export default function OrderDetailDrawer({ orderId, readOnly = false, onClose, 
       const updated = await action();
       setOrder(updated);
       setNote(updated.pharmacistNote || "");
-      onToast("Saqlandi");
+      onToast(t("panel.saved"));
     } catch (err) {
-      onToast(apiError(err, "Amal bajarilmadi"));
+      onToast(apiError(err, t("panel.actionFailed")));
     } finally {
       setBusy(false);
     }
@@ -153,9 +153,9 @@ export default function OrderDetailDrawer({ orderId, readOnly = false, onClose, 
               ))}
             </ul>
             <div className="grid gap-1 text-sm">
-              <p className="flex justify-between"><span>Dorilar jami</span><span>{formatSom(order.subtotal)}</span></p>
-              <p className="flex justify-between"><span>Yetkazib berish</span><span>{formatSom(order.deliveryFee)}</span></p>
-              <p className="flex justify-between font-extrabold"><span>Umumiy</span><span>{formatSom(order.totalAmount)}</span></p>
+              <p className="flex justify-between"><span>{t("panel.subtotal")}</span><span>{formatSom(order.subtotal)}</span></p>
+              <p className="flex justify-between"><span>{t("panel.deliveryFee")}</span><span>{formatSom(order.deliveryFee)}</span></p>
+              <p className="flex justify-between font-extrabold"><span>{t("panel.total")}</span><span>{formatSom(order.totalAmount)}</span></p>
               <p>{t("panel.payment", "To'lov")}: {PAYMENT[order.payment?.provider] || "—"} · {PAYMENT[order.payment?.status] || "—"}</p>
             </div>
             {order.refundStatus === "PENDING" && <p className="text-sm text-amber-800">{t("panel.refundPending", "To'lov qaytarilishi kutilmoqda")}</p>}
@@ -163,7 +163,7 @@ export default function OrderDetailDrawer({ orderId, readOnly = false, onClose, 
               <p className="text-xs font-bold uppercase text-slate-500">{t("panel.history", "Holat tarixi")}</p>
               <ul className="mt-1 grid gap-1 text-sm">
                 {(order.history || []).map((row) => (
-                  <li key={row.id}>{formatDateTime(row.createdAt)} · {row.userName || (row.kind === "system" ? "Tizim" : "—")} · {row.kind === "undo" ? "Ortga qaytarildi" : `${orderStatusLabel({ status: row.fromStatus })} → ${orderStatusLabel({ status: row.toStatus })}`}{row.note && row.note !== "undo" ? ` · ${row.note}` : ""}</li>
+                  <li key={row.id}>{formatDateTime(row.createdAt)} · {row.userName || (row.kind === "system" ? t("panel.system") : "—")} · {row.kind === "undo" ? t("panel.undoLine") : `${orderStatusLabel({ status: row.fromStatus })} → ${orderStatusLabel({ status: row.toStatus })}`}{row.note && row.note !== "undo" ? ` · ${row.note}` : ""}</li>
                 ))}
               </ul>
             </div>
@@ -193,6 +193,8 @@ export default function OrderDetailDrawer({ orderId, readOnly = false, onClose, 
               busy={busy}
               readOnly={readOnly}
               couriers={couriers}
+              onToast={onToast}
+              onReceiptDone={() => load()}
               onOpen={() => {}}
               onReview={() => {}}
               onStatus={(current, payload) => run(() => updateBranchOrderStatus(current.id, payload))}

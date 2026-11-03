@@ -72,6 +72,12 @@ enum PaymentStatus {
   FAILED
 }
 
+enum ReceiptStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 enum SynonymType {
   BRAND
   INGREDIENT
@@ -116,6 +122,7 @@ model User {
   deliveryProofs      DeliveryProof[]
   cashHandovers       CashHandover[]     @relation("HandoverCourier")
   confirmedHandovers  CashHandover[]     @relation("HandoverConfirmer")
+  refreshTokens       RefreshToken[]
   prescriptions       Prescription[]
   lastStreet          String?
   lastApartment       String?
@@ -210,24 +217,30 @@ model Branch {
 }
 
 model ShopSetting {
-  id                   String   @id @default("default")
-  deliveryFee          Decimal  @default(15000) @db.Decimal(12, 2)
-  freeDeliveryFrom     Decimal  @default(200000) @db.Decimal(12, 2)
-  reviewWindowMinutes  Int      @default(120)
-  paymentWindowMinutes Int      @default(15)
-  paymeEnabled         Boolean  @default(true)
-  clickEnabled         Boolean  @default(true)
-  cashEnabled          Boolean  @default(true)
-  cardTerminalEnabled  Boolean  @default(true)
-  pickupEnabled        Boolean  @default(true)
-  telegramBotToken     String?
-  messageTemplates     Json
-  contactPhone         String   @default("1095")
-  contactPhoneAlt      String   @default("+998 71 200 24 24")
-  footerAbout          String
-  footerLicensed       String
-  footerShort          String
-  updatedAt            DateTime @updatedAt
+  id                      String   @id @default("default")
+  deliveryFee             Decimal  @default(15000) @db.Decimal(12, 2)
+  freeDeliveryFrom        Decimal  @default(200000) @db.Decimal(12, 2)
+  reviewWindowMinutes     Int      @default(120)
+  paymentWindowMinutes    Int      @default(15)
+  paymeEnabled            Boolean  @default(true)
+  clickEnabled            Boolean  @default(true)
+  cashEnabled             Boolean  @default(true)
+  cardTerminalEnabled     Boolean  @default(true)
+  cardTransferEnabled     Boolean  @default(false)
+  cardTransferNumber      String   @default("")
+  cardTransferHolder      String   @default("")
+  cardTransferBank        String   @default("")
+  cardTransferTimeoutMin  Int      @default(30)
+  pickupEnabled           Boolean  @default(true)
+  telegramBotToken        String?
+  messageTemplates        Json
+  contactPhone            String   @default("1095")
+  contactPhoneAlt         String   @default("+998 71 200 24 24")
+  footerAbout             String
+  footerLicensed          String
+  footerShort             String
+  localizedCopy           Json     @default("{}")
+  updatedAt               DateTime @updatedAt
 }
 
 model SystemSetting {
@@ -279,12 +292,15 @@ model SearchLog {
 }
 
 model Category {
-  id        String     @id @default(uuid())
-  name      String
-  slug      String     @unique
-  icon      String
-  sortOrder Int        @default(0)
-  medicines Medicine[]
+  id         String     @id @default(uuid())
+  name       String
+  nameUz     String?
+  nameUzCyrl String?
+  nameRu     String?
+  slug       String     @unique
+  icon       String
+  sortOrder  Int        @default(0)
+  medicines  Medicine[]
 }
 
 model Medicine {
@@ -298,8 +314,9 @@ model Medicine {
   rxSource       RxSource?
   atcCode        String?
   rxNeedsReview  Boolean       @default(false)
-  showOnHome     Boolean       @default(false)
-  homeSortOrder  Int           @default(0)
+  showOnHome          Boolean       @default(false)
+  hiddenFromShowcase  Boolean       @default(false)
+  homeSortOrder       Int           @default(0)
   imageEmoji     String
   imageUrl       String?
   externalApiId  Int?          @unique
@@ -393,8 +410,10 @@ model Order {
   branch              Branch              @relation(fields: [branchId], references: [id])
   items               OrderItem[]
   deliveryProofs      DeliveryProof[]
+  handoverLinks       CashHandoverOrder[]
   prescription    Prescription?
   payment         PaymentTransaction?
+  paymentReceipts PaymentReceipt[]
   history         OrderStatusHistory[]
   promoRedemption PromoRedemption?
   createdAt       DateTime            @default(now())
@@ -407,6 +426,7 @@ model Order {
 model CourierBranch {
   courierId String
   branchId  String
+  active    Boolean  @default(true)
   createdAt DateTime @default(now())
   courier   User     @relation(fields: [courierId], references: [id], onDelete: Cascade)
   branch    Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
@@ -416,38 +436,70 @@ model CourierBranch {
 }
 
 model DeliveryProof {
-  id              String              @id @default(uuid())
-  orderId         String
-  courierId       String
-  method          DeliveryProofMethod
-  collectedAmount Decimal?            @db.Decimal(12, 2)
-  receiptGiven    Boolean             @default(false)
-  photoPath       String?
-  createdAt       DateTime            @default(now())
-  order           Order               @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  courier         User                @relation(fields: [courierId], references: [id])
+  id                 String              @id @default(uuid())
+  orderId            String
+  courierId          String
+  method             DeliveryProofMethod
+  collectedAmount    Decimal?            @db.Decimal(12, 2)
+  discrepancy        Decimal?            @db.Decimal(12, 2)
+  discrepancyReason  String?
+  discrepancyOpen    Boolean             @default(false)
+  terminalRef        String?
+  receiptGiven       Boolean             @default(false)
+  photoPath          String?
+  handoverId         String?
+  createdAt          DateTime            @default(now())
+  order              Order               @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  courier            User                @relation(fields: [courierId], references: [id])
+  handover           CashHandover?       @relation(fields: [handoverId], references: [id])
 
   @@index([orderId])
   @@index([courierId, createdAt])
+  @@index([handoverId])
 }
 
 model CashHandover {
-  id            String         @id @default(uuid())
+  id            String              @id @default(uuid())
   courierId     String
   branchId      String
-  amount        Decimal        @db.Decimal(12, 2)
+  amount        Decimal             @db.Decimal(12, 2)
   orderIds      String[]
-  status        HandoverStatus @default(PENDING)
+  status        HandoverStatus      @default(PENDING)
   confirmedById String?
   confirmedAt   DateTime?
   note          String?
-  createdAt     DateTime       @default(now())
-  courier       User           @relation("HandoverCourier", fields: [courierId], references: [id])
-  branch        Branch         @relation(fields: [branchId], references: [id])
-  confirmedBy   User?          @relation("HandoverConfirmer", fields: [confirmedById], references: [id])
+  createdAt     DateTime            @default(now())
+  courier       User                @relation("HandoverCourier", fields: [courierId], references: [id])
+  branch        Branch              @relation(fields: [branchId], references: [id])
+  confirmedBy   User?               @relation("HandoverConfirmer", fields: [confirmedById], references: [id])
+  orders        CashHandoverOrder[]
+  proofs        DeliveryProof[]
 
   @@index([branchId, status])
   @@index([courierId, createdAt])
+}
+
+model CashHandoverOrder {
+  handoverId String
+  orderId    String
+  handover   CashHandover @relation(fields: [handoverId], references: [id], onDelete: Cascade)
+  order      Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@id([handoverId, orderId])
+  @@index([orderId])
+}
+
+model RefreshToken {
+  id           String    @id @default(uuid())
+  userId       String
+  tokenHash    String    @unique
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  replacedById String?
+  createdAt    DateTime  @default(now())
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model OrderItem {
@@ -544,6 +596,22 @@ model PaymentTransaction {
   order      Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
   createdAt  DateTime      @default(now())
   updatedAt  DateTime      @updatedAt
+}
+
+model PaymentReceipt {
+  id           String        @id @default(uuid())
+  orderId      String
+  fileUrl      String
+  fileName     String
+  status       ReceiptStatus @default(PENDING)
+  rejectReason String?
+  reviewedById String?
+  reviewedAt   DateTime?
+  order        Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  createdAt    DateTime      @default(now())
+
+  @@index([orderId, createdAt])
+  @@index([orderId, status])
 }
 
 model AuditLog {

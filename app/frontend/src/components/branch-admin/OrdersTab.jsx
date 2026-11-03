@@ -233,11 +233,11 @@ export default function OrdersTab({ branchId, pulse, focus, readOnly = false, on
           className="h-11 rounded-xl border border-slate-200 px-3 text-sm"
         />
         <label className="grid gap-1 text-xs font-semibold text-slate-500">
-          Dan
+          {t("panel.dateFrom")}
           <input value={fromText} onChange={(event) => setFromText(event.target.value)} placeholder="kk.oo.yyyy" inputMode="numeric" className="h-11 rounded-xl border border-slate-200 px-3 text-sm text-slate-900" />
         </label>
         <label className="grid gap-1 text-xs font-semibold text-slate-500">
-          Gacha
+          {t("panel.dateTo")}
           <input value={toText} onChange={(event) => setToText(event.target.value)} placeholder="kk.oo.yyyy" inputMode="numeric" className="h-11 rounded-xl border border-slate-200 px-3 text-sm text-slate-900" />
         </label>
         <select value={sort} onChange={(event) => setSort(event.target.value)} className="h-11 rounded-xl border border-slate-200 px-3 text-sm">
@@ -248,9 +248,9 @@ export default function OrdersTab({ branchId, pulse, focus, readOnly = false, on
       </div>
       <div className="flex flex-wrap gap-2">
         {[
-          ["Bugun", 0],
-          ["Kecha", 1],
-          ["7 kun", 6],
+          [t("panel.today"), 0],
+          [t("panel.yesterday"), 1],
+          [t("panel.days7"), 6],
         ].map(([label, days]) => (
           <button
             key={label}
@@ -269,7 +269,7 @@ export default function OrdersTab({ branchId, pulse, focus, readOnly = false, on
           </button>
         ))}
       </div>
-      {rangeError && <p className="text-sm text-red-600">Sana oralig'i noto'g'ri: Dan sanasi Gacha sanasidan keyin</p>}
+      {rangeError && <p className="text-sm text-red-600">{t("panel.dateRangeError")}</p>}
       <div className="relative">
         <div className="flex gap-2 overflow-x-auto pb-1 xl:flex-wrap xl:overflow-visible">
         {ORDER_FILTERS.map(([id, key, fallback]) => {
@@ -309,8 +309,8 @@ export default function OrdersTab({ branchId, pulse, focus, readOnly = false, on
       )}
       {!loading && !error && orders.length === 0 && (
         <EmptyState
-          title="Bu filtr bo'yicha buyurtma topilmadi"
-          actionLabel="Filtrlarni tozalash"
+          title={t("panel.emptyOrders")}
+          actionLabel={t("panel.clearFilters")}
           onAction={() => {
             setStatus("");
             setSearch("");
@@ -326,6 +326,16 @@ export default function OrdersTab({ branchId, pulse, focus, readOnly = false, on
           <OrderCard
             key={order.id}
             order={order}
+            onToast={onToast}
+            onReceiptDone={() => {
+              fetchBranchAdminOrders(branchId, { search: query, from, to, status, sort, page: 1, limit: 20 })
+                .then((data) => {
+                  setOrders(data.orders);
+                  onOrders?.(data.orders);
+                  setCounts(data.counts || {});
+                })
+                .catch(() => {});
+            }}
             highlight={highlight.includes(order.id)}
             busy={busyId === order.id}
             readOnly={readOnly}

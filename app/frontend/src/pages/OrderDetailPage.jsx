@@ -20,6 +20,7 @@ import {
   uploadPrescription,
 } from "../services/api";
 import client from "../services/api";
+import CardTransferPayPanel from "../components/orders/CardTransferPayPanel";
 import { useAuthStore } from "../store/useAuthStore";
 import { useBranchStore } from "../store/useBranchStore";
 import { useCartStore } from "../store/useCartStore";
@@ -28,7 +29,8 @@ import { useToastStore } from "../store/useToastStore";
 const POLL_MS = 15000;
 
 function statusKey(order) {
-  return `${order?.status || ""}:${order?.courierStage || ""}:${order?.prescription?.status || ""}`;
+  const receipt = order?.latestReceipt || (order?.paymentReceipts || [])[0];
+  return `${order?.status || ""}:${order?.courierStage || ""}:${order?.prescription?.status || ""}:${receipt?.status || ""}:${receipt?.id || ""}`;
 }
 
 function OrderPrescription({ prescriptionId, fileName }) {
@@ -170,7 +172,9 @@ export default function OrderDetailPage() {
 
   const payOnDelivery = ["CASH", "CARD_TERMINAL"].includes(String(order?.payment?.provider || "").toUpperCase());
   const reviewing = ["PENDING_PRESCRIPTION", "PENDING_BRANCH"].includes(order?.status);
-  const showPayTimer = order?.status === "WAITING_PAYMENT" && !payOnDelivery;
+  const cardTransfer = String(order?.payment?.provider || "").toUpperCase() === "CARD_TRANSFER";
+  const receiptPending = cardTransfer && (order?.latestReceipt || order?.paymentReceipts?.[0])?.status === "PENDING";
+  const showPayTimer = order?.status === "WAITING_PAYMENT" && !payOnDelivery && !receiptPending;
   const showReviewTimer = reviewing;
 
   useEffect(() => {
@@ -437,6 +441,18 @@ export default function OrderDetailPage() {
             <p className="mt-3 text-sm text-slate-600">{t("order.pay.label")}: {t(view.paymentKey)}</p>
           )}
           {view.prescriptionKey && <p className="mt-1 text-sm text-slate-600">{t(view.prescriptionKey)}</p>}
+          {view.showCardTransfer && (
+            <CardTransferPayPanel
+              order={order}
+              remaining={remaining}
+              onUploaded={async () => {
+                const response = await client.get(`/orders/${id}`, { audience: "customer" });
+                remember(response.data?.data || response.data);
+                pushToast(t("order.receipt.uploaded"));
+              }}
+              onError={setActionError}
+            />
+          )}
           {view.showPay && (
             <LoadingButton type="button" loading={paying} loadingText={t("cart.paying")} onClick={pay} className="mt-4 h-12 rounded-xl bg-[#087B51] px-4 text-sm font-bold text-white disabled:opacity-50">
               {`${formatSom(total)} ${t("order.pay.label")}`}

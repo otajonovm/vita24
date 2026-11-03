@@ -1,6 +1,7 @@
 const prisma = require("../lib/prisma");
 const { asyncHandler, sendSuccess } = require("../lib/response");
 const { writeAudit } = require("../lib/audit");
+const { maskCardNumber } = require("../lib/cardTransfer");
 const {
   getShopSettings,
   publicShopSettings,
@@ -19,8 +20,11 @@ const getAdminSettings = asyncHandler(async (req, res) => {
 });
 
 function settingsAudit(view) {
-  const { telegramToken, ...rest } = view;
-  return rest;
+  const { telegramToken, cardTransferNumber, ...rest } = view;
+  return {
+    ...rest,
+    cardTransferNumber: maskCardNumber(cardTransferNumber || view.cardTransferNumberMasked || ""),
+  };
 }
 
 const updateAdminSettings = asyncHandler(async (req, res) => {

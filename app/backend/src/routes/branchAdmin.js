@@ -19,7 +19,9 @@ const {
   setBranchOpen,
   streamEvents,
   assignCourier,
+  resolvePaymentDiscrepancy,
 } = require("../controllers/branchAdminController");
+const { approveReceipt, rejectReceipt } = require("../controllers/receiptController");
 const {
   listCouriers,
   postCourier,
@@ -105,6 +107,18 @@ router.patch(
   validateRequest(verifyPrescriptionSchema, "body"),
   verifyPrescription
 );
+router.post(
+  "/orders/:id/receipt/approve",
+  requireBranchAdminWrite,
+  validateRequest(idParamSchema, "params"),
+  approveReceipt
+);
+router.post(
+  "/orders/:id/receipt/reject",
+  requireBranchAdminWrite,
+  validateRequest(idParamSchema, "params"),
+  rejectReceipt
+);
 router.patch(
   "/stock/bulk",
   requireBranchAdminWrite,
@@ -135,6 +149,12 @@ router.patch(
   validateRequest(idParamSchema, "params"),
   validateRequest(assignCourierSchema),
   assignCourier
+);
+router.post(
+  "/orders/:id/resolve-discrepancy",
+  requireBranchAdminWrite,
+  validateRequest(idParamSchema, "params"),
+  resolvePaymentDiscrepancy
 );
 router.get("/handovers", requireBranchAdminWrite, getHandovers);
 router.post(

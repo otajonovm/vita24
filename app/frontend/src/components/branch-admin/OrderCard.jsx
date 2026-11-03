@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { formatDateTime, formatSom } from "../../lib/format";
 import { LoadingButton } from "../ui";
+import ReceiptReviewBlock from "./ReceiptReviewBlock";
 import { CANCEL_REASONS, StatusBadge, canDecide, deadlineMs, formatRemain, paymentLabel, timerTone } from "./panelShared";
 
 const NEXT = {
@@ -12,8 +13,14 @@ const NEXT = {
 };
 
 const CANCELABLE = ["PENDING_PRESCRIPTION", "PENDING_BRANCH", "WAITING_PAYMENT", "PAID", "PREPARING", "READY", "DELIVERING"];
+const STAGE_KEY = {
+  ASSIGNED: "courier.stage.assigned",
+  PICKED_UP: "courier.stage.enRoute",
+  DELIVERED: "courier.stage.delivered",
+  FAILED: "courier.stage.failed",
+};
 
-export default function OrderCard({ order, highlight, busy, readOnly = false, couriers = [], onOpen, onReview, onStatus, onUndo, onCash, onAssign }) {
+export default function OrderCard({ order, highlight, busy, readOnly = false, couriers = [], onOpen, onReview, onStatus, onUndo, onCash, onAssign, onReceiptDone, onToast }) {
   const { t } = useTranslation();
   const [now, setNow] = useState(Date.now());
   const [cancelOpen, setCancelOpen] = useState(false);
@@ -26,12 +33,13 @@ export default function OrderCard({ order, highlight, busy, readOnly = false, co
     ? ["COMPLETED", "panel.pickedUp", "Mijoz olib ketdi"]
     : NEXT[order.status];
   if (order.deliveryType !== "PICKUP" && order.status === "READY") next = null;
+  if (order.deliveryType !== "PICKUP" && order.courierId && (order.status === "READY" || order.status === "DELIVERING")) next = null;
   if (order.courierStage === "PICKED_UP") next = null;
   const canCancel = CANCELABLE.includes(order.status);
   const undoLeft = order.undoUntil ? new Date(order.undoUntil).getTime() - now : 0;
   const provider = String(order.payment?.provider || "").toUpperCase();
   const paidOnline = order.payment?.status === "COMPLETED" && provider !== "CASH";
-  const cashDue = provider === "CASH" && order.payment?.status !== "COMPLETED" && ["PREPARING", "READY", "DELIVERING"].includes(order.status) && (order.deliveryType === "PICKUP" || !order.courierId);
+  const cashDue = order.deliveryType === "PICKUP" && provider === "CASH" && order.payment?.status !== "COMPLETED" && ["PREPARING", "READY"].includes(order.status);
   const name = order.customerName || order.user?.name || order.customerPhone;
   const noteRequired = reason === "OTHER" && !note.trim();
 
@@ -73,18 +81,21 @@ export default function OrderCard({ order, highlight, busy, readOnly = false, co
         </p>
       )}
       {order.cancelReason && <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{t("panel.reason", "Sabab")}: {order.cancelReason}</p>}
+      <ReceiptReviewBlock order={order} readOnly={readOnly} onToast={onToast} onDone={onReceiptDone} />
       <ul className="grid gap-1 text-sm text-slate-700">
         {(order.items || []).slice(0, 3).map((item) => (
           <li key={item.id}>{item.name} × {item.quantity}</li>
         ))}
       </ul>
-      {!readOnly && order.deliveryType !== "PICKUP" && order.status === "READY" && ["UNASSIGNED", "ASSIGNED", "FAILED"].includes(order.courierStage || "UNASSIGNED") && (
+      {!readOnly && order.deliveryType !== "PICKUP" && ["READY", "DELIVERING"].includes(order.status) && (
         <label className="grid gap-1 text-sm">
           {t("courier.panel.assign")}
+          {order.courier?.name ? ` · ${order.courier.name}` : ""}
+          {STAGE_KEY[order.courierStage] ? ` · ${t(STAGE_KEY[order.courierStage])}` : ""}
           <select
             value={order.courierId || ""}
             disabled={busy}
-            onChange={(event) => event.target.value && onAssign?.(order, event.target.value)}
+            onChange={(event) => onAssign?.(order, event.target.value)}
             className="h-11 rounded-xl border border-slate-200 px-3"
           >
             <option value="">{t("courier.panel.none")}</option>
@@ -93,6 +104,9 @@ export default function OrderCard({ order, highlight, busy, readOnly = false, co
             ))}
           </select>
         </label>
+      )}
+      {order.discrepancyOpen && (
+        <p className="rounded-xl bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{t("panel.discrepancy")}: {formatSom(order.discrepancy || 0)}</p>
       )}
       <div className="flex flex-wrap gap-2">
         <button type="button" onClick={() => onOpen(order)} className="h-10 rounded-xl border border-slate-200 px-3 text-sm font-semibold">{t("panel.detail", "Tafsilot")}</button>
@@ -114,7 +128,7 @@ export default function OrderCard({ order, highlight, busy, readOnly = false, co
         )}
         {!readOnly && cashDue && (
           <LoadingButton type="button" loading={busy} loadingText={t("common.saving")} onClick={() => onCash(order)} className="h-10 rounded-xl border border-slate-200 px-3 text-sm font-bold disabled:opacity-50">
-            Naqd olindi
+            {t("panel.cashReceived", "Naqd olindi")}
           </LoadingButton>
         )}
         {!readOnly && canCancel && (
@@ -144,7 +158,7 @@ export default function OrderCard({ order, highlight, busy, readOnly = false, co
             >
               {order.deliveryType === "PICKUP" ? t("panel.pickedUp", "Mijoz olib ketdi") : t("panel.delivered", "Yetkazildi")}
             </LoadingButton>
-            <button type="button" onClick={() => setConfirmDone(false)} className="h-10 rounded-xl px-3 text-sm">Bekor</button>
+            <button type="button" onClick={() => setConfirmDone(false)} className="h-10 rounded-xl px-3 text-sm">{t("common.cancel")}</button>
           </div>
         </div>
       )}
@@ -170,7 +184,7 @@ export default function OrderCard({ order, highlight, busy, readOnly = false, co
           {noteRequired && <p className="text-xs text-red-600">Boshqa sabab uchun izoh yozing</p>}
           <div className="flex gap-2">
             <LoadingButton type="submit" loading={busy} disabled={!reason || noteRequired} loadingText={t("common.saving")} className="h-10 rounded-xl bg-red-600 px-3 text-sm font-bold text-white disabled:opacity-50">{t("panel.cancel", "Bekor qilish")}</LoadingButton>
-            <button type="button" onClick={() => setCancelOpen(false)} className="h-10 rounded-xl px-3 text-sm">Bekor</button>
+            <button type="button" onClick={() => setCancelOpen(false)} className="h-10 rounded-xl px-3 text-sm">{t("common.cancel")}</button>
           </div>
         </form>
       )}

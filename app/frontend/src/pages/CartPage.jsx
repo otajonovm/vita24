@@ -48,6 +48,7 @@ function lineStock(item) {
 const PAYMENT_OPTIONS = [
   { id: "payme", label: "Payme", flag: "paymeEnabled" },
   { id: "click", label: "Click", flag: "clickEnabled" },
+  { id: "card_transfer", labelKey: "cart.cardTransfer", flag: "cardTransferEnabled", hintKey: "cart.cardTransferHint" },
   { id: "cash", labelKey: "cart.cash", flag: "cashEnabled" },
   { id: "card_terminal", labelKey: "courier.pay.cardTerminal", flag: "cardTerminalEnabled", deliveryOnly: true },
 ];
@@ -55,6 +56,7 @@ const PAYMENT_OPTIONS = [
 function visiblePayments(shop, deliveryType) {
   return PAYMENT_OPTIONS.filter((option) => {
     if (option.deliveryOnly && deliveryType !== "DELIVERY") return false;
+    if (option.flag === "cardTransferEnabled") return Boolean(shop?.cardTransferEnabled);
     return !shop || shop[option.flag] !== false;
   });
 }
@@ -107,8 +109,8 @@ export default function CartPage() {
     if (!shop) return;
     if (deliveryType === "PICKUP" && shop.pickupEnabled === false) setDeliveryType("DELIVERY");
     const options = visiblePayments(shop, deliveryType);
-    if (options.length && !options.some((option) => option.id === paymentMethod)) {
-      setPaymentMethod(options[0].id);
+    if (paymentMethod && options.length && !options.some((option) => option.id === paymentMethod)) {
+      setPaymentMethod("");
     }
   }, [shop, deliveryType, paymentMethod, paymentOptionsKey, setDeliveryType, setPaymentMethod]);
   const address = useCartStore((state) => state.savedAddress) || {
@@ -311,12 +313,14 @@ export default function CartPage() {
     addressValid &&
     prescriptionValid &&
     paymentsAvailable &&
+    Boolean(paymentMethod) &&
     !expired;
   const canCheckout = readyForAuth && Boolean(token);
 
   const checkoutHints = [
     !branch && t("cart.hint.branch"),
     !paymentsAvailable && t("cart.hint.payment"),
+    paymentsAvailable && !paymentMethod && t("cart.hint.payment"),
     !phoneValid && t("cart.hint.phone"),
     !nameValid && t("cart.hint.name"),
     !addressValid && t("cart.hint.address"),
@@ -591,9 +595,13 @@ export default function CartPage() {
 
   const submitLabel = hasPrescriptionItems
     ? t("cart.submitRx")
-    : paymentMethod === "cash" || paymentMethod === "card_terminal"
+    : !paymentMethod
       ? t("cart.submit")
-      : t("cart.pay", { amount: formatSom(totals.totalAmount) });
+      : paymentMethod === "cash"
+        ? t("cart.submitCash")
+        : paymentMethod === "card_terminal"
+          ? t("cart.submit")
+          : t("cart.pay", { amount: formatSom(totals.totalAmount) });
   const submittingLabel =
     submitStage === "rx"
       ? t("cart.uploadingRx", { percent: uploadPct || 0 })
@@ -891,12 +899,7 @@ export default function CartPage() {
             <label className="grid gap-1 text-xs font-semibold text-slate-600">
               {t("cart.promo")}
               {!token ? (
-                <span className="flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-600">
-                  {t("cart.promoLogin")}
-                  <button type="button" onClick={() => setLoginOpen(true)} className="h-8 rounded-lg bg-[#087B51] px-3 text-xs font-bold text-white">
-                    {t("common.login")}
-                  </button>
-                </span>
+                <span className="text-xs font-semibold text-slate-500">{t("cart.promoLogin")}</span>
               ) : (
               <span className="flex gap-2">
                 <input
@@ -968,7 +971,12 @@ export default function CartPage() {
                   ) : (
                     <CreditCard className="h-4 w-4 text-brand" />
                   )}
-                  <span className="text-sm font-semibold text-slate-800">{option.labelKey ? t(option.labelKey) : option.label}</span>
+                  <span className="grid">
+                    <span className="text-sm font-semibold text-slate-800">{option.labelKey ? t(option.labelKey) : option.label}</span>
+                    {option.hintKey && paymentMethod === option.id ? (
+                      <span className="text-xs font-medium text-slate-500">{t(option.hintKey)}</span>
+                    ) : null}
+                  </span>
                 </label>
               ))}
             </div>

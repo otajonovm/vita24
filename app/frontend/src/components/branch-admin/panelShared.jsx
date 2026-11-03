@@ -1,4 +1,6 @@
+import i18n from "../../i18n";
 import { orderStatusLabel, STATUS_TONES } from "../../lib/format";
+import { userError } from "../../lib/userError";
 
 export const REJECT_CHIPS = [
   ["NO_STAMP", "Muhr yo'q"],
@@ -22,7 +24,15 @@ export const PAYMENT_LABELS = {
   CLICK: "Click",
   PAYME: "Payme",
   CARD_TERMINAL: "Karta terminal",
+  CARD_TRANSFER: "Kartaga o'tkazma",
 };
+
+export const RECEIPT_REJECT_REASONS = [
+  ["NOT_RECEIVED", "panel.receipt.rejectReasons.notReceived", "Pul tushmagan"],
+  ["WRONG_AMOUNT", "panel.receipt.rejectReasons.wrongAmount", "Summa noto'g'ri"],
+  ["UNREADABLE", "panel.receipt.rejectReasons.unreadable", "Chek o'qilmaydi"],
+  ["OTHER", "panel.receipt.rejectReasons.other", "Boshqa"],
+];
 
 export const STOCK_REASONS = [
   ["kirim", "Kirim"],
@@ -35,6 +45,7 @@ export const STOCK_REASONS = [
 export const ORDER_FILTERS = [
   ["", "panel.filters.all", "Barchasi"],
   ["review", "panel.filters.review", "Retsept tekshiruvi"],
+  ["payment_review", "panel.filters.paymentReview", "To'lov tekshiruvi"],
   ["WAITING_PAYMENT", "panel.filters.payment", "To'lov kutilmoqda"],
   ["PAID", "panel.filters.paid", "To'langan"],
   ["PREPARING", "panel.filters.preparing", "Yig'ilmoqda"],
@@ -47,7 +58,7 @@ export const ORDER_FILTERS = [
 ];
 
 export function apiError(error, fallback) {
-  return error?.response?.data?.error?.message || error?.message || fallback;
+  return userError(error, i18n.t.bind(i18n)) || fallback;
 }
 
 export function beep() {

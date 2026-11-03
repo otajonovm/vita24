@@ -210,7 +210,10 @@
     "invalidResponse": "Server kutilgan javobni bermadi. Keyinroq urinib ko'ring.",
     "confirmYes": "Ha, tasdiqlash",
     "loadMore": "Yana yuklash",
-    "missingRx": "Retsept fayli topilmadi"
+    "missingRx": "Retsept fayli topilmadi",
+    "loadFailed": "Ma'lumot yuklanmadi",
+    "copy": "Nusxalash",
+    "copied": "Nusxalandi"
   },
   "header": {
     "brand": "Onlayn dorixona",
@@ -355,6 +358,7 @@
     "rxHint": "JPG, PNG yoki PDF",
     "submitRx": "Retseptni tasdiqlashga yuborish",
     "submit": "Buyurtma berish",
+    "submitCash": "Buyurtma berish (naqd)",
     "pay": "{{amount}} to'lash",
     "sending": "Yuborilmoqda...",
     "uploadingRx": "Retsept yuklanmoqda... ({{percent}}%)",
@@ -411,7 +415,9 @@
     "promo": "Promokod",
     "promoApply": "Qo'llash",
     "promoOk": "{{code}} qo'llandi",
-    "promoInvalid": "Promokod yaroqsiz"
+    "promoInvalid": "Promokod yaroqsiz",
+    "cardTransfer": "Kartaga o'tkazma",
+    "cardTransferHint": "Chek skrinshotini yuklaysiz, farmatsevt tasdiqlaydi"
   },
   "address": {
     "label": "Yetkazish manzili",
@@ -433,6 +439,7 @@
     "intercomPh": "Domofon (ixtiyoriy)",
     "mapCredit": "Xarita: OpenStreetMap",
     "mapTap": "Xaritani ko'rish",
+    "mapFailed": "Xarita yuklanmadi. Manzilni qo'lda yozing.",
     "title": "Manzil"
   },
   "rx": {
@@ -555,6 +562,7 @@
   },
   "error": {
     "generic": "Xatolik yuz berdi. Qayta urinib ko'ring.",
+    "timeout": "Server javob bermadi. Qayta urinib ko'ring.",
     "NOT_FOUND": "Ma'lumot topilmadi",
     "VALIDATION_ERROR": "Ma'lumot noto'g'ri kiritildi",
     "PRESCRIPTION_REQUIRED": "Retsept yuklash kerak",
@@ -564,6 +572,11 @@
     "PAYMENT_NOT_ALLOWED": "Naqd buyurtmada online to'lov yo'q",
     "FORBIDDEN": "Bu amalga ruxsat yo'q",
     "UNAUTHORIZED": "Avval tizimga kiring",
+    "INVALID_CREDENTIALS": "Telefon yoki parol noto'g'ri",
+    "ROUTE_NOT_FOUND": "So'rov manzili topilmadi",
+    "AMOUNT_MISMATCH": "Terminal summasi buyurtma summasiga teng bo'lishi kerak",
+    "DISCREPANCY_REASON_REQUIRED": "Kamomad sababini yozing",
+    "HANDOVER_PENDING": "Topshirish allaqachon yuborilgan",
     "PROMO_INVALID": "Promokod yaroqsiz",
     "invalidResponse": "Server kutilgan javobni bermadi. Keyinroq urinib ko'ring."
   },
@@ -614,7 +627,21 @@
     "confirm": "Tasdiqlash",
     "retry": "Qayta urinish",
     "refresh": "Yangilash",
-    "search": "Qidirish",
+    "search": {
+      "title": "Qidiruv va sinonimlar",
+      "hint": "Natijasiz so'rovni sinonim qilib qo'shish mumkin. 90 kundan eski jurnal o'chadi.",
+      "top": "Eng ko'p qidirilganlar",
+      "zero": "Natijasiz qidiruvlar",
+      "conversion": "Qidiruvdan savatga",
+      "addSynonym": "Sinonim sifatida qo'shish",
+      "term": "So'z",
+      "canonical": "Asosiy nom",
+      "type": "Turi",
+      "save": "Saqlash",
+      "edit": "Tahrirlash",
+      "delete": "O'chirish",
+      "empty": "Hali yozuv yo'q"
+    },
     "sort": "Saralash",
     "sortNewest": "Avval yangilari",
     "sortOldest": "Avval eskilari",
@@ -637,7 +664,11 @@
     "branchHint": "Manzil, ish vaqti, xarita va LEKKO kaliti.",
     "branchFilterCurrent": "Arxivdan tashqari",
     "archivedStatus": "Arxiv",
-    "branchStatus": { "active": "Faol", "inactive": "Nofaol", "archived": "Arxiv" },
+    "branchStatus": {
+      "active": "Faol",
+      "inactive": "Nofaol",
+      "archived": "Arxiv"
+    },
     "pharmacists": "Farmatsevtlar",
     "todayOrders": "Bugungi buyurtma",
     "todayRevenue": "Bugungi tushum",
@@ -664,7 +695,15 @@
     "mapPoint": "Xaritadagi nuqta",
     "mapHint": "Xaritani bosing, nuqta shu yerga tushadi",
     "radius": "Yetkazish radiusi, km",
-    "days": { "mon": "Dush", "tue": "Sesh", "wed": "Chor", "thu": "Pay", "fri": "Juma", "sat": "Shan", "sun": "Yak" },
+    "days": {
+      "mon": "Dush",
+      "tue": "Sesh",
+      "wed": "Chor",
+      "thu": "Pay",
+      "fri": "Juma",
+      "sat": "Shan",
+      "sun": "Yak"
+    },
     "phone": "Telefon",
     "password": "Parol",
     "loginTitle": "Super admin kirishi",
@@ -673,11 +712,19 @@
     "checking": "Tekshirilmoqda...",
     "loginFailed": "Kirish amalga oshmadi",
     "superOnly": "Faqat super-admin kira oladi",
-    "role": { "SUPER_ADMIN": "Super admin", "BRANCH_ADMIN": "Farmatsevt", "MANAGER": "Menejer", "CUSTOMER": "Mijoz" },
+    "role": {
+      "SUPER_ADMIN": "Super admin",
+      "BRANCH_ADMIN": "Farmatsevt",
+      "MANAGER": "Menejer",
+      "CUSTOMER": "Mijoz"
+    },
     "colRole": "Rol",
     "allRoles": "Barcha rollar",
     "lastLogin": "Oxirgi kirish",
-    "userStatus": { "ACTIVE": "Faol", "SUSPENDED": "To'xtatilgan" },
+    "userStatus": {
+      "ACTIVE": "Faol",
+      "SUSPENDED": "To'xtatilgan"
+    },
     "staffHint": "Farmatsevt va menejer hisoblari.",
     "newStaff": "Yangi xodim",
     "editStaff": "Xodimni tahrirlash",
@@ -717,21 +764,7 @@
       "settings": "Sozlamalar",
       "audit": "Audit jurnali"
     },
-    "search": {
-      "title": "Qidiruv va sinonimlar",
-      "hint": "Natijasiz so'rovni sinonim qilib qo'shish mumkin. 90 kundan eski jurnal o'chadi.",
-      "top": "Eng ko'p qidirilganlar",
-      "zero": "Natijasiz qidiruvlar",
-      "conversion": "Qidiruvdan savatga",
-      "addSynonym": "Sinonim sifatida qo'shish",
-      "term": "So'z",
-      "canonical": "Asosiy nom",
-      "type": "Turi",
-      "save": "Saqlash",
-      "edit": "Tahrirlash",
-      "delete": "O'chirish",
-      "empty": "Hali yozuv yo'q"
-    },
+    "searchPlaceholder": "Qidirish",
     "validation": {
       "required": "Bu maydonni to'ldiring",
       "password": "Parol kamida 6 ta belgi",
@@ -750,7 +783,10 @@
       "CANCELLED": "Bekor qilingan",
       "REJECTED": "Rad etilgan"
     },
-    "refund": { "PENDING": "Kutilmoqda", "DONE": "Qaytarilgan" },
+    "refund": {
+      "PENDING": "Kutilmoqda",
+      "DONE": "Qaytarilgan"
+    },
     "dashboardTitle": "Boshqaruv",
     "dashboardHint": "Filiallar, buyurtmalar va xodimlar bo'yicha qisqa holat.",
     "uncovered": "Farmatsevti yo'q filiallar: {{names}}. Retseptlar super admin navbatida qoladi.",
@@ -766,7 +802,10 @@
     "colSpent": "Umumiy xarid",
     "colLastOrder": "Oxirgi buyurtma",
     "openCard": "Karta",
-    "customerStatus": { "ACTIVE": "Faol", "SUSPENDED": "Bloklangan" },
+    "customerStatus": {
+      "ACTIVE": "Faol",
+      "SUSPENDED": "Bloklangan"
+    },
     "block": "Bloklash",
     "unblock": "Blokdan chiqarish",
     "blockHint": "Sabab yoziladi. Bloklangan mijoz buyurtma bera olmaydi.",
@@ -777,14 +816,25 @@
     "noCustomerOrders": "Buyurtma yo'q",
     "addresses": "Manzillar",
     "noAddresses": "Manzil yo'q",
-    "addressSource": { "primary": "Asosiy", "saved": "Saqlangan", "order": "Buyurtmadan" },
+    "addressSource": {
+      "primary": "Asosiy",
+      "saved": "Saqlangan",
+      "order": "Buyurtmadan"
+    },
     "noPrescriptions": "Retsept yo'q",
-    "rxStatus": { "PENDING": "Kutilmoqda", "APPROVED": "Tasdiqlangan", "REJECTED": "Rad etilgan" },
+    "rxStatus": {
+      "PENDING": "Kutilmoqda",
+      "APPROVED": "Tasdiqlangan",
+      "REJECTED": "Rad etilgan"
+    },
     "promoUse": "Promokodlar",
     "noPromos": "Promokod ishlatilmagan",
     "blockHistory": "Bloklash tarixi",
     "noBlockHistory": "Bloklash yozuvi yo'q",
-    "blockAction": { "BLOCK": "Bloklandi", "UNBLOCK": "Blokdan chiqarildi" },
+    "blockAction": {
+      "BLOCK": "Bloklandi",
+      "UNBLOCK": "Blokdan chiqarildi"
+    },
     "promosEmpty": "Promokodlar yo'q",
     "promosEmptyBody": "Yangi promokod qo'shing.",
     "promoHint": "Kod, chegirma, muddat, limit va filiallar.",
@@ -1000,9 +1050,23 @@
     "allPaymentStatuses": "Barcha to'lov holatlari",
     "deliveryType": "Yetkazish",
     "allDeliveries": "Barcha yetkazishlar",
-    "pay": { "CASH": "Naqd", "CLICK": "Click", "PAYME": "Payme", "MOCK": "Sinov" },
-    "payState": { "PENDING": "Kutilmoqda", "COMPLETED": "To'langan", "FAILED": "Muvaffaqiyatsiz" },
-    "delivery": { "DELIVERY": "Yetkazib berish", "PICKUP": "Olib ketish" },
+    "pay": {
+      "CASH": "Naqd",
+      "CLICK": "Click",
+      "PAYME": "Payme",
+      "MOCK": "Sinov",
+      "CARD_TRANSFER": "Kartaga o'tkazma",
+      "CARD_TERMINAL": "Karta terminal"
+    },
+    "payState": {
+      "PENDING": "Kutilmoqda",
+      "COMPLETED": "To'langan",
+      "FAILED": "Muvaffaqiyatsiz"
+    },
+    "delivery": {
+      "DELIVERY": "Yetkazib berish",
+      "PICKUP": "Olib ketish"
+    },
     "customer": "Mijoz",
     "amounts": "Summa",
     "medicines": "Dorilar",
@@ -1029,7 +1093,6 @@
     "transactionId": "Tranzaksiya raqami",
     "transactionRequired": "Tranzaksiya raqamini kiriting",
     "refundDone": "Pul qaytarildi deb belgilandi",
-    "cancel": "Bekor qilish",
     "actor": "Bajaruvchi",
     "action": "Amal",
     "summary": "Tafsilot",
@@ -1147,7 +1210,14 @@
       "exportFailed": "Hisobot yuklanmadi",
       "medicines": "Dorilar",
       "errorCol": "Xato"
-    }
+    },
+    "settingsCardTransfer": "Kartaga o'tkazma",
+    "settingsCardTransferEnable": "Kartaga o'tkazmani yoqish",
+    "settingsCardTransferHint": "Payme/Click ulangandan keyin kartaga o'tkazmani o'chirishni tavsiya qilamiz",
+    "settingsCardNumber": "Karta raqami",
+    "settingsCardHolder": "Karta egasi",
+    "settingsCardBank": "Bank (ixtiyoriy)",
+    "settingsCardTimeout": "To'lov muddati (daqiqa)"
   },
   "courier": {
     "stage": {
@@ -1172,7 +1242,9 @@
       "cardTerminal": "Kuryerga karta bilan",
       "terminalDue": "Karta terminal, yetkazilganda"
     },
-    "settings": { "cardTerminal": "Kuryerga karta terminal" },
+    "settings": {
+      "cardTerminal": "Kuryerga karta terminal"
+    },
     "tab": {
       "active": "Faol",
       "history": "Tarix",
@@ -1240,5 +1312,158 @@
       "courierEmpty": "Kuryer yo'q",
       "difference": "Farq: {{amount}}"
     }
-  }
+  },
+  "admin.close": "Yopish",
+  "auth.hidePassword": "Yashirish",
+  "auth.showPassword": "Ko'rsatish",
+  "panel.actionFailed": "Amal bajarilmadi",
+  "panel.avgReview": "O'rtacha tekshiruv",
+  "panel.badImage": "Rasm yaroqsiz",
+  "panel.bigImage": "Rasm juda katta",
+  "panel.branch": "Filial",
+  "panel.byStatus": "Holat bo'yicha",
+  "panel.call": "Qo'ng'iroq",
+  "panel.cashReceived": "Naqd olindi",
+  "panel.checking": "Tekshirilmoqda...",
+  "panel.close": "Yopish",
+  "panel.confirmDone": "Tasdiqlaysizmi?",
+  "panel.customerNote": "Mijoz izohi",
+  "panel.days30": "30 kun",
+  "panel.days7": "7 kun",
+  "panel.detail": "Tafsilot",
+  "panel.extraNote": "Qo'shimcha izoh",
+  "panel.fullscreen": "To'liq ekran",
+  "panel.google": "Google xarita",
+  "panel.history": "Tarix",
+  "panel.image": "Rasm",
+  "panel.imageSaved": "Rasm saqlandi",
+  "panel.live": "Jonli",
+  "panel.loadFailed": "Yuklanmadi",
+  "panel.loginFailed": "Kirish amalga oshmadi",
+  "panel.loginHint": "Filial farmatsevti hisobi bilan kiring",
+  "panel.medicines": "Dorilar",
+  "panel.movements": "Harakatlar",
+  "panel.needReason": "Sababni yozing",
+  "panel.neverSynced": "Hali sinxronlanmagan",
+  "panel.newOrder": "Yangi buyurtma",
+  "panel.noMovements": "Harakat yo'q",
+  "panel.noToken": "Token yo'q",
+  "panel.notFound": "Topilmadi",
+  "panel.note": "Izoh",
+  "panel.nowClosed": "Hozir yopiq",
+  "panel.opened": "Ochildi",
+  "panel.payLeft": "To'lovgacha",
+  "panel.payment": "To'lov",
+  "panel.pick": "Tanlang",
+  "panel.printCourier": "Kuryer varag'i",
+  "panel.printPick": "Yig'ish varag'i",
+  "panel.printReceipt": "Chek",
+  "panel.product": "Mahsulot",
+  "panel.reason": "Sabab",
+  "panel.reconnecting": "Qayta ulanmoqda",
+  "panel.refreshing": "Yangilanmoqda...",
+  "panel.refundPending": "Pul qaytarilishi kutilmoqda",
+  "panel.rejectWithNote": "Rad etish sababi",
+  "panel.rejected": "Rad etilgan",
+  "panel.reviewLeft": "Tekshiruvgacha",
+  "panel.rotate": "Burish",
+  "panel.rxItem": "Retseptli",
+  "panel.rxShare": "Ulashish",
+  "panel.saved": "Saqlandi",
+  "panel.staffOnly": "Faqat farmatsevt kira oladi",
+  "panel.stockCount": "Qoldiq",
+  "panel.stockReason": "Sabab",
+  "panel.stockSearch": "Qidirish",
+  "panel.syncFailed": "Sinxron xato",
+  "panel.synced": "Sinxronlandi",
+  "panel.syncing": "Sinxronlanmoqda",
+  "panel.today": "Bugun",
+  "panel.undone": "Qaytarildi",
+  "panel.yandex": "Yandex xarita",
+  "panel.zoomIn": "Yaqinlashtirish",
+  "panel.zoomOut": "Uzoqlashtirish",
+  "panel.dateFrom": "Dan",
+  "panel.dateTo": "Gacha",
+  "panel.yesterday": "Kecha",
+  "panel.dateRangeError": "Sana oralig'i noto'g'ri: Dan sanasi Gacha sanasidan keyin",
+  "panel.emptyOrders": "Bu filtr bo'yicha buyurtma topilmadi",
+  "panel.clearFilters": "Filtrlarni tozalash",
+  "panel.shiftConfirm": "Smenani yakunlaysizmi?",
+  "panel.shiftCash": "Naqd",
+  "panel.shiftShortage": "Kamomad",
+  "panel.shiftEnd": "Yakunlash",
+  "panel.shiftReport": "Smena hisoboti",
+  "panel.shiftOnline": "Online tushum",
+  "panel.shiftRefunds": "Pul qaytarishlar",
+  "panel.shiftStock": "Ombor harakatlari",
+  "panel.shiftPrint": "Chop etish",
+  "panel.subtotal": "Dorilar jami",
+  "panel.deliveryFee": "Yetkazib berish",
+  "panel.total": "Umumiy",
+  "panel.system": "Tizim",
+  "panel.undoLine": "Ortga qaytarildi",
+  "panel.discrepancy": "Kamomad",
+  "panel.minutes": "{{count}} daq",
+  "localeName": {
+    "uz": "O'zbekcha",
+    "cyrl": "Кирилл",
+    "ru": "Русский"
+  },
+  "order": {
+    "pay": {
+      "cardTransfer": "Kartaga o'tkazma",
+      "cardTransferPaid": "Kartaga o'tkazma tasdiqlandi"
+    },
+    "status": {
+      "receiptReview": "Chek tekshirilmoqda"
+    },
+    "receipt": {
+      "title": "Kartaga o'tkazma",
+      "step1": "Ko'rsatilgan kartaga o'tkazing",
+      "step2": "Chek skrinshotini yuklang",
+      "step3": "Farmatsevt tasdiqlashini kuting",
+      "cardNumber": "Karta raqami",
+      "holder": "Karta egasi",
+      "bank": "Bank",
+      "amount": "Summa",
+      "orderNo": "Buyurtma raqami",
+      "commentHint": "To'lov izohiga buyurtma raqamini yozing",
+      "upload": "Chekni yuklash",
+      "replace": "Almashtirish",
+      "reviewing": "Tekshirilmoqda",
+      "rejected": "Chek rad etildi",
+      "rejectOther": "Boshqa",
+      "uploaded": "Chek yuklandi",
+      "uploadFailed": "Chek yuklanmadi",
+      "failed": "Chek ochilmadi"
+    }
+  },
+  "panel": {
+    "filters": {
+      "paymentReview": "To'lov tekshiruvi"
+    },
+    "shiftCardTransfer": "Kartaga o'tkazma",
+    "receipt": {
+      "title": "To'lov cheki",
+      "uploadedAt": "Yuklangan vaqt",
+      "approve": "To'lov tushdi — tasdiqlash",
+      "reject": "Rad etish",
+      "approveConfirm": "Bankda {{amount}} tushganini tekshirdingizmi?",
+      "rejectConfirm": "Chekni rad etish sababini tanlang",
+      "approved": "To'lov tasdiqlandi",
+      "rejected": "Chek rad etildi",
+      "actionFailed": "Amal bajarilmadi",
+      "rejectReasons": {
+        "notReceived": "Pul tushmagan",
+        "wrongAmount": "Summa noto'g'ri",
+        "unreadable": "Chek o'qilmaydi",
+        "other": "Boshqa"
+      }
+    }
+  },
+  "panel.filters.paymentReview": "To'lov tekshiruvi",
+  "panel.shiftCardTransfer": "Kartaga o'tkazma",
+  "order.pay.cardTransfer": "Kartaga o'tkazma",
+  "order.pay.cardTransferPaid": "Kartaga o'tkazma tasdiqlandi",
+  "order.status.receiptReview": "Chek tekshirilmoqda"
 }

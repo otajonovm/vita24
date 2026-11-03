@@ -34,9 +34,12 @@ test("o'chirilgan to'lov va olib ketish rad etiladi", () => {
     paymeEnabled: false,
     clickEnabled: true,
     cashEnabled: true,
+    cardTerminalEnabled: true,
+    cardTransferEnabled: false,
     pickupEnabled: false,
   };
   assert.throws(() => assertPaymentAllowed(shop, "PAYME", "DELIVERY"), /Payme/);
   assert.throws(() => assertPaymentAllowed(shop, "CASH", "PICKUP"), /Olib ketish/);
   assert.doesNotThrow(() => assertPaymentAllowed(shop, "CLICK", "DELIVERY"));
+  assert.throws(() => assertPaymentAllowed(shop, "CARD_TRANSFER", "DELIVERY"), /o'tkazma/);
 });

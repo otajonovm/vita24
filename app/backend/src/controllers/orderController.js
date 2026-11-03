@@ -120,6 +120,45 @@ function serializeOrder(order, { forCustomer = true } = {}) {
           paidAt: order.payment.paidAt,
         }
       : null,
+    paymentReceipts: (order.paymentReceipts || []).map((row) => ({
+      id: row.id,
+      fileName: row.fileName,
+      status: row.status,
+      rejectReason: row.rejectReason || null,
+      reviewedAt: row.reviewedAt || null,
+      createdAt: row.createdAt,
+      fileUrl: `/api/orders/receipts/${row.id}/file`,
+    })),
+    latestReceipt: (() => {
+      const rows = order.paymentReceipts || [];
+      if (!rows.length) return null;
+      const latest = rows[0];
+      return {
+        id: latest.id,
+        fileName: latest.fileName,
+        status: latest.status,
+        rejectReason: latest.rejectReason || null,
+        reviewedAt: latest.reviewedAt || null,
+        createdAt: latest.createdAt,
+        fileUrl: `/api/orders/receipts/${latest.id}/file`,
+      };
+    })(),
+    cardTransfer:
+      String(order.payment?.provider || "").toUpperCase() === "CARD_TRANSFER"
+        ? (() => {
+            const rules = order.checkoutRules && typeof order.checkoutRules === "object" ? order.checkoutRules : {};
+            const shop = require("../lib/shopSettings").peekShopSettings() || {};
+            const number = rules.cardTransferNumber || shop.cardTransferNumber || "";
+            if (!number) return { cardTransferEnabled: false };
+            return {
+              cardTransferEnabled: true,
+              cardTransferNumber: String(number).replace(/\D/g, "").slice(0, 16),
+              cardTransferHolder: String(rules.cardTransferHolder || shop.cardTransferHolder || "").trim(),
+              cardTransferBank: String(rules.cardTransferBank || shop.cardTransferBank || "").trim(),
+              cardTransferTimeoutMin: Number(rules.cardTransferTimeoutMin || shop.cardTransferTimeoutMin || 30),
+            };
+          })()
+        : null,
     courierStage: order.courierStage || "UNASSIGNED",
     courier:
       forCustomer && ["PICKED_UP", "DELIVERED"].includes(order.courierStage) && order.courier
@@ -136,6 +175,7 @@ const orderInclude = {
   items: { include: { medicine: { select: { name: true, slug: true } } } },
   prescription: true,
   payment: true,
+  paymentReceipts: { orderBy: { createdAt: "desc" } },
   courier: { select: { name: true, phone: true } },
   history: { orderBy: { createdAt: "asc" } },
 };
@@ -306,13 +346,22 @@ const createOrder = asyncHandler(async (req, res) => {
         promoCode,
         notes: notes ? String(notes).trim() : null,
         subtotal,
-        checkoutRules: checkoutRulesFrom(shop),
-        reservedUntil: placed.reservation === "none" ? new Date(Date.now() + 24 * 60 * 60 * 1000) : reservationDeadline(placed.reservation, shop),
+        checkoutRules: (() => {
+          const rules = checkoutRulesFrom(shop, { paymentMethod: body.paymentMethod });
+          if (String(body.paymentMethod || "").toUpperCase() === "CARD_TRANSFER") {
+            rules.cardTransferNumber = shop.cardTransferNumber;
+            rules.cardTransferHolder = shop.cardTransferHolder;
+            rules.cardTransferBank = shop.cardTransferBank;
+            rules.cardTransferTimeoutMin = shop.cardTransferTimeoutMin;
+          }
+          return rules;
+        })(),
+        reservedUntil: placed.reservation === "none" ? new Date(Date.now() + 24 * 60 * 60 * 1000) : reservationDeadline(placed.reservation, checkoutRulesFrom(shop, { paymentMethod: body.paymentMethod })),
         items: { create: preparedItems },
         payment: {
           create: {
             amount: quote.totalAmount,
-            provider: ["PAYME", "CLICK", "CASH", "CARD_TERMINAL"].includes(String(body.paymentMethod || "").toUpperCase())
+            provider: ["PAYME", "CLICK", "CASH", "CARD_TERMINAL", "CARD_TRANSFER"].includes(String(body.paymentMethod || "").toUpperCase())
               ? String(body.paymentMethod).toUpperCase()
               : "CASH",
             status: "PENDING",
@@ -583,6 +632,9 @@ const updateOrderStatus = asyncHandler(async (req, res) => {
 });
 
 const mockPay = asyncHandler(async (req, res) => {
+  if (process.env.NODE_ENV === "production") {
+    throw new AppError("Mock to'lov o'chirilgan", 404, "NOT_FOUND");
+  }
   if (String(process.env.ENABLE_MOCK_PAY || "").toLowerCase() !== "true") {
     throw new AppError("Mock to'lov o'chirilgan", 404, "NOT_FOUND");
   }

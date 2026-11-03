@@ -1,13 +1,20 @@
 const prisma = require("./prisma");
 const { AppError } = require("./response");
 const { runDbTransaction } = require("./transaction");
-const { payableAmount } = require("./pricing");
+const { payableAmount, settledTotals } = require("./pricing");
 const { captureAsPaid, emitOrder, notifyStatus } = require("./orderFlow");
 
 function amountsMatch(orderAmount, given) {
   const left = Math.round(Number(orderAmount) * 100);
   const right = Math.round(Number(given) * 100);
   return Number.isFinite(left) && left === right && left >= 0;
+}
+
+function expectedPayable(order) {
+  if (order && (order.deliveryFee != null || order.deliveryType)) {
+    return settledTotals(order).totalAmount;
+  }
+  return payableAmount(order?.subtotal);
 }
 
 /**
@@ -25,7 +32,7 @@ async function settlePayment({ orderId, provider, externalId, amount }) {
       throw new AppError("Buyurtma topilmadi", 404, "ORDER_NOT_FOUND");
     }
 
-    if (!amountsMatch(payableAmount(order.subtotal), amount)) {
+    if (!amountsMatch(expectedPayable(order), amount)) {
       throw new AppError("To'lov summasi mos emas", 409, "AMOUNT_MISMATCH");
     }
 
@@ -82,7 +89,7 @@ async function settlePayment({ orderId, provider, externalId, amount }) {
           status: "COMPLETED",
           provider,
           externalId: String(externalId),
-          amount: payableAmount(order.subtotal),
+          amount: expectedPayable(order),
           paidAt: new Date(),
         },
       });
@@ -119,6 +126,7 @@ async function rememberPrepare(orderId, externalId, provider) {
 
 module.exports = {
   amountsMatch,
+  expectedPayable,
   settlePayment,
   rememberPrepare,
 };

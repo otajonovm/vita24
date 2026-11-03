@@ -48,9 +48,11 @@ const orderInclude = {
   },
   prescription: true,
   payment: true,
+  paymentReceipts: { orderBy: { createdAt: "desc" } },
   courier: { select: { id: true, name: true, phone: true, status: true } },
   user: { select: { id: true, name: true, phone: true, role: true } },
   history: { orderBy: { createdAt: "desc" }, take: 30 },
+  deliveryProofs: { orderBy: { createdAt: "desc" }, take: 1 },
 };
 
 async function requireActiveBranch(branchId) {
@@ -160,6 +162,29 @@ function serializeBranchOrder(order, viewerId) {
           paidAt: order.payment.paidAt,
         }
       : null,
+    paymentReceipts: (order.paymentReceipts || []).map((row) => ({
+      id: row.id,
+      fileName: row.fileName,
+      status: row.status,
+      rejectReason: row.rejectReason || null,
+      reviewedAt: row.reviewedAt || null,
+      createdAt: row.createdAt,
+      fileUrl: `/api/orders/receipts/${row.id}/file`,
+    })),
+    latestReceipt: (() => {
+      const rows = order.paymentReceipts || [];
+      if (!rows.length) return null;
+      const latest = rows[0];
+      return {
+        id: latest.id,
+        fileName: latest.fileName,
+        status: latest.status,
+        rejectReason: latest.rejectReason || null,
+        reviewedAt: latest.reviewedAt || null,
+        createdAt: latest.createdAt,
+        fileUrl: `/api/orders/receipts/${latest.id}/file`,
+      };
+    })(),
     history: (order.history || []).map((row) => ({
       id: row.id,
       fromStatus: row.fromStatus,
@@ -179,6 +204,21 @@ function serializeBranchOrder(order, viewerId) {
     courier: order.courier
       ? { id: order.courier.id, name: order.courier.name, phone: order.courier.phone, status: order.courier.status }
       : null,
+    deliveryProof: serializeDeliveryProof(order.deliveryProofs?.[0]),
+  };
+}
+
+function serializeDeliveryProof(proof) {
+  if (!proof) return null;
+  return {
+    id: proof.id,
+    method: proof.method,
+    collectedAmount: proof.collectedAmount == null ? null : Number(proof.collectedAmount),
+    discrepancy: Number(proof.discrepancy || 0),
+    discrepancyReason: proof.discrepancyReason || "",
+    discrepancyOpen: Boolean(proof.discrepancyOpen),
+    terminalRef: proof.terminalRef || "",
+    photoUrl: proof.photoPath ? `/api/files/proof/${proof.id}` : null,
   };
 }
 
@@ -276,6 +316,12 @@ function withStatus(where, status) {
   if (!status) return next;
   if (status === "review") {
     next.status = { in: REVIEW_STATUSES };
+  } else if (status === "payment_review") {
+    next.status = "WAITING_PAYMENT";
+    next.AND.push({
+      payment: { provider: "CARD_TRANSFER", status: "PENDING" },
+      paymentReceipts: { some: { status: "PENDING" } },
+    });
   } else if (status === "rejected") {
     next.status = "CANCELLED";
     next.AND.push({ prescription: { status: "REJECTED" } });
@@ -307,9 +353,18 @@ async function statusCounts(where) {
   const failedDelivery = await prisma.order.count({
     where: { ...where, status: "READY", courierStage: "FAILED" },
   });
+  const paymentReview = await prisma.order.count({
+    where: {
+      ...where,
+      status: "WAITING_PAYMENT",
+      payment: { provider: "CARD_TRANSFER", status: "PENDING" },
+      paymentReceipts: { some: { status: "PENDING" } },
+    },
+  });
   return {
     all: grouped.reduce((sum, row) => sum + row._count._all, 0),
     review: (byStatus.PENDING_PRESCRIPTION || 0) + (byStatus.PENDING_BRANCH || 0),
+    payment_review: paymentReview,
     WAITING_PAYMENT: byStatus.WAITING_PAYMENT || 0,
     PAID: byStatus.PAID || 0,
     PREPARING: byStatus.PREPARING || 0,
@@ -975,22 +1030,33 @@ const panelSummary = asyncHandler(async (req, res) => {
   const scopedBranchId = assertBranchAccess(req, req.query.branchId);
   const branch = await requireActiveBranch(scopedBranchId || req.query.branchId);
   const start = rangeStart("today");
-  const [todayOrders, review, lowRows, paid] = await Promise.all([
+  const [todayOrders, review, lowRows, paid, cashProofs] = await Promise.all([
     prisma.order.count({ where: { branchId: branch.id, createdAt: { gte: start } } }),
     prisma.order.count({ where: { branchId: branch.id, status: { in: REVIEW_STATUSES } } }),
     prisma.$queryRaw`SELECT COUNT(*)::int AS count FROM "BranchStock" WHERE "branchId" = ${branch.id} AND ("stockCount" - "reservedCount") > 0 AND ("stockCount" - "reservedCount") < ${branch.lowStockThreshold || LOW_STOCK_THRESHOLD}`,
     prisma.order.findMany({
       where: { branchId: branch.id, status: { in: PAID_LIKE }, createdAt: { gte: start } },
-      select: { subtotal: true },
+      select: { subtotal: true, payment: { select: { provider: true } } },
+    }),
+    prisma.deliveryProof.findMany({
+      where: { createdAt: { gte: start }, method: "CASH", order: { branchId: branch.id } },
+      select: { collectedAmount: true, discrepancy: true },
     }),
   ]);
-  const revenue = paid.reduce((sum, order) => sum + settledTotals(order).totalAmount, 0);
+  const cashCollected = cashProofs.reduce((sum, proof) => sum + Number(proof.collectedAmount || 0), 0);
+  const discrepancy = cashProofs.reduce((sum, proof) => sum + Number(proof.discrepancy || 0), 0);
+  const online = paid.reduce((sum, order) => {
+    if (String(order.payment?.provider || "").toUpperCase() === "CASH") return sum;
+    return sum + settledTotals(order).totalAmount;
+  }, 0);
   return sendSuccess(
     res,
     {
       branch: publicBranch(branch),
       todayOrders,
-      revenue,
+      revenue: online + cashCollected,
+      cashCollected,
+      discrepancy,
       review,
       lowStock: Number(lowRows[0]?.count || 0),
     },
@@ -1085,7 +1151,7 @@ const shiftReport = asyncHandler(async (req, res) => {
   if (Number.isNaN(since.getTime())) {
     throw new AppError("Smena boshlanish vaqti noto'g'ri", 400, "VALIDATION_ERROR");
   }
-  const [history, movements, shiftOrders] = await Promise.all([
+  const [history, movements, shiftOrders, cashProofs] = await Promise.all([
     prisma.orderStatusHistory.findMany({
       where: { createdAt: { gte: since }, order: { branchId: branch.id } },
       include: { order: { select: { orderNumber: true, subtotal: true, status: true, refundStatus: true, payment: { select: { provider: true, status: true } } } } },
@@ -1099,6 +1165,10 @@ const shiftReport = asyncHandler(async (req, res) => {
     prisma.order.findMany({
       where: { branchId: branch.id, createdAt: { gte: since } },
       include: { payment: true, prescription: true },
+    }),
+    prisma.deliveryProof.findMany({
+      where: { createdAt: { gte: since }, method: "CASH", order: { branchId: branch.id } },
+      select: { collectedAmount: true, discrepancy: true },
     }),
   ]);
   const userIds = [
@@ -1127,23 +1197,23 @@ const shiftReport = asyncHandler(async (req, res) => {
 
   const statusCountsShift = {};
   let onlineRevenue = 0;
-  let cashRevenue = 0;
+  let cardRevenue = 0;
+  let cardTransferRevenue = 0;
   let refunds = 0;
   for (const order of shiftOrders) {
     statusCountsShift[order.status] = (statusCountsShift[order.status] || 0) + 1;
     if (order.prescription?.status === "REJECTED") statusCountsShift.REJECTED = (statusCountsShift.REJECTED || 0) + 1;
     if (order.refundStatus === "PENDING" || order.refundStatus === "DONE") refunds += 1;
-    if (PAID_LIKE.includes(order.status)) {
+    if (PAID_LIKE.includes(order.status) && String(order.payment?.status || "").toUpperCase() === "COMPLETED") {
       const amount = settledTotals(order).totalAmount;
       const provider = String(order.payment?.provider || "").toUpperCase();
-      const cash = provider === "CASH" || provider === "CARD_TERMINAL";
-      if (cash) {
-        if (order.payment?.status === "COMPLETED") cashRevenue += amount;
-      } else {
-        onlineRevenue += amount;
-      }
+      if (provider === "CARD_TERMINAL") cardRevenue += amount;
+      else if (provider === "CARD_TRANSFER") cardTransferRevenue += amount;
+      else if (provider !== "CASH") onlineRevenue += amount;
     }
   }
+  const cashCollected = cashProofs.reduce((sum, proof) => sum + Number(proof.collectedAmount || 0), 0);
+  const discrepancy = cashProofs.reduce((sum, proof) => sum + Number(proof.discrepancy || 0), 0);
 
   return sendSuccess(
     res,
@@ -1152,8 +1222,10 @@ const shiftReport = asyncHandler(async (req, res) => {
       until: new Date().toISOString(),
       branch: publicBranch(branch),
       onlineRevenue,
-      cashRevenue,
-      revenue: onlineRevenue + cashRevenue,
+      cardTransferRevenue,
+      cashRevenue: cashCollected,
+      discrepancy,
+      revenue: onlineRevenue + cardRevenue + cardTransferRevenue + cashCollected,
       byStatus: statusCountsShift,
       refunds,
       stockMovements: movements.length,
@@ -1200,13 +1272,21 @@ const setBranchOpen = asyncHandler(async (req, res) => {
 });
 
 const assignCourier = asyncHandler(async (req, res) => {
+  const remove = req.body.remove === true || !req.body.courierId;
   const updated = await assignOrderCourier({
     orderId: req.params.id,
     courierId: req.body.courierId,
+    remove,
     user: req.user,
     req,
   });
-  return sendSuccess(res, serializeBranchOrder(updated, req.user.id), "Kuryer biriktirildi");
+  return sendSuccess(res, serializeBranchOrder(updated, req.user.id), remove ? "Kuryer olib tashlandi" : "Kuryer biriktirildi");
+});
+
+const resolvePaymentDiscrepancy = asyncHandler(async (req, res) => {
+  const { resolveDiscrepancy } = require("../services/courierService");
+  const updated = await resolveDiscrepancy({ orderId: req.params.id, user: req.user, req });
+  return sendSuccess(res, serializeBranchOrder(updated, req.user.id), "Kamomad tasdiqlandi");
 });
 
 const streamEvents = asyncHandler(async (req, res) => {
@@ -1247,5 +1327,6 @@ module.exports = {
   setBranchOpen,
   streamEvents,
   assignCourier,
+  resolvePaymentDiscrepancy,
   serializeBranchOrder,
 };

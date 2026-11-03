@@ -152,6 +152,8 @@ export function OrdersPanel() {
           <option value="CASH">{t("admin.pay.CASH")}</option>
           <option value="CLICK">Click</option>
           <option value="PAYME">Payme</option>
+          <option value="CARD_TRANSFER">{t("admin.pay.CARD_TRANSFER")}</option>
+          <option value="CARD_TERMINAL">{t("admin.pay.CARD_TERMINAL")}</option>
         </select>
         <select aria-label={t("admin.paymentStatus")} value={paymentStatus} onChange={resetPage(setPaymentStatus)} className={selectClass}>
           <option value="">{t("admin.allPaymentStatuses")}</option>
@@ -212,7 +214,7 @@ export function OrdersPanel() {
                   <td className="py-2 pr-3">{order.branch?.name}</td>
                   <td className="py-2 pr-3">
                     <span className={`rounded-full border px-2 py-0.5 text-xs font-bold ${STATUS_TONES[order.status] || ""}`}>
-                      {order.prescription?.status === "REJECTED" ? t("admin.status.REJECTED") : t(`admin.status.${order.status}`, orderStatusLabel(order))}
+                      {orderStatusLabel(order.prescription?.status === "REJECTED" ? { ...order, status: "CANCELLED", prescription: { status: "REJECTED" } } : order)}
                     </span>
                   </td>
                   <td className="py-2 pr-3">{order.payment ? t(`admin.pay.${order.payment.provider}`, order.payment.provider) : "—"}</td>

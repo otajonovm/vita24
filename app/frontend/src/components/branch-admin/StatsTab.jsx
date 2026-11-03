@@ -12,6 +12,8 @@ export default function StatsTab({ branchId, onToast }) {
   const [stats, setStats] = useState(null);
   const [shift, setShift] = useState(null);
   const [askShift, setAskShift] = useState(false);
+  const [preview, setPreview] = useState(null);
+  const [previewError, setPreviewError] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [ending, setEnding] = useState(false);
@@ -43,20 +45,26 @@ export default function StatsTab({ branchId, onToast }) {
 
   useEffect(() => load(), [branchId, range]);
 
-  async function endShift() {
-    if (ending) return;
-    const since = localStorage.getItem("vita24-shift-start") || new Date().toISOString();
+  async function openShift() {
+    setAskShift(true);
+    setPreview(null);
+    setPreviewError("");
     setEnding(true);
+    const since = localStorage.getItem("vita24-shift-start") || new Date().toISOString();
     try {
-      const report = await fetchShiftReport(branchId, since);
-      setShift(report);
-      localStorage.setItem("vita24-shift-start", new Date().toISOString());
-      setAskShift(false);
+      setPreview(await fetchShiftReport(branchId, since));
     } catch (err) {
-      onToast(apiError(err, t("panel.actionFailed", "Amal bajarilmadi")));
+      setPreviewError(apiError(err, t("panel.loadFailed", "Ro'yxat yuklanmadi")));
     } finally {
       setEnding(false);
     }
+  }
+
+  function endShift() {
+    if (!preview || ending) return;
+    localStorage.setItem("vita24-shift-start", new Date().toISOString());
+    setShift(preview);
+    setAskShift(false);
   }
 
   return (
@@ -69,7 +77,7 @@ export default function StatsTab({ branchId, onToast }) {
         ].map(([id, label]) => (
           <button key={id} type="button" onClick={() => setRange(id)} className={`rounded-full px-3 py-1.5 text-xs font-bold ${range === id ? "bg-slate-900 text-white" : "bg-white"}`}>{label}</button>
         ))}
-        <button type="button" onClick={() => setAskShift(true)} className="ml-auto h-10 rounded-xl bg-brand px-3 text-sm font-bold text-white">{t("panel.shift", "Smenani yakunlash")}</button>
+        <button type="button" onClick={openShift} className="ml-auto h-10 rounded-xl bg-brand px-3 text-sm font-bold text-white">{t("panel.shift", "Smenani yakunlash")}</button>
       </div>
       {loading && !stats && <SkeletonTable rows={3} />}
       {!loading && error && !stats && <ErrorState title={error} onRetry={() => load()} />}
@@ -79,12 +87,12 @@ export default function StatsTab({ branchId, onToast }) {
         <div className="grid gap-3 md:grid-cols-3">
           <Card title={t("panel.orders", "Buyurtmalar")} value={stats.orders} />
           <Card title={t("panel.todayRevenue", "Tushum")} value={formatSom(stats.revenue || 0)} />
-          <Card title={t("panel.avgReview", "O'rtacha tekshiruv")} value={`${stats.averageReviewMinutes || 0} daq`} />
+          <Card title={t("panel.avgReview", "O'rtacha tekshiruv")} value={t("panel.minutes", { count: stats.averageReviewMinutes || 0 })} />
           <div className="rounded-2xl border border-slate-100 bg-white p-3 md:col-span-2">
             <p className="text-xs font-bold uppercase text-slate-500">{t("panel.byStatus", "Holatlar")}</p>
             <ul className="mt-2 grid gap-1 text-sm">
               {Object.entries(stats.byStatus || {}).map(([status, count]) => (
-                <li key={status} className="flex justify-between"><span>{status === "REJECTED" ? "Rad etilgan" : orderStatusLabel({ status })}</span><span>{count}</span></li>
+                <li key={status} className="flex justify-between"><span>{status === "REJECTED" ? t("panel.rejected") : orderStatusLabel({ status })}</span><span>{count}</span></li>
               ))}
             </ul>
           </div>
@@ -103,38 +111,51 @@ export default function StatsTab({ branchId, onToast }) {
       </div>
       {askShift && (
         <div className="grid gap-2 rounded-2xl border border-slate-100 bg-white p-4">
-          <p className="text-sm">Smenani yakunlaysizmi? Hisobot ekranda chiqadi.</p>
+          <p className="text-sm font-bold">{t("panel.shiftConfirm")}</p>
+          {ending && !preview && <p className="text-sm text-slate-500">{t("common.loading")}</p>}
+          {previewError && <p className="text-sm text-red-600">{previewError}</p>}
+          {preview && (
+            <div className="grid gap-1 text-sm">
+              <p>{t("panel.shiftCash")}: {formatSom(preview.cashRevenue || 0)}</p>
+              <p className={Number(preview.discrepancy) > 0 ? "font-bold text-red-700" : ""}>{t("panel.shiftShortage")}: {formatSom(preview.discrepancy || 0)}</p>
+              <p>{t("panel.shiftOnline")}: {formatSom(preview.onlineRevenue || 0)}</p>
+              <p>{t("panel.shiftCardTransfer")}: {formatSom(preview.cardTransferRevenue || 0)}</p>
+            </div>
+          )}
           <div className="flex gap-2">
             <LoadingButton
               type="button"
               loading={ending}
+              disabled={!preview}
               loadingText={t("common.saving")}
               onClick={endShift}
               className="h-10 rounded-xl bg-brand px-3 text-sm font-bold text-white disabled:opacity-50"
             >
-              Yakunlash
+              {t("panel.shiftEnd")}
             </LoadingButton>
-            <button type="button" disabled={ending} onClick={() => setAskShift(false)} className="h-10 rounded-xl px-3 text-sm disabled:opacity-50">Bekor</button>
+            <button type="button" disabled={ending} onClick={() => setAskShift(false)} className="h-10 rounded-xl px-3 text-sm disabled:opacity-50">{t("common.cancel")}</button>
           </div>
         </div>
       )}
       {shift && (
         <section className="grid gap-2 rounded-2xl border border-slate-100 bg-white p-4 text-sm">
-          <h2 className="text-lg font-extrabold">Smena hisoboti</h2>
+          <h2 className="text-lg font-extrabold">{t("panel.shiftReport")}</h2>
           <p>{formatDateTime(shift.since)} — {formatDateTime(shift.until)}</p>
-          <p>Online tushum: {formatSom(shift.onlineRevenue || 0)}</p>
-          <p>Naqd tushum: {formatSom(shift.cashRevenue || 0)}</p>
-          <p>Pul qaytarishlar: {shift.refunds || 0}</p>
-          <p>Ombor harakatlari: {shift.stockMovements || 0}</p>
+          <p>{t("panel.shiftOnline")}: {formatSom(shift.onlineRevenue || 0)}</p>
+          <p>{t("panel.shiftCardTransfer")}: {formatSom(shift.cardTransferRevenue || 0)}</p>
+          <p>{t("panel.shiftCash")}: {formatSom(shift.cashRevenue || 0)}</p>
+          <p className={Number(shift.discrepancy) > 0 ? "font-bold text-red-700" : ""}>{t("panel.shiftShortage")}: {formatSom(shift.discrepancy || 0)}</p>
+          <p>{t("panel.shiftRefunds")}: {shift.refunds || 0}</p>
+          <p>{t("panel.shiftStock")}: {shift.stockMovements || 0}</p>
           {(shift.pharmacists || []).map((person) => (
             <p key={person.userName}>{person.userName}: tasdiq {person.approved}, rad {person.rejected}, yakun {person.completed}, ombor {person.stockChanges}</p>
           ))}
           <button
             type="button"
-            onClick={() => printHtml(`<!doctype html><html><head><meta charset="utf-8"><style>@page{size:A5;margin:10mm}body{font-family:sans-serif;font-size:12px}</style></head><body><h1>Smena hisoboti</h1><p>${formatDateTime(shift.since)} — ${formatDateTime(shift.until)}</p><p>Online: ${formatSom(shift.onlineRevenue || 0)}</p><p>Naqd: ${formatSom(shift.cashRevenue || 0)}</p><p>Pul qaytarish: ${shift.refunds || 0}</p><p>Ombor: ${shift.stockMovements || 0}</p></body></html>`)}
+            onClick={() => printHtml(`<!doctype html><html><head><meta charset="utf-8"><style>@page{size:A5;margin:10mm}body{font-family:sans-serif;font-size:12px}</style></head><body><h1>${t("panel.shiftReport")}</h1><p>${formatDateTime(shift.since)} — ${formatDateTime(shift.until)}</p><p>${t("panel.shiftOnline")}: ${formatSom(shift.onlineRevenue || 0)}</p><p>${t("panel.shiftCardTransfer")}: ${formatSom(shift.cardTransferRevenue || 0)}</p><p>${t("panel.shiftCash")}: ${formatSom(shift.cashRevenue || 0)}</p><p>${t("panel.shiftShortage")}: ${formatSom(shift.discrepancy || 0)}</p><p>${t("panel.shiftRefunds")}: ${shift.refunds || 0}</p><p>${t("panel.shiftStock")}: ${shift.stockMovements || 0}</p></body></html>`)}
             className="h-10 w-fit rounded-xl border px-3 text-sm font-bold"
           >
-            Chop etish
+            {t("panel.shiftPrint")}
           </button>
         </section>
       )}

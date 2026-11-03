@@ -2,6 +2,12 @@ const prisma = require("./prisma");
 const { AppError } = require("./response");
 const { encryptSecret, decryptSecret } = require("./secrets");
 const { DELIVERY_FEE, FREE_DELIVERY_FROM } = require("./deliveryFee.json");
+const {
+  cardTransferPublic,
+  isValidCardNumber,
+  maskCardNumber,
+  normalizeCardNumber,
+} = require("./cardTransfer");
 
 const CACHE_MS = 15_000;
 const TEMPLATE_KEYS = ["otp", "askContact", "PAID", "PREPARING", "READY", "DELIVERING", "COMPLETED", "CANCELLED", "WAITING_PAYMENT"];
@@ -27,6 +33,11 @@ const DEFAULTS = {
   clickEnabled: true,
   cashEnabled: true,
   cardTerminalEnabled: true,
+  cardTransferEnabled: false,
+  cardTransferNumber: "",
+  cardTransferHolder: "",
+  cardTransferBank: "",
+  cardTransferTimeoutMin: 30,
   pickupEnabled: true,
   contactPhone: "1095",
   contactPhoneAlt: "+998 71 200 24 24",
@@ -60,6 +71,9 @@ function maskToken(plain) {
 
 function normalize(row, tokenPlain) {
   const templates = templatesFrom(row?.messageTemplates);
+  const cardNumber = normalizeCardNumber(row?.cardTransferNumber || "");
+  const cardHolder = String(row?.cardTransferHolder || "").trim();
+  const cardEnabled = Boolean(row?.cardTransferEnabled) && isValidCardNumber(cardNumber) && Boolean(cardHolder);
   return {
     deliveryFee: money(row?.deliveryFee ?? DEFAULTS.deliveryFee),
     freeDeliveryFrom: money(row?.freeDeliveryFrom ?? DEFAULTS.freeDeliveryFrom),
@@ -69,12 +83,18 @@ function normalize(row, tokenPlain) {
     clickEnabled: row?.clickEnabled !== false,
     cashEnabled: row?.cashEnabled !== false,
     cardTerminalEnabled: row?.cardTerminalEnabled !== false,
+    cardTransferEnabled: cardEnabled,
+    cardTransferNumber: cardNumber,
+    cardTransferHolder: cardHolder,
+    cardTransferBank: String(row?.cardTransferBank || "").trim(),
+    cardTransferTimeoutMin: Math.min(180, Math.max(5, Number(row?.cardTransferTimeoutMin || DEFAULTS.cardTransferTimeoutMin))),
     pickupEnabled: row?.pickupEnabled !== false,
     contactPhone: row?.contactPhone || DEFAULTS.contactPhone,
     contactPhoneAlt: row?.contactPhoneAlt || DEFAULTS.contactPhoneAlt,
     footerAbout: row?.footerAbout || DEFAULTS.footerAbout,
     footerLicensed: row?.footerLicensed || DEFAULTS.footerLicensed,
     footerShort: row?.footerShort || DEFAULTS.footerShort,
+    localizedCopy: row?.localizedCopy && typeof row.localizedCopy === "object" ? row.localizedCopy : {},
     messageTemplates: templates,
     telegramToken: tokenPlain || "",
   };
@@ -102,10 +122,19 @@ async function getShopSettings() {
 }
 
 function publicShopSettings(settings) {
-  const { telegramToken, ...rest } = settings;
+  const {
+    telegramToken,
+    cardTransferNumber: _cardNumber,
+    cardTransferHolder: _cardHolder,
+    cardTransferBank: _cardBank,
+    cardTransferEnabled: _cardEnabled,
+    cardTransferTimeoutMin: _cardTimeout,
+    ...rest
+  } = settings;
   const telegramBotUsername = require("../bot/identity").currentBotUsername();
   return {
     ...rest,
+    ...cardTransferPublic(settings),
     telegramBotUsername,
     telegramBotUrl: telegramBotUsername ? `https://t.me/${telegramBotUsername}` : "",
   };
@@ -116,17 +145,27 @@ function adminShopSettings(settings) {
   const envToken = String(process.env.TELEGRAM_BOT_TOKEN || "").trim();
   return {
     ...publicShopSettings(settings),
+    cardTransferEnabled: Boolean(settings.cardTransferEnabled),
+    cardTransferNumber: settings.cardTransferNumber || "",
+    cardTransferHolder: settings.cardTransferHolder || "",
+    cardTransferBank: settings.cardTransferBank || "",
+    cardTransferTimeoutMin: settings.cardTransferTimeoutMin || 30,
+    cardTransferNumberMasked: maskCardNumber(settings.cardTransferNumber),
     ...mask,
     telegramFromEnv: !mask.hasTelegramToken && Boolean(envToken),
   };
 }
 
-function checkoutRulesFrom(settings) {
+function checkoutRulesFrom(settings, { paymentMethod } = {}) {
+  const method = String(paymentMethod || "").toUpperCase();
   return {
     deliveryFee: settings.deliveryFee,
     freeDeliveryFrom: settings.freeDeliveryFrom,
     reviewWindowMinutes: settings.reviewWindowMinutes,
-    paymentWindowMinutes: settings.paymentWindowMinutes,
+    paymentWindowMinutes:
+      method === "CARD_TRANSFER"
+        ? Number(settings.cardTransferTimeoutMin || DEFAULTS.cardTransferTimeoutMin)
+        : settings.paymentWindowMinutes,
   };
 }
 
@@ -161,7 +200,21 @@ function assertPaymentAllowed(settings, method, deliveryType) {
       throw new AppError("Karta terminal hozir o'chiq", 409, "PAYMENT_DISABLED");
     }
   }
-  if (!settings.paymeEnabled && !settings.clickEnabled && !settings.cashEnabled && !settings.cardTerminalEnabled) {
+  if (provider === "CARD_TRANSFER") {
+    if (!settings.cardTransferEnabled) {
+      throw new AppError("Kartaga o'tkazma hozir o'chiq", 409, "PAYMENT_DISABLED");
+    }
+    if (!isValidCardNumber(settings.cardTransferNumber) || !String(settings.cardTransferHolder || "").trim()) {
+      throw new AppError("Kartaga o'tkazma sozlamalari to'liq emas", 409, "PAYMENT_DISABLED");
+    }
+  }
+  if (
+    !settings.paymeEnabled &&
+    !settings.clickEnabled &&
+    !settings.cashEnabled &&
+    !settings.cardTerminalEnabled &&
+    !settings.cardTransferEnabled
+  ) {
     throw new AppError("Hech qanday to'lov yoqilmagan", 409, "PAYMENT_DISABLED");
   }
 }
@@ -173,6 +226,39 @@ async function saveShopSettings(body) {
   if (body.telegramBotToken) {
     telegramBotToken = encryptSecret(String(body.telegramBotToken).trim());
   }
+
+  const cardNumber = normalizeCardNumber(
+    body.cardTransferNumber != null ? body.cardTransferNumber : current.cardTransferNumber
+  );
+  const cardHolder = String(
+    body.cardTransferHolder != null ? body.cardTransferHolder : current.cardTransferHolder || ""
+  ).trim();
+  const cardBank = String(body.cardTransferBank != null ? body.cardTransferBank : current.cardTransferBank || "").trim();
+  const cardTimeout = Math.min(
+    180,
+    Math.max(
+      5,
+      Number(
+        body.cardTransferTimeoutMin != null ? body.cardTransferTimeoutMin : current.cardTransferTimeoutMin || 30
+      )
+    )
+  );
+  let cardEnabled = body.cardTransferEnabled != null ? Boolean(body.cardTransferEnabled) : current.cardTransferEnabled;
+  if (cardEnabled && (!isValidCardNumber(cardNumber) || !cardHolder)) {
+    throw new AppError("Kartaga o'tkazmani yoqish uchun karta raqami va egasi majburiy", 400, "VALIDATION_ERROR");
+  }
+  if (body.cardTransferNumber != null && String(body.cardTransferNumber).trim() && !isValidCardNumber(cardNumber)) {
+    throw new AppError("Karta raqami 16 ta raqamdan iborat bo'lishi kerak", 400, "VALIDATION_ERROR");
+  }
+
+  const cardFields = {
+    cardTransferEnabled: cardEnabled,
+    cardTransferNumber: cardNumber,
+    cardTransferHolder: cardHolder,
+    cardTransferBank: cardBank,
+    cardTransferTimeoutMin: cardTimeout,
+  };
+
   const saved = await prisma.shopSetting.upsert({
     where: { id: "default" },
     create: {
@@ -185,12 +271,14 @@ async function saveShopSettings(body) {
       clickEnabled: body.clickEnabled,
       cashEnabled: body.cashEnabled,
       cardTerminalEnabled: body.cardTerminalEnabled !== false,
+      ...cardFields,
       pickupEnabled: body.pickupEnabled,
       contactPhone: body.contactPhone,
       contactPhoneAlt: body.contactPhoneAlt || "",
       footerAbout: body.footerAbout,
       footerLicensed: body.footerLicensed,
       footerShort: body.footerShort,
+      localizedCopy: body.localizedCopy && typeof body.localizedCopy === "object" ? body.localizedCopy : {},
       messageTemplates: templates,
       ...(telegramBotToken ? { telegramBotToken } : {}),
     },
@@ -203,12 +291,14 @@ async function saveShopSettings(body) {
       clickEnabled: body.clickEnabled,
       cashEnabled: body.cashEnabled,
       cardTerminalEnabled: body.cardTerminalEnabled !== false,
+      ...cardFields,
       pickupEnabled: body.pickupEnabled,
       contactPhone: body.contactPhone,
       contactPhoneAlt: body.contactPhoneAlt || "",
       footerAbout: body.footerAbout,
       footerLicensed: body.footerLicensed,
       footerShort: body.footerShort,
+      localizedCopy: body.localizedCopy && typeof body.localizedCopy === "object" ? body.localizedCopy : {},
       messageTemplates: templates,
       ...(telegramBotToken ? { telegramBotToken } : {}),
     },

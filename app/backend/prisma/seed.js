@@ -357,7 +357,7 @@ async function main() {
   });
 
   const courierHash = await bcrypt.hash("Courier123!", 10);
-  const couriers = [
+  const couriers = process.env.NODE_ENV === "production" ? [] : [
     { id: "user-courier-yunusobod", name: "Yunusobod kuryer", phone: "+998901000010", branchId: "branch-yunusobod" },
     { id: "user-courier-chilonzor", name: "Chilonzor kuryer", phone: "+998901000011", branchId: "branch-chilonzor" },
     { id: "user-courier-mirzo", name: "Mirzo Ulug'bek kuryer", phone: "+998901000012", branchId: "branch-mirzo-ulugbek" },
@@ -417,6 +417,11 @@ async function main() {
       clickEnabled: DEFAULTS.clickEnabled,
       cashEnabled: DEFAULTS.cashEnabled,
       cardTerminalEnabled: DEFAULTS.cardTerminalEnabled,
+      cardTransferEnabled: DEFAULTS.cardTransferEnabled,
+      cardTransferNumber: DEFAULTS.cardTransferNumber,
+      cardTransferHolder: DEFAULTS.cardTransferHolder,
+      cardTransferBank: DEFAULTS.cardTransferBank,
+      cardTransferTimeoutMin: DEFAULTS.cardTransferTimeoutMin,
       pickupEnabled: DEFAULTS.pickupEnabled,
       contactPhone: DEFAULTS.contactPhone,
       contactPhoneAlt: DEFAULTS.contactPhoneAlt,

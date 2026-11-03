@@ -86,15 +86,25 @@ function getCustomerOrderView(order) {
     } else if (cash) paymentKey = order.payment.status === "COMPLETED" ? "order.pay.cashReceived" : "order.pay.cashDue";
     else if (provider === "CLICK") paymentKey = "order.pay.click";
     else if (provider === "PAYME") paymentKey = "order.pay.payme";
-    else paymentKey = "order.pay.other";
+    else if (provider === "CARD_TRANSFER") {
+      paymentKey =
+        order.payment.status === "COMPLETED" ? "order.pay.cardTransferPaid" : "order.pay.cardTransfer";
+    } else paymentKey = "order.pay.other";
   }
 
   if (order?.payment && cash && order.payment.status !== "COMPLETED" && order?.deliveryType === "PICKUP") {
     paymentKey = "order.pay.cashPickup";
   }
 
+  const cardTransfer = paymentProvider(order) === "CARD_TRANSFER";
+  const latestReceipt = Array.isArray(order?.paymentReceipts)
+    ? [...order.paymentReceipts].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0]
+    : order?.latestReceipt || null;
+  const receiptPending = cardTransfer && latestReceipt?.status === "PENDING";
+  const receiptRejected = cardTransfer && latestReceipt?.status === "REJECTED";
+
   return {
-    titleKey,
+    titleKey: receiptPending ? "order.status.receiptReview" : titleKey,
     reservationKey,
     paymentKey,
     nextStepKey: stageKey === "failed" ? "courier.next.failed" : stageKey === "assigned" ? "courier.next.assigned" : stageKey === "enRoute" ? "courier.next.enRoute" : nextStepKey(order),
@@ -102,8 +112,11 @@ function getCustomerOrderView(order) {
     reasons: rejected ? rejectReasons(prescription) : [],
     cancelReason: cancelled && !rejected ? order?.notes || null : null,
     showReupload: rejected,
-    showPay: status === "WAITING_PAYMENT" && !payOnDelivery && !rejected,
-    showPayTimer: status === "WAITING_PAYMENT" && !payOnDelivery && !rejected,
+    showPay: status === "WAITING_PAYMENT" && !payOnDelivery && !rejected && !cardTransfer,
+    showCardTransfer: status === "WAITING_PAYMENT" && cardTransfer && !rejected,
+    showPayTimer: status === "WAITING_PAYMENT" && !payOnDelivery && !rejected && !(cardTransfer && receiptPending),
+    receiptPending,
+    receiptRejected,
     showDeliveryFee: order?.deliveryType !== "PICKUP" && Number(order?.deliveryFee) > 0,
     prescriptionKey: !prescription || rejected || cancelled ? null : reviewing ? "order.rx.pending" : null,
   };

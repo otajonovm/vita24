@@ -143,7 +143,10 @@ export default function BranchAdminPage() {
           buffer += decoder.decode(value, { stream: true });
           const parts = buffer.split("\n\n");
           buffer = parts.pop() || "";
-          if (parts.some((part) => /event:\s*(order(?:\.updated)?|branch)/.test(part))) setPulse((value) => value + 1);
+          if (parts.some((part) => /event:\s*(order(?:\.updated)?|receipt(?:\.(?:uploaded|approved|rejected))?|branch)/.test(part))) {
+            if (parts.some((part) => /event:\s*receipt\.uploaded/.test(part)) && sound) beep();
+            setPulse((value) => value + 1);
+          }
         }
         if (!stopped) throw new Error("ended");
       } catch {
