@@ -80,6 +80,8 @@ function branchStatus(branch) {
 
 function serializeBranch(branch, stats = {}) {
   const key = maskSecret(branch.lekkoApiKey);
+  const { cardTransferAdminMasked } = require("../lib/cardTransfer");
+  const card = cardTransferAdminMasked(branch);
   return {
     id: branch.id,
     name: branch.name,
@@ -109,6 +111,10 @@ function serializeBranch(branch, stats = {}) {
     lekkoKeyLast4: key.lekkoKeyLast4,
     lekkoDrugStoreId: branch.lekkoDrugStoreId,
     lastSyncedAt: branch.lastSyncedAt,
+    cardTransferEnabled: card.cardTransferEnabled,
+    cardTransferNumberMasked: card.cardTransferNumberMasked,
+    cardTransferHolder: card.cardTransferHolder,
+    cardTransferBank: card.cardTransferBank,
   };
 }
 
@@ -425,6 +431,33 @@ const unarchiveBranch = asyncHandler(async (req, res) => {
   return sendSuccess(res, serializeBranch(branch), "Filial arxivdan chiqarildi");
 });
 
+const disableBranchCard = asyncHandler(async (req, res) => {
+  const { maskCardNumber } = require("../lib/cardTransfer");
+  const current = await prisma.branch.findUnique({ where: { id: req.params.id } });
+  if (!current) throw new AppError("Filial topilmadi", 404, "NOT_FOUND");
+  const branch = await prisma.branch.update({
+    where: { id: current.id },
+    data: { cardTransferEnabled: false },
+  });
+  await writeAudit(prisma, {
+    req,
+    action: "BRANCH_CARD_DISABLED",
+    entityType: "Branch",
+    entityId: branch.id,
+    branchId: branch.id,
+    summary: `${branch.name} kartasi o'chirildi`,
+    before: {
+      cardTransferEnabled: current.cardTransferEnabled,
+      cardTransferNumber: maskCardNumber(current.cardTransferNumber),
+    },
+    after: {
+      cardTransferEnabled: false,
+      cardTransferNumber: maskCardNumber(branch.cardTransferNumber),
+    },
+  });
+  return sendSuccess(res, serializeBranch(branch), "Filial kartasi o'chirildi");
+});
+
 module.exports = {
   listBranches,
   createBranch,
@@ -434,5 +467,6 @@ module.exports = {
   deleteBranch,
   archiveBranch,
   unarchiveBranch,
+  disableBranchCard,
   lekkoKeyData,
 };

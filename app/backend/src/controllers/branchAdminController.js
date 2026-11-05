@@ -32,6 +32,13 @@ const { writeAudit } = require("../lib/audit");
 const { formatWorkingHours } = require("../lib/branchProfile");
 const { applyOrderStatusChange } = require("../services/orderStatusService");
 const { assignOrderCourier } = require("../services/courierService");
+const {
+  cardTransferStaffView,
+  isMaskedCardNumber,
+  isValidCardNumber,
+  maskCardNumber,
+  normalizeCardNumber,
+} = require("../lib/cardTransfer");
 
 const REVIEW_STATUSES = ["PENDING_PRESCRIPTION", "PENDING_BRANCH"];
 const PAID_LIKE = ["PAID", "PREPARING", "READY", "DELIVERING", "COMPLETED"];
@@ -1289,6 +1296,88 @@ const resolvePaymentDiscrepancy = asyncHandler(async (req, res) => {
   return sendSuccess(res, serializeBranchOrder(updated, req.user.id), "Kamomad tasdiqlandi");
 });
 
+const getCardSettings = asyncHandler(async (req, res) => {
+  if (req.user.role !== "BRANCH_ADMIN" && req.user.role !== "MANAGER") {
+    throw new AppError("Faqat filial xodimi karta sozlamalarini ko'ra oladi", 403, "FORBIDDEN");
+  }
+  const branchId = assertBranchAccess(req, req.user.branchId);
+  if (!branchId) throw new AppError("Filial biriktirilmagan", 403, "FORBIDDEN");
+  const branch = await prisma.branch.findUnique({ where: { id: branchId } });
+  if (!branch || !branch.isActive || branch.archivedAt) {
+    throw new AppError("Filial topilmadi", 404, "NOT_FOUND");
+  }
+  return sendSuccess(res, cardTransferStaffView(branch), "Karta sozlamalari");
+});
+
+const updateCardSettings = asyncHandler(async (req, res) => {
+  if (req.user.role !== "BRANCH_ADMIN") {
+    throw new AppError("Faqat farmatsevt karta sozlamalarini o'zgartira oladi", 403, "FORBIDDEN");
+  }
+  const branchId = assertBranchAccess(req, req.user.branchId, { write: true });
+  if (!branchId) throw new AppError("Filial biriktirilmagan", 403, "FORBIDDEN");
+
+  const current = await prisma.branch.findUnique({ where: { id: branchId } });
+  if (!current || !current.isActive || current.archivedAt) {
+    throw new AppError("Filial topilmadi", 404, "NOT_FOUND");
+  }
+
+  const body = req.body || {};
+  const keepExisting = body.cardTransferNumber != null && isMaskedCardNumber(body.cardTransferNumber);
+  const cardNumber = keepExisting
+    ? normalizeCardNumber(current.cardTransferNumber)
+    : normalizeCardNumber(body.cardTransferNumber != null ? body.cardTransferNumber : current.cardTransferNumber);
+  const cardHolder = String(
+    body.cardTransferHolder != null ? body.cardTransferHolder : current.cardTransferHolder || ""
+  ).trim();
+  const cardBank = String(body.cardTransferBank != null ? body.cardTransferBank : current.cardTransferBank || "").trim();
+  const cardEnabled = Boolean(body.cardTransferEnabled);
+
+  if (cardEnabled && (!isValidCardNumber(cardNumber) || !cardHolder)) {
+    throw new AppError("Kartaga o'tkazmani yoqish uchun karta raqami va egasi majburiy", 400, "VALIDATION_ERROR");
+  }
+  if (
+    body.cardTransferNumber != null &&
+    String(body.cardTransferNumber).trim() &&
+    !keepExisting &&
+    !isValidCardNumber(cardNumber)
+  ) {
+    throw new AppError("Karta raqami 16 ta raqamdan iborat bo'lishi kerak", 400, "VALIDATION_ERROR");
+  }
+
+  const updated = await prisma.branch.update({
+    where: { id: branchId },
+    data: {
+      cardTransferEnabled: cardEnabled,
+      cardTransferNumber: cardNumber,
+      cardTransferHolder: cardHolder,
+      cardTransferBank: cardBank,
+    },
+  });
+
+  await writeAudit(prisma, {
+    req,
+    action: "BRANCH_CARD_SETTINGS_UPDATED",
+    entityType: "Branch",
+    entityId: branchId,
+    branchId,
+    summary: `Filial kartasi ${cardEnabled ? "yoqildi" : "o'chirildi"}: ${maskCardNumber(cardNumber)}`,
+    before: {
+      cardTransferEnabled: current.cardTransferEnabled,
+      cardTransferNumber: maskCardNumber(current.cardTransferNumber),
+      cardTransferHolder: current.cardTransferHolder,
+      cardTransferBank: current.cardTransferBank,
+    },
+    after: {
+      cardTransferEnabled: updated.cardTransferEnabled,
+      cardTransferNumber: maskCardNumber(updated.cardTransferNumber),
+      cardTransferHolder: updated.cardTransferHolder,
+      cardTransferBank: updated.cardTransferBank,
+    },
+  });
+
+  return sendSuccess(res, cardTransferStaffView(updated), "Karta sozlamalari saqlandi");
+});
+
 const streamEvents = asyncHandler(async (req, res) => {
   const scopedBranchId = assertBranchAccess(req, req.query.branchId);
   const branch = await requireActiveBranch(scopedBranchId || req.query.branchId);
@@ -1328,5 +1417,7 @@ module.exports = {
   streamEvents,
   assignCourier,
   resolvePaymentDiscrepancy,
+  getCardSettings,
+  updateCardSettings,
   serializeBranchOrder,
 };

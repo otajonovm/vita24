@@ -28,11 +28,14 @@ export default function Header() {
   const [query, setQuery] = useState("");
   const [groups, setGroups] = useState({ medicines: [], ingredients: [], symptoms: [] });
   const [suggestions, setSuggestions] = useState([]);
+  const [popularQueries, setPopularQueries] = useState([]);
+  const [popularMedicines, setPopularMedicines] = useState([]);
   const [openResults, setOpenResults] = useState(false);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState("");
   const searchGate = useRef(createRequestGate());
   const submittedQuery = useRef("");
+  const latestNeedle = useRef("");
 
   useEffect(() => {
     if (!branch?.id) return undefined;
@@ -70,12 +73,15 @@ export default function Header() {
 
   useEffect(() => {
     const needle = query.trim();
+    latestNeedle.current = needle;
     const pageQuery = new URLSearchParams(location.search).get("q") || "";
     const onThisResult =
       (location.pathname === "/catalog" || location.pathname === "/") && pageQuery === needle && needle.length > 0;
     if (needle.length < 2 || onThisResult || submittedQuery.current === needle) {
       setGroups({ medicines: [], ingredients: [], symptoms: [] });
       setSuggestions([]);
+      setPopularQueries([]);
+      setPopularMedicines([]);
       setSearching(false);
       setSearchError("");
       return undefined;
@@ -84,9 +90,10 @@ export default function Header() {
 
     const controller = new AbortController();
     const requestId = searchGate.current.next();
+    // Searching flag immediately — avoids stale "topilmadi" flash while waiting debounce.
+    setSearching(true);
+    setSearchError("");
     const timer = setTimeout(async () => {
-      setSearching(true);
-      setSearchError("");
       setOpenResults(true);
       try {
         const data = await suggestMedicines({
@@ -94,30 +101,34 @@ export default function Header() {
           search: needle,
           signal: controller.signal,
         });
-        if (!searchGate.current.isLatest(requestId)) return;
+        if (!searchGate.current.isLatest(requestId) || latestNeedle.current !== needle) return;
         setGroups({
           medicines: data.medicines || [],
           ingredients: data.ingredients || [],
           symptoms: data.symptoms || [],
         });
         setSuggestions(data.suggestions || []);
+        setPopularQueries(data.popularQueries || []);
+        setPopularMedicines(data.popular || []);
         setOpenResults(true);
       } catch (error) {
-        if (isCanceled(error) || !searchGate.current.isLatest(requestId)) return;
+        if (isCanceled(error) || !searchGate.current.isLatest(requestId) || latestNeedle.current !== needle) return;
         setGroups({ medicines: [], ingredients: [], symptoms: [] });
         setSuggestions([]);
+        setPopularQueries([]);
+        setPopularMedicines([]);
         setSearchError(t("error.generic"));
         setOpenResults(true);
       } finally {
-        if (searchGate.current.isLatest(requestId)) setSearching(false);
+        if (searchGate.current.isLatest(requestId) && latestNeedle.current === needle) setSearching(false);
       }
-    }, 250);
+    }, 180);
 
     return () => {
       clearTimeout(timer);
       controller.abort();
     };
-  }, [query, branch, location.pathname, location.search]);
+  }, [query, branch?.id, location.pathname, location.search, t]);
 
   const hideSearch =
     location.pathname.startsWith("/branch-admin") || location.pathname.startsWith("/admin");
@@ -132,6 +143,8 @@ export default function Header() {
     setQuery,
     groups,
     suggestions,
+    popularQueries,
+    popular: popularMedicines,
     openResults,
     setOpenResults,
     navigate,
@@ -140,6 +153,8 @@ export default function Header() {
       submittedQuery.current = value;
       setGroups({ medicines: [], ingredients: [], symptoms: [] });
       setSuggestions([]);
+      setPopularQueries([]);
+      setPopularMedicines([]);
       setOpenResults(false);
     },
     searching,

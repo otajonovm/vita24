@@ -7,9 +7,23 @@ export function formatGrouped(value) {
 }
 
 export function formatSom(value) {
-  const amount = Math.round(Number(value) || 0);
+  if (value == null || value === "") return "";
+  const amount = Math.round(Number(value));
+  if (!Number.isFinite(amount)) return "";
   const grouped = amount.toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
   return i18n.t("money.som", { amount: grouped });
+}
+
+/** Filial narxi, yo'q bo'lsa minPrice "… dan", aks holda "Filial tanlang". */
+export function formatPriceLabel(medicine, t) {
+  if (medicine?.price != null && medicine.price !== "" && Number.isFinite(Number(medicine.price))) {
+    return formatSom(medicine.price);
+  }
+  const min = medicine?.minPrice ?? medicine?.priceFrom;
+  if (min != null && min !== "" && Number(min) > 0) {
+    return i18n.t("money.from", { amount: formatGrouped(min) });
+  }
+  return t ? t("medicine.pickBranch") : i18n.t("medicine.pickBranch");
 }
 
 export function normalizePhoneInput(value) {

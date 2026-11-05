@@ -118,6 +118,14 @@ async function expireStaleReservations(client = prisma) {
         where: { orderId: row.id, status: "PENDING" },
         data: { status: "FAILED" },
       });
+      await tx.paymentReceipt.updateMany({
+        where: { orderId: row.id, status: "PENDING" },
+        data: {
+          status: "EXPIRED",
+          rejectReason: "Muddat tugadi",
+          reviewedAt: new Date(),
+        },
+      });
       return {
         id: locked[0].id,
         userId: locked[0].userId || null,

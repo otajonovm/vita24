@@ -171,6 +171,48 @@ const idParamSchema = z
   })
   .strict();
 
+const branchCardSettingsSchema = z
+  .object({
+    cardTransferEnabled: z.boolean(),
+    cardTransferNumber: z.string().trim().max(32).optional().or(z.literal("")),
+    cardTransferHolder: z.string().trim().max(120).optional().or(z.literal("")),
+    cardTransferBank: z.string().trim().max(120).optional().or(z.literal("")),
+  })
+  .strict()
+  .superRefine((data, ctx) => {
+    const raw = String(data.cardTransferNumber || "").trim();
+    const masked = raw.includes("*");
+    const digits = raw.replace(/\D/g, "");
+    if (data.cardTransferEnabled) {
+      if (!masked && digits.length !== 16) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["cardTransferNumber"],
+          message: "Karta raqami 16 ta raqamdan iborat bo'lishi kerak",
+        });
+      }
+      if (!String(data.cardTransferHolder || "").trim()) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["cardTransferHolder"],
+          message: "Karta egasining ismi majburiy",
+        });
+      }
+    } else if (raw && !masked && digits.length > 0 && digits.length !== 16) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["cardTransferNumber"],
+        message: "Karta raqami 16 ta raqamdan iborat bo'lishi kerak",
+      });
+    }
+  });
+
+const adminBranchCardDisableSchema = z
+  .object({
+    cardTransferEnabled: z.literal(false),
+  })
+  .strict();
+
 module.exports = {
   branchIdQuerySchema,
   updateStockSchema,
@@ -184,4 +226,6 @@ module.exports = {
   shiftQuerySchema,
   statsQuerySchema,
   idParamSchema,
+  branchCardSettingsSchema,
+  adminBranchCardDisableSchema,
 };

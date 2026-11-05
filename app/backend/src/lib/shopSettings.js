@@ -3,7 +3,7 @@ const { AppError } = require("./response");
 const { encryptSecret, decryptSecret } = require("./secrets");
 const { DELIVERY_FEE, FREE_DELIVERY_FROM } = require("./deliveryFee.json");
 const {
-  cardTransferPublic,
+  isMaskedCardNumber,
   isValidCardNumber,
   maskCardNumber,
   normalizeCardNumber,
@@ -132,9 +132,11 @@ function publicShopSettings(settings) {
     ...rest
   } = settings;
   const telegramBotUsername = require("../bot/identity").currentBotUsername();
+  // Global karta faqat fallback bayrog'i; to'liq raqam buyurtma snapshotida
   return {
     ...rest,
-    ...cardTransferPublic(settings),
+    cardTransferEnabled: Boolean(settings.cardTransferEnabled),
+    cardTransferTimeoutMin: Number(settings.cardTransferTimeoutMin || DEFAULTS.cardTransferTimeoutMin),
     telegramBotUsername,
     telegramBotUrl: telegramBotUsername ? `https://t.me/${telegramBotUsername}` : "",
   };
@@ -143,14 +145,16 @@ function publicShopSettings(settings) {
 function adminShopSettings(settings) {
   const mask = maskToken(settings.telegramToken);
   const envToken = String(process.env.TELEGRAM_BOT_TOKEN || "").trim();
+  const number = settings.cardTransferNumber || "";
   return {
     ...publicShopSettings(settings),
     cardTransferEnabled: Boolean(settings.cardTransferEnabled),
-    cardTransferNumber: settings.cardTransferNumber || "",
+    // GET da maskalangan raqam; PATCH da **** qayta yuborilsa eski saqlanadi
+    cardTransferNumber: number ? maskCardNumber(number) : "",
     cardTransferHolder: settings.cardTransferHolder || "",
     cardTransferBank: settings.cardTransferBank || "",
     cardTransferTimeoutMin: settings.cardTransferTimeoutMin || 30,
-    cardTransferNumberMasked: maskCardNumber(settings.cardTransferNumber),
+    cardTransferNumberMasked: maskCardNumber(number),
     ...mask,
     telegramFromEnv: !mask.hasTelegramToken && Boolean(envToken),
   };
@@ -227,9 +231,11 @@ async function saveShopSettings(body) {
     telegramBotToken = encryptSecret(String(body.telegramBotToken).trim());
   }
 
-  const cardNumber = normalizeCardNumber(
-    body.cardTransferNumber != null ? body.cardTransferNumber : current.cardTransferNumber
-  );
+  const rawCardInput = body.cardTransferNumber != null ? body.cardTransferNumber : current.cardTransferNumber;
+  const keepExistingCard = body.cardTransferNumber != null && isMaskedCardNumber(body.cardTransferNumber);
+  const cardNumber = keepExistingCard
+    ? normalizeCardNumber(current.cardTransferNumber)
+    : normalizeCardNumber(rawCardInput);
   const cardHolder = String(
     body.cardTransferHolder != null ? body.cardTransferHolder : current.cardTransferHolder || ""
   ).trim();
@@ -247,7 +253,12 @@ async function saveShopSettings(body) {
   if (cardEnabled && (!isValidCardNumber(cardNumber) || !cardHolder)) {
     throw new AppError("Kartaga o'tkazmani yoqish uchun karta raqami va egasi majburiy", 400, "VALIDATION_ERROR");
   }
-  if (body.cardTransferNumber != null && String(body.cardTransferNumber).trim() && !isValidCardNumber(cardNumber)) {
+  if (
+    body.cardTransferNumber != null &&
+    String(body.cardTransferNumber).trim() &&
+    !keepExistingCard &&
+    !isValidCardNumber(cardNumber)
+  ) {
     throw new AppError("Karta raqami 16 ta raqamdan iborat bo'lishi kerak", 400, "VALIDATION_ERROR");
   }
 

@@ -134,10 +134,97 @@ function extractDosageNumbers(value) {
   return { text: text.replace(/\s+/g, " ").trim(), numbers: [...new Set(numbers)] };
 }
 
+/** QWERTY → ЙЦУКЕН (lotin klavishda kirill yozmoqchi bo'lganda). */
+const EN_TO_RU_LAYOUT = {
+  q: "й",
+  w: "ц",
+  e: "у",
+  r: "к",
+  t: "е",
+  y: "н",
+  u: "г",
+  i: "ш",
+  o: "щ",
+  p: "з",
+  "[": "х",
+  "]": "ъ",
+  a: "ф",
+  s: "ы",
+  d: "в",
+  f: "а",
+  g: "п",
+  h: "р",
+  j: "о",
+  k: "л",
+  l: "д",
+  ";": "ж",
+  "'": "э",
+  z: "я",
+  x: "ч",
+  c: "с",
+  v: "м",
+  b: "и",
+  n: "т",
+  m: "ь",
+  ",": "б",
+  ".": "ю",
+  "`": "ё",
+};
+
+const RU_TO_EN_LAYOUT = Object.fromEntries(
+  Object.entries(EN_TO_RU_LAYOUT).map(([latin, cyr]) => [cyr, latin])
+);
+
+function mapLayout(value, table) {
+  return String(value || "")
+    .toLowerCase()
+    .split("")
+    .map((char) => table[char] ?? char)
+    .join("");
+}
+
+/** Kirill klaviatura yoqilgan holda lotin so'z yozilganda (зфкфсуефьщд → paracetamol). */
+function fixRuLayoutToLatin(value) {
+  return mapLayout(value, RU_TO_EN_LAYOUT);
+}
+
+/** Lotin klaviatura yoqilgan holda kirill so'z yozilganda (ghfhwtnfvjk → парацетамол). */
+function fixEnLayoutToCyrillic(value) {
+  return mapLayout(value, EN_TO_RU_LAYOUT);
+}
+
+function adjacentSwaps(value) {
+  const text = String(value || "");
+  if (text.length < 4) return [];
+  const out = [];
+  for (let i = 0; i < text.length - 1; i += 1) {
+    if (text[i] === text[i + 1]) continue;
+    out.push(`${text.slice(0, i)}${text[i + 1]}${text[i]}${text.slice(i + 2)}`);
+  }
+  return out;
+}
+
 function searchVariants(input) {
   const raw = String(input || "").trim();
   if (raw.length < 2) return [];
   const variants = new Set([raw, toCyrillic(raw), toLatin(raw)]);
+  const fromRuKeys = fixRuLayoutToLatin(raw);
+  const fromEnKeys = fixEnLayoutToCyrillic(raw);
+  if (fromRuKeys !== raw.toLowerCase()) {
+    variants.add(fromRuKeys);
+    variants.add(toLatin(fromRuKeys));
+    variants.add(toCyrillic(fromRuKeys));
+  }
+  if (fromEnKeys !== raw.toLowerCase()) {
+    variants.add(fromEnKeys);
+    variants.add(toLatin(fromEnKeys));
+    variants.add(toCyrillic(fromEnKeys));
+  }
+  if (raw.length >= 4 && raw.length <= 16) {
+    for (const swap of adjacentSwaps(normalizeSearch(raw))) {
+      variants.add(swap);
+    }
+  }
   if (raw.length >= 5) {
     const head = raw.slice(0, 4);
     variants.add(head);
@@ -200,4 +287,8 @@ module.exports = {
   escapeLike,
   buildSearchText,
   extractDosageNumbers,
+  fixRuLayoutToLatin,
+  fixEnLayoutToCyrillic,
+  adjacentSwaps,
+  levenshtein,
 };

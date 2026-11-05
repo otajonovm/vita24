@@ -50,19 +50,45 @@ const suggestMedicines = asyncHandler(async (req, res) => {
   const ranked = await rankMedicines({
     query,
     branchId,
-    limit: 8,
+    limit: 12,
     offset: 0,
     log: false,
+    logZero: true,
   });
   const reasons = new Map(ranked.hits.map((hit) => [hit.id, hit]));
   const items = await hydrate(ranked.hits.map((hit) => hit.id), branchId, reasons);
+
+  const medicines = [];
+  const ingredients = [];
+  const symptoms = [];
+  for (const item of items) {
+    if (item.matchGroup === "symptom") symptoms.push(item);
+    else if (item.matchGroup === "ingredient") ingredients.push(item);
+    else medicines.push(item);
+  }
+
+  // Agar asosiy guruhda faqat OOS bo'lsa — ingredient analoglarini alohida saqlab qol.
+  const medicineHasStock = medicines.some((item) => Number(item.stockCount) > 0);
+  if (!medicineHasStock && ingredients.length === 0) {
+    const stocked = items.filter((item) => Number(item.stockCount) > 0 && !medicines.some((row) => row.id === item.id));
+    ingredients.push(...stocked.slice(0, 4));
+  }
+
+  let popular = [];
+  let popularQueryRows = [];
+  if (items.length === 0) {
+    const [queries, shelf] = await Promise.all([popularQueries(8), fallbackShelf(branchId)]);
+    popularQueryRows = queries;
+    popular = await hydrate(shelf.popularIds, branchId);
+  }
+
   return sendSuccess(res, {
-    medicines: items.filter((item) => item.matchGroup !== "ingredient" && item.matchGroup !== "symptom"),
-    ingredients: items.filter((item) => item.matchGroup === "ingredient"),
-    symptoms: items.filter((item) => item.matchGroup === "symptom"),
+    medicines: medicines.slice(0, 8),
+    ingredients: ingredients.slice(0, 6),
+    symptoms: symptoms.slice(0, 6),
     suggestions: ranked.suggestions.map((item) => item.name),
-    popularQueries: [],
-    popular: [],
+    popularQueries: popularQueryRows,
+    popular,
   });
 });
 

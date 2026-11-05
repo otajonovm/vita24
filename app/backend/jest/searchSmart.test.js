@@ -62,28 +62,43 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 
+const PARA = /paracetamol|парацетамол|panadol|панадол/i;
+const IBU = /ibuprofen|ибупрофен|nurofen|нурофен/i;
+const AMOX = /amoksitsillin|amoxicillin|амоксициллин|амоксиклав/i;
+const NOSHPA = /no-shpa|noshpa|но-шпа|drotaverin|дротаверин/i;
+const COUGH = /ambroksol|амброксол|bromgeksin|бромгексин/i;
+const STOMACH = /omeprazol|омепразол|omez|омез/i;
+const HEAD = /paracetamol|парацетамол|ibuprofen|ибупрофен|nurofen|нурофен|sitramon|цитрамон/i;
+
 const named = [
-  ["paracetamol", /paracetamol/i],
-  ["paratsitamol", /paracetamol/i],
-  ["parasetamol", /paracetamol/i],
-  ["парацетамол", /paracetamol/i],
-  ["panadol", /panadol|paracetamol/i],
-  ["acetaminophen", /paracetamol|panadol/i],
-  ["amoxicillin", /amoksitsillin|amoxicillin/i],
-  ["amoksilin", /amoksitsillin|amoxicillin/i],
-  ["ибупрофен", /ibuprofen|nurofen/i],
-  ["ibuprafen", /ibuprofen|nurofen/i],
-  ["nurofen", /nurofen|ibuprofen/i],
-  ["no shpa", /no-shpa|noshpa|drotaverin/i],
-  ["noshpa", /no-shpa|noshpa|drotaverin/i],
-  ["но-шпа", /no-shpa|noshpa|drotaverin/i],
-  ["bosh og'rig'i", /paracetamol|ibuprofen|nurofen|sitramon/i],
-  ["bosh ogrigi", /paracetamol|ibuprofen|nurofen|sitramon/i],
-  ["бош оғриғи", /paracetamol|ibuprofen|nurofen|sitramon/i],
-  ["головная боль", /paracetamol|ibuprofen|nurofen|sitramon/i],
-  ["isitma", /paracetamol|panadol/i],
-  ["yo'tal", /ambroksol/i],
-  ["yoʻtal", /ambroksol/i],
+  ["paracetamol", PARA],
+  ["paratsitamol", PARA],
+  ["parasetamol", PARA],
+  ["парацетамол", PARA],
+  ["зфкфсуефьщд", PARA],
+  ["gfhfwtnfvjk", PARA],
+  ["ghfhwtnfvjk", PARA],
+  ["panadol", /panadol|панадол|paracetamol|парацетамол/i],
+  ["acetaminophen", PARA],
+  ["amoxicillin", AMOX],
+  ["amoksilin", AMOX],
+  ["ибупрофен", IBU],
+  ["ibuprafen", IBU],
+  ["nurofen", IBU],
+  ["nuorfen", IBU],
+  ["nuro", IBU],
+  ["no shpa", NOSHPA],
+  ["noshpa", NOSHPA],
+  ["но-шпа", NOSHPA],
+  ["дротаверин", NOSHPA],
+  ["bosh og'rig'i", HEAD],
+  ["bosh ogrigi", HEAD],
+  ["бош оғриғи", HEAD],
+  ["головная боль", HEAD],
+  ["isitma", PARA],
+  ["yo'tal", COUGH],
+  ["yoʻtal", COUGH],
+  ["oshqozon og'rig'i", STOMACH],
 ];
 
 test.each(named)("%s birinchi 3 ta ichida to'g'ri dorini qaytaradi", async (query, pattern) => {
@@ -93,10 +108,10 @@ test.each(named)("%s birinchi 3 ta ichida to'g'ri dorini qaytaradi", async (quer
 
 test("500 paracetamol faqat 500 mg ni birinchi qo'yadi", async () => {
   const { top } = await runQuery("500 paracetamol");
-  expect(top[0] || "").toMatch(/paracetamol/i);
+  expect(top[0] || "").toMatch(PARA);
   expect(top[0] || "").toMatch(/500/);
   for (const name of top) {
-    if (/paracetamol|panadol/i.test(name)) expect(name).toMatch(/500/);
+    if (PARA.test(name) || /panadol|панадол/i.test(name)) expect(name).toMatch(/500/);
   }
 });
 

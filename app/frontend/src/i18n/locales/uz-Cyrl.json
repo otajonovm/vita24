@@ -18,6 +18,10 @@
   "search.symptomGroup": "Касаллик бўйича",
   "search.inStock": "Мавжуд",
   "search.outOfStock": "Тугаган",
+  "search.analogs": "Ўхшаш / аналоглар",
+  "search.clear": "Тозалаш",
+  "search.askPharmacist": "Фармацевтдан сўраш",
+  "search.openTelegram": "Telegramда ёзиш",
   "empty.notFound": "Ҳеч нарса топилмади",
   "lang.uz": "O'zbek lotin",
   "lang.uzCyrl": "Ўзбек кирилл",
@@ -243,6 +247,7 @@
   "catalog": {
     "title": "Каталог",
     "pickBranch": "Каталог учун филиални танланг",
+    "priceHint": "Аниқ нарх ва қолдиқ учун филиални танланг",
     "sortLabel": "Саралаш",
     "sort": {
       "stock": "Омборда борлар",
@@ -548,6 +553,7 @@
   },
   "money": {
     "som": "{{amount}} сўм",
+    "from": "{{amount}} сўм дан",
     "left": "{{minutes}} дақ {{seconds}} сон"
   },
   "admin": {
@@ -878,6 +884,10 @@
     "rxBulkHint": "{{count}} та дори белгиси ўзгаради ва қўлда сақланади.",
     "rxSaved": "Рецепт белгиси сақланди",
     "rxNoneSelected": "Дори танланмаган",
+    "categoryBulk": "Оммавий категория",
+    "categoryBulkApply": "Категорияни қўллаш",
+    "categoryBulkHint": "{{count}} та дори категорияси қўлда сақланади.",
+    "categoryBulkSaved": "Категория янгиланди",
     "usage": "Қўлланилиши",
     "contraindications": "Қарши кўрсатмалар",
     "storage": "Сақлаш шароити",
@@ -1180,13 +1190,20 @@
     "rxAvgWait": "Ўртача кутиш",
     "rxByBranch": "Филиал бўйича",
     "rxLongWaitSignal": "{{count}} та буюртма узоқ кутмоқда — бу платформа муаммоси",
-    "settingsCardTransfer": "Картага ўтказма",
-    "settingsCardTransferEnable": "Картага ўтказмани ёқиш",
+    "settingsCardTransfer": "Картага ўтказма (захира)",
+    "settingsCardTransferEnable": "Глобал захира картани ёқиш",
     "settingsCardTransferHint": "Payme/Click улангандан кейин картага ўтказмани ўчиришни тавсия қиламиз",
+    "settingsCardTransferFallback": "Бу карта фақат филиалда ўз картаси йўқ бўлганда ишлатилади. Асосий карта фармацевт панелида киритилади.",
     "settingsCardNumber": "Карта рақами",
     "settingsCardHolder": "Карта эгаси",
     "settingsCardBank": "Банк (ихтиёрий)",
-    "settingsCardTimeout": "Тўлов муддати (дақиқа)"
+    "settingsCardTimeout": "Тўлов муддати (дақиқа)",
+    "branchCard": "Филиал картаси",
+    "branchCardOn": "Ёқилган",
+    "branchCardOff": "Йўқ",
+    "branchCardDisable": "Картани ўчириш",
+    "branchCardDisableHint": "{{name}} филиалининг картага ўтказмасини ўчирасизми?",
+    "branchCardDisabled": "Филиал картаси ўчирилди"
   },
   "orders.active": "Фаол",
   "orders.history": "Тарих",
@@ -1447,9 +1464,22 @@
       "paymentReview": "Тўлов текшируви"
     },
     "shiftCardTransfer": "Картага ўтказма",
+    "card": {
+      "tab": "Тўлов картаси",
+      "title": "Филиал тўлов картаси",
+      "hint": "Мижозлар шу филиалга буюртма берганда шу картага ўтказади.",
+      "enable": "Картага ўтказмани ёқиш",
+      "number": "Карта рақами",
+      "holder": "Карта эгаси",
+      "bank": "Банк номи (ихтиёрий)",
+      "numberInvalid": "Карта рақами 16 та рақамдан иборат бўлиши керак",
+      "holderRequired": "Карта эгасининг исми мажбурий",
+      "saved": "Карта созламалари сақланди"
+    },
     "receipt": {
       "title": "Тўлов чеки",
       "uploadedAt": "Юкланган вақт",
+      "newUpload": "Янги чек текширувга келди",
       "approve": "Тўлов тушди — тасдиқлаш",
       "reject": "Рад этиш",
       "approveConfirm": "Банкда {{amount}} тушганини текширдингизми?",

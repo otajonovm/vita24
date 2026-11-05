@@ -16,6 +16,7 @@ import {
   setAdminMedicineActive,
   setAdminMedicineRx,
   setAdminMedicineRxBulk,
+  setAdminMedicineCategoryBulk,
   updateAdminCategory,
   updateAdminMedicine,
   uploadMedicineImage,
@@ -96,6 +97,8 @@ export function CatalogManager() {
   const [rxStats, setRxStats] = useState(null);
   const [selected, setSelected] = useState([]);
   const [rxBusy, setRxBusy] = useState(false);
+  const [bulkCategoryId, setBulkCategoryId] = useState("");
+  const [categoryBusy, setCategoryBusy] = useState(false);
 
   async function loadCategories() {
     setCategoryError("");
@@ -345,6 +348,33 @@ export function CatalogManager() {
     }
   }
 
+  async function bulkCategory() {
+    if (!selected.length) {
+      push(t("admin.rxNoneSelected"), "error");
+      return;
+    }
+    if (!bulkCategoryId) {
+      push(t("admin.pickCategory"), "error");
+      return;
+    }
+    const accepted = await confirm({
+      title: t("admin.categoryBulk"),
+      body: t("admin.categoryBulkHint", { count: selected.length }),
+    });
+    if (!accepted) return;
+    setCategoryBusy(true);
+    try {
+      await setAdminMedicineCategoryBulk(selected, bulkCategoryId);
+      push(t("admin.categoryBulkSaved"));
+      setSelected([]);
+      await load(page, { quiet: true });
+    } catch (err) {
+      push(errorText(err, t("admin.errorTitle")), "error");
+    } finally {
+      setCategoryBusy(false);
+    }
+  }
+
   function toggleSelected(id) {
     setSelected((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
   }
@@ -394,6 +424,28 @@ export function CatalogManager() {
           <button type="button" onClick={() => setRxFilter("review")} className="font-bold text-amber-900">{t("admin.rxReviewCount", { count: rxStats.reviewCount || 0 })}</button>
         </div>
       )}
+      <div className="flex flex-wrap items-center gap-2">
+        <select
+          aria-label={t("admin.categoryBulk")}
+          value={bulkCategoryId}
+          onChange={(event) => setBulkCategoryId(event.target.value)}
+          className="h-11 rounded-xl border border-slate-200 px-3 text-sm"
+        >
+          <option value="">{t("admin.pickCategory")}</option>
+          {categories.map((item) => (
+            <option key={item.id} value={item.id}>{item.name}</option>
+          ))}
+        </select>
+        <button
+          type="button"
+          disabled={categoryBusy || !selected.length}
+          onClick={bulkCategory}
+          className="h-10 rounded-xl border border-slate-200 px-3 text-sm font-bold disabled:opacity-50"
+        >
+          {t("admin.categoryBulkApply")}
+        </button>
+        {selected.length ? <span className="text-sm text-slate-500">{selected.length}</span> : null}
+      </div>
       {rxOpen && (
         <div className="flex flex-wrap items-center gap-2">
           <select aria-label={t("admin.rxSourceFilter")} value={rxFilter} onChange={(event) => setRxFilter(event.target.value)} className="h-11 rounded-xl border border-slate-200 px-3 text-sm">
@@ -414,11 +466,9 @@ export function CatalogManager() {
           <table className="w-full min-w-[720px] text-left text-sm">
             <thead className="text-xs uppercase tracking-wide text-slate-500">
               <tr>
-                {rxOpen && (
-                  <th className="pb-2 pr-3">
-                    <input type="checkbox" checked={allSelected} onChange={() => setSelected(allSelected ? [] : pageIds)} aria-label={t("admin.rxBulkOn")} />
-                  </th>
-                )}
+                <th className="pb-2 pr-3">
+                  <input type="checkbox" checked={allSelected} onChange={() => setSelected(allSelected ? [] : pageIds)} aria-label={t("admin.categoryBulk")} />
+                </th>
                 <th className="pb-2 pr-3">{t("admin.colName")}</th>
                 <th className="pb-2 pr-3">{t("admin.category")}</th>
                 <th className="pb-2 pr-3">{t("admin.basePrice")}</th>
@@ -428,14 +478,12 @@ export function CatalogManager() {
             </thead>
             <tbody>
               {rows.length === 0 ? (
-                <tr><td colSpan={rxOpen ? 6 : 5} className="py-6 text-slate-500">{t("admin.catalogEmpty")}</td></tr>
+                <tr><td colSpan={6} className="py-6 text-slate-500">{t("admin.catalogEmpty")}</td></tr>
               ) : rows.map((row) => (
                 <tr key={row.id} className="border-t border-slate-100">
-                  {rxOpen && (
-                    <td className="py-3 pr-3">
-                      <input type="checkbox" checked={selected.includes(row.id)} onChange={() => toggleSelected(row.id)} aria-label={row.name} />
-                    </td>
-                  )}
+                  <td className="py-3 pr-3">
+                    <input type="checkbox" checked={selected.includes(row.id)} onChange={() => toggleSelected(row.id)} aria-label={row.name} />
+                  </td>
                   <td className="py-3 pr-3">
                     <p className="font-semibold text-slate-900">
                       {row.name}

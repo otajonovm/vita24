@@ -1,9 +1,49 @@
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import MedicineCard from "../cards/MedicineCard";
+import { peekPublicSettings, loadPublicSettings } from "../../lib/publicSettings";
+import { suggestMedicines } from "../../services/api";
+import { useBranchStore } from "../../store/useBranchStore";
 
-export default function SearchEmpty({ suggestion, suggestions = [], popular = [], categories = [], onSuggest, onCategory }) {
+export default function SearchEmpty({
+  suggestion,
+  suggestions = [],
+  popular = [],
+  popularQueries: popularQueriesProp = [],
+  categories = [],
+  onSuggest,
+  onCategory,
+}) {
   const { t } = useTranslation();
+  const branch = useBranchStore((state) => state.branch);
   const ideas = suggestions.length ? suggestions : suggestion ? [suggestion] : [];
+  const [popularQueries, setPopularQueries] = useState(popularQueriesProp);
+  const [settings, setSettings] = useState(() => peekPublicSettings());
+
+  useEffect(() => {
+    setPopularQueries(popularQueriesProp);
+  }, [popularQueriesProp]);
+
+  useEffect(() => {
+    let active = true;
+    loadPublicSettings().then((data) => {
+      if (active) setSettings(data);
+    });
+    if (!popularQueriesProp.length) {
+      suggestMedicines({ branchId: branch?.id, search: "" })
+        .then((data) => {
+          if (active) setPopularQueries(data.popularQueries || []);
+        })
+        .catch(() => {});
+    }
+    return () => {
+      active = false;
+    };
+  }, [branch?.id, popularQueriesProp.length]);
+
+  const telegramUrl =
+    settings?.telegramBotUrl || (settings?.telegramBotUsername ? `https://t.me/${settings.telegramBotUsername}` : "");
+  const phone = settings?.contactPhone || settings?.contactPhoneAlt || "";
 
   return (
     <div className="grid gap-4">
@@ -36,6 +76,37 @@ export default function SearchEmpty({ suggestion, suggestions = [], popular = []
             </div>
           </div>
         )}
+        {popularQueries.length > 0 && (
+          <div className="mt-4">
+            <p className="text-xs font-bold uppercase tracking-wide text-slate-400">{t("search.popularQueries")}</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {popularQueries.slice(0, 8).map((item) => (
+                <button
+                  key={item.query || item}
+                  type="button"
+                  onClick={() => onSuggest(item.query || item)}
+                  className="rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1.5 text-sm font-semibold text-[#087B51]"
+                >
+                  {item.query || item}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        <div className="mt-4 flex flex-wrap gap-3">
+          {telegramUrl ? (
+            <a href={telegramUrl} target="_blank" rel="noreferrer" className="text-sm font-bold text-[#087B51] no-underline">
+              {t("search.openTelegram")}
+            </a>
+          ) : null}
+          {phone ? (
+            <a href={`tel:${String(phone).replace(/\s/g, "")}`} className="text-sm font-bold text-slate-700 no-underline">
+              {t("search.askPharmacist")}: {phone}
+            </a>
+          ) : (
+            <p className="text-sm font-semibold text-slate-500">{t("search.askPharmacist")}</p>
+          )}
+        </div>
       </div>
       {popular.length > 0 && (
         <section>

@@ -8,6 +8,7 @@ const {
   deleteBranch,
   archiveBranch,
   unarchiveBranch,
+  disableBranchCard,
 } = require("../controllers/adminBranchController");
 const {
   listPharmacists,
@@ -53,6 +54,7 @@ const {
   lekkoLogQuerySchema,
   shopSettingsSchema,
 } = require("../validators/adminValidator");
+const { adminBranchCardDisableSchema } = require("../validators/branchAdminValidator");
 
 const router = express.Router();
 const guard = [authenticateToken, requireRole("SUPER_ADMIN")];
@@ -87,6 +89,13 @@ router.post(
   archiveBranch
 );
 router.post("/branches/:id/unarchive", ...guard, validateRequest(idParamSchema, "params"), unarchiveBranch);
+router.patch(
+  "/branches/:id/card-settings",
+  ...guard,
+  validateRequest(idParamSchema, "params"),
+  validateRequest(adminBranchCardDisableSchema),
+  disableBranchCard
+);
 router.delete(
   "/branches/:id/lekko-key",
   ...guard,

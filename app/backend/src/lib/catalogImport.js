@@ -186,6 +186,7 @@ function classifyRow(entry, context) {
       manufacturer,
       category: categoryName,
       categoryId: context.categories.get(categoryName.toLowerCase()) || null,
+      categorySource: "IMPORT",
       isPrescription: prescription === true,
       rxSource: "MANUAL",
       rxNeedsReview: false,

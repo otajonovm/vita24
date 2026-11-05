@@ -177,6 +177,9 @@ function unwrap(response) {
 
 function normalizeMedicine(raw, branchId) {
   const dosageMatch = String(raw.name || "").match(/(\d+\s?(mg|ml|iu|IU)?)/i);
+  const hasPrice = raw.price != null && raw.price !== "" && Number.isFinite(Number(raw.price));
+  const minRaw = raw.minPrice ?? raw.priceFrom;
+  const hasMin = minRaw != null && minRaw !== "" && Number(minRaw) > 0;
   return {
     id: raw.id,
     slug: raw.slug || "",
@@ -195,7 +198,9 @@ function normalizeMedicine(raw, branchId) {
     matchReason: raw.matchReason || "",
     matchGroup: raw.matchGroup || "",
     categoryId: raw.categoryId || raw.category?.id || "",
-    price: Number(raw.price) || 0,
+    price: hasPrice ? Number(raw.price) : null,
+    minPrice: hasMin ? Number(minRaw) : null,
+    priceFrom: hasMin ? Number(minRaw) : null,
     stockCount: Number(raw.stockCount ?? raw.available ?? 0),
     available: Number(raw.available ?? raw.stockCount ?? 0),
     branchId,
@@ -737,6 +742,20 @@ export async function unarchiveAdminBranch(branchId) {
   return unwrap(await client.post(`/admin/branches/${branchId}/unarchive`));
 }
 
+export async function disableAdminBranchCard(branchId) {
+  return unwrap(
+    await client.patch(`/admin/branches/${branchId}/card-settings`, { cardTransferEnabled: false })
+  );
+}
+
+export async function fetchBranchCardSettings() {
+  return unwrap(await client.get("/branch-admin/card-settings", { audience: "pharmacist" }));
+}
+
+export async function saveBranchCardSettings(payload) {
+  return unwrap(await client.patch("/branch-admin/card-settings", payload, { audience: "pharmacist" }));
+}
+
 export async function fetchPublicSettings() {
   return unwrap(await client.get("/settings"));
 }
@@ -944,6 +963,10 @@ export async function setAdminMedicineRx(id, isPrescription) {
 
 export async function setAdminMedicineRxBulk(ids, isPrescription) {
   return unwrap(await client.post("/admin/medicines/rx/bulk", { ids, isPrescription }));
+}
+
+export async function setAdminMedicineCategoryBulk(ids, categoryId) {
+  return unwrap(await client.post("/admin/medicines/category/bulk", { ids, categoryId }));
 }
 
 export async function fetchAdminCategories() {

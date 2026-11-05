@@ -18,6 +18,10 @@
   "search.symptomGroup": "По заболеванию",
   "search.inStock": "В наличии",
   "search.outOfStock": "Нет в наличии",
+  "search.analogs": "Похожие / аналоги",
+  "search.clear": "Очистить",
+  "search.askPharmacist": "Спросить фармацевта",
+  "search.openTelegram": "Написать в Telegram",
   "empty.notFound": "Ничего не найдено",
   "lang.uz": "O'zbek lotin",
   "lang.uzCyrl": "Ўзбек кирилл",
@@ -243,6 +247,7 @@
   "catalog": {
     "title": "Каталог",
     "pickBranch": "Для каталога выберите филиал",
+    "priceHint": "Для точной цены и остатка выберите филиал",
     "sortLabel": "Сортировка",
     "sort": {
       "stock": "Сначала в наличии",
@@ -548,6 +553,7 @@
   },
   "money": {
     "som": "{{amount}} сум",
+    "from": "от {{amount}} сум",
     "left": "{{minutes}} мин {{seconds}} сек"
   },
   "admin": {
@@ -878,6 +884,10 @@
     "rxBulkHint": "Изменится отметка у {{count}} лекарств и сохранится как ручная.",
     "rxSaved": "Отметка рецепта сохранена",
     "rxNoneSelected": "Лекарство не выбрано",
+    "categoryBulk": "Массовая категория",
+    "categoryBulkApply": "Применить категорию",
+    "categoryBulkHint": "Категория {{count}} лекарств будет сохранена вручную.",
+    "categoryBulkSaved": "Категория обновлена",
     "usage": "Применение",
     "contraindications": "Противопоказания",
     "storage": "Условия хранения",
@@ -1180,13 +1190,20 @@
     "rxAvgWait": "Среднее ожидание",
     "rxByBranch": "По филиалам",
     "rxLongWaitSignal": "{{count}} заказ(ов) ждут долго — это сигнал платформы",
-    "settingsCardTransfer": "Перевод на карту",
-    "settingsCardTransferEnable": "Включить перевод на карту",
+    "settingsCardTransfer": "Перевод на карту (резерв)",
+    "settingsCardTransferEnable": "Включить глобальную резервную карту",
     "settingsCardTransferHint": "После подключения Payme/Click рекомендуем отключить перевод на карту",
+    "settingsCardTransferFallback": "Эта карта используется только если у филиала нет своей. Основную карту вводит фармацевт в панели филиала.",
     "settingsCardNumber": "Номер карты",
     "settingsCardHolder": "Владелец карты",
     "settingsCardBank": "Банк (необязательно)",
-    "settingsCardTimeout": "Срок оплаты (минуты)"
+    "settingsCardTimeout": "Срок оплаты (минуты)",
+    "branchCard": "Карта филиала",
+    "branchCardOn": "Включена",
+    "branchCardOff": "Нет",
+    "branchCardDisable": "Отключить карту",
+    "branchCardDisableHint": "Отключить перевод на карту для филиала {{name}}?",
+    "branchCardDisabled": "Карта филиала отключена"
   },
   "orders.active": "Активные",
   "orders.history": "История",
@@ -1447,9 +1464,22 @@
       "paymentReview": "Проверка оплаты"
     },
     "shiftCardTransfer": "Перевод на карту",
+    "card": {
+      "tab": "Платёжная карта",
+      "title": "Карта филиала для оплаты",
+      "hint": "Клиенты переводят на эту карту при заказе в данный филиал.",
+      "enable": "Включить перевод на карту",
+      "number": "Номер карты",
+      "holder": "Владелец карты",
+      "bank": "Название банка (необязательно)",
+      "numberInvalid": "Номер карты должен состоять из 16 цифр",
+      "holderRequired": "Имя владельца карты обязательно",
+      "saved": "Настройки карты сохранены"
+    },
     "receipt": {
       "title": "Чек оплаты",
       "uploadedAt": "Время загрузки",
+      "newUpload": "Новый чек поступил на проверку",
       "approve": "Оплата поступила — подтвердить",
       "reject": "Отклонить",
       "approveConfirm": "Вы проверили, что в банке поступило {{amount}}?",

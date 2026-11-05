@@ -20,6 +20,8 @@ const {
   streamEvents,
   assignCourier,
   resolvePaymentDiscrepancy,
+  getCardSettings,
+  updateCardSettings,
 } = require("../controllers/branchAdminController");
 const { approveReceipt, rejectReceipt } = require("../controllers/receiptController");
 const {
@@ -56,6 +58,7 @@ const {
   shiftQuerySchema,
   statsQuerySchema,
   idParamSchema,
+  branchCardSettingsSchema,
 } = require("../validators/branchAdminValidator");
 
 const router = express.Router();
@@ -66,6 +69,13 @@ router.get("/events", validateRequest(branchIdQuerySchema, "query"), streamEvent
 router.get("/summary", validateRequest(branchIdQuerySchema, "query"), panelSummary);
 router.get("/stats", validateRequest(statsQuerySchema, "query"), panelStats);
 router.get("/shift", validateRequest(shiftQuerySchema, "query"), shiftReport);
+router.get("/card-settings", getCardSettings);
+router.patch(
+  "/card-settings",
+  requireBranchAdminWrite,
+  validateRequest(branchCardSettingsSchema),
+  updateCardSettings
+);
 
 router.get("/orders", validateRequest(branchIdQuerySchema, "query"), listBranchOrders);
 router.get("/orders/:id", validateRequest(idParamSchema, "params"), getBranchOrder);

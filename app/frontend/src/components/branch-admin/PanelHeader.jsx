@@ -30,6 +30,7 @@ export default function PanelHeader({
     ["stats", t("panel.stats", "Statistika")],
     ...(!readOnly
       ? [
+          ["card", t("panel.card.tab")],
           ["couriers", t("courier.tab.couriers")],
           ["handovers", t("courier.tab.handovers")],
         ]

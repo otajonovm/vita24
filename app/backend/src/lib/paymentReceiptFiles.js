@@ -20,8 +20,45 @@ function extensionFor(mime) {
   return ALLOWED[mime] || null;
 }
 
-function assertReceiptFile({ mimetype, size }) {
-  if (!extensionFor(mimetype)) {
+function detectMimeFromBuffer(buffer) {
+  if (!Buffer.isBuffer(buffer) || buffer.length < 12) return null;
+  if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return "image/jpeg";
+  if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47) return "image/png";
+  if (
+    buffer[0] === 0x52 &&
+    buffer[1] === 0x49 &&
+    buffer[2] === 0x46 &&
+    buffer[3] === 0x46 &&
+    buffer[8] === 0x57 &&
+    buffer[9] === 0x45 &&
+    buffer[10] === 0x42 &&
+    buffer[11] === 0x50
+  ) {
+    return "image/webp";
+  }
+  if (buffer.slice(0, 4).toString("ascii") === "%PDF") return "application/pdf";
+  // HEIC/HEIF: ftyp....heic/heif/mif1
+  if (buffer.slice(4, 8).toString("ascii") === "ftyp") {
+    const brand = buffer.slice(8, 12).toString("ascii").toLowerCase();
+    if (["heic", "heif", "mif1", "msf1", "hevx", "hevc"].some((token) => brand.includes(token.slice(0, 4)))) {
+      return "image/heic";
+    }
+    const major = buffer.slice(8, 16).toString("ascii").toLowerCase();
+    if (/heic|heif|mif1|msf1/.test(major)) return "image/heic";
+  }
+  return null;
+}
+
+function assertReceiptFile({ mimetype, size, buffer }) {
+  const detected = buffer ? detectMimeFromBuffer(buffer) : null;
+  const mime = detected || mimetype;
+  if (!detected) {
+    const error = new Error("Fayl turi aniqlanmadi. Faqat JPG, PNG, WEBP, HEIC yoki PDF yuklash mumkin");
+    error.statusCode = 400;
+    error.code = "INVALID_FILE_TYPE";
+    throw error;
+  }
+  if (!extensionFor(mime)) {
     const error = new Error("Faqat JPG, PNG, WEBP, HEIC yoki PDF yuklash mumkin");
     error.statusCode = 400;
     error.code = "INVALID_FILE_TYPE";
@@ -33,6 +70,7 @@ function assertReceiptFile({ mimetype, size }) {
     error.code = "FILE_TOO_LARGE";
     throw error;
   }
+  return mime;
 }
 
 function isStorageKey(value) {
@@ -48,13 +86,27 @@ function absolutePath(storageKey) {
 }
 
 function saveReceiptBuffer({ buffer, mimetype, userId }) {
-  assertReceiptFile({ mimetype, size: buffer.length });
-  const ext = extensionFor(mimetype);
+  const mime = assertReceiptFile({ mimetype, size: buffer.length, buffer });
+  const ext = extensionFor(mime);
   const id = crypto.randomUUID();
   const owner = String(userId || "");
   const key = /^[a-zA-Z0-9_-]+$/.test(owner) ? `pay/${owner}__${id}${ext}` : `pay/${id}${ext}`;
   fs.writeFileSync(absolutePath(key), buffer);
   return key;
+}
+
+function deleteReceiptFile(storageKey) {
+  const full = absolutePath(storageKey);
+  if (!full) return false;
+  try {
+    if (fs.existsSync(full)) {
+      fs.unlinkSync(full);
+      return true;
+    }
+  } catch {
+    // ignore
+  }
+  return false;
 }
 
 function receiptKeyOwner(storageKey) {
@@ -118,10 +170,12 @@ module.exports = {
   MAX_BYTES,
   ALLOWED,
   extensionFor,
+  detectMimeFromBuffer,
   assertReceiptFile,
   isStorageKey,
   absolutePath,
   saveReceiptBuffer,
+  deleteReceiptFile,
   receiptKeyOwner,
   ownsReceiptKey,
   readReceiptFile,

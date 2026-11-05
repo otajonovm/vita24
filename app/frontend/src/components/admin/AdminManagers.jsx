@@ -11,6 +11,7 @@ import {
   createPharmacist,
   deleteAdminBranch,
   deletePharmacist,
+  disableAdminBranchCard,
   fetchAdminBranches,
   fetchPharmacists,
   setPharmacistStatus,
@@ -342,6 +343,23 @@ export function BranchManager() {
     }
   }
 
+  async function disableCard(branch) {
+    const ok = await confirm({
+      title: t("admin.branchCardDisable"),
+      body: t("admin.branchCardDisableHint", { name: branch.name }),
+      confirmLabel: t("admin.branchCardDisable"),
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await disableAdminBranchCard(branch.id);
+      await load();
+      push(t("admin.branchCardDisabled"));
+    } catch (err) {
+      setError(errorText(err, t("admin.errorTitle")));
+    }
+  }
+
   return (
     <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -410,6 +428,21 @@ export function BranchManager() {
               { key: "todayOrders", header: t("admin.todayOrders"), sortValue: (row) => row.todayOrders || 0 },
               { key: "todayRevenue", header: t("admin.todayRevenue"), sortValue: (row) => row.todayRevenue || 0, render: (row) => formatSom(row.todayRevenue || 0) },
               {
+                key: "card",
+                header: t("admin.branchCard"),
+                sortable: false,
+                render: (row) =>
+                  row.cardTransferEnabled ? (
+                    <span className="block text-xs text-slate-700">
+                      <span className="font-bold text-emerald-700">{t("admin.branchCardOn")}</span>
+                      <span className="mt-0.5 block tabular-nums">{row.cardTransferNumberMasked}</span>
+                      {row.cardTransferHolder ? <span className="block text-slate-500">{row.cardTransferHolder}</span> : null}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-slate-400">{t("admin.branchCardOff")}</span>
+                  ),
+              },
+              {
                 key: "status",
                 header: t("admin.colStatus"),
                 sortValue: (row) => row.status || "",
@@ -429,6 +462,11 @@ export function BranchManager() {
                       <Pencil className="h-3.5 w-3.5" aria-hidden />
                       {t("admin.edit")}
                     </button>
+                    {row.cardTransferEnabled ? (
+                      <button type="button" onClick={() => disableCard(row)} className="h-10 rounded-xl border border-amber-200 px-3 text-xs font-bold text-amber-800">
+                        {t("admin.branchCardDisable")}
+                      </button>
+                    ) : null}
                     {row.status === "archived" ? (
                       <button type="button" onClick={() => restore(row)} className="h-10 rounded-xl border border-slate-200 px-3 text-xs font-bold text-slate-700">{t("admin.unarchive")}</button>
                     ) : (

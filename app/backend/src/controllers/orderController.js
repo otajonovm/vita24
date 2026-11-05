@@ -17,6 +17,7 @@ const { isStorageKey, ownsPrescriptionKey } = require("../lib/prescriptionFiles"
 const { prescriptionView } = require("./prescriptionController");
 const { quoteTotals, settledTotals } = require("../lib/pricing");
 const { getShopSettings, checkoutRulesFrom, assertPaymentAllowed } = require("../lib/shopSettings");
+const { resolveCardTransfer } = require("../lib/cardTransfer");
 const { assertPromo, claimPromo, attachRedemption, reclaimPromo } = require("../lib/promo");
 const { formatWorkingHours } = require("../lib/branchProfile");
 const { captureAsPaid, emitOrder, notifyStatus, writeHistory } = require("../lib/orderFlow");
@@ -147,15 +148,14 @@ function serializeOrder(order, { forCustomer = true } = {}) {
       String(order.payment?.provider || "").toUpperCase() === "CARD_TRANSFER"
         ? (() => {
             const rules = order.checkoutRules && typeof order.checkoutRules === "object" ? order.checkoutRules : {};
-            const shop = require("../lib/shopSettings").peekShopSettings() || {};
-            const number = rules.cardTransferNumber || shop.cardTransferNumber || "";
+            const number = String(rules.cardTransferNumber || "").replace(/\D/g, "").slice(0, 16);
             if (!number) return { cardTransferEnabled: false };
             return {
               cardTransferEnabled: true,
-              cardTransferNumber: String(number).replace(/\D/g, "").slice(0, 16),
-              cardTransferHolder: String(rules.cardTransferHolder || shop.cardTransferHolder || "").trim(),
-              cardTransferBank: String(rules.cardTransferBank || shop.cardTransferBank || "").trim(),
-              cardTransferTimeoutMin: Number(rules.cardTransferTimeoutMin || shop.cardTransferTimeoutMin || 30),
+              cardTransferNumber: number,
+              cardTransferHolder: String(rules.cardTransferHolder || "").trim(),
+              cardTransferBank: String(rules.cardTransferBank || "").trim(),
+              cardTransferTimeoutMin: Number(rules.cardTransferTimeoutMin || 30),
             };
           })()
         : null,
@@ -221,7 +221,12 @@ const createOrder = asyncHandler(async (req, res) => {
   }
 
   const shop = await getShopSettings();
-  assertPaymentAllowed(shop, body.paymentMethod, deliveryType);
+  const branchPreview = await prisma.branch.findUnique({ where: { id: branchId } });
+  if (!branchPreview || !branchPreview.isActive || branchPreview.archivedAt) {
+    throw new AppError("Filial topilmadi yoki faol emas", 404, "NOT_FOUND");
+  }
+  const effectiveCard = resolveCardTransfer(branchPreview, shop);
+  assertPaymentAllowed({ ...shop, ...effectiveCard }, body.paymentMethod, deliveryType);
 
   const { order, user } = await runDbTransaction(prisma, async (tx) => {
     const account = await tx.user.findUnique({
@@ -237,6 +242,10 @@ const createOrder = asyncHandler(async (req, res) => {
     const closed = closedBranchMessage(branch);
     if (closed) {
       throw new AppError(closed, 409, "BRANCH_CLOSED");
+    }
+    const cardSnapshot = resolveCardTransfer(branch, shop);
+    if (String(body.paymentMethod || "").toUpperCase() === "CARD_TRANSFER" && !cardSnapshot.cardTransferEnabled) {
+      throw new AppError("Kartaga o'tkazma hozir o'chiq", 409, "PAYMENT_DISABLED");
     }
 
     const provisioned = await provisionCustomer(tx, { phone, fullName });
@@ -347,16 +356,32 @@ const createOrder = asyncHandler(async (req, res) => {
         notes: notes ? String(notes).trim() : null,
         subtotal,
         checkoutRules: (() => {
-          const rules = checkoutRulesFrom(shop, { paymentMethod: body.paymentMethod });
-          if (String(body.paymentMethod || "").toUpperCase() === "CARD_TRANSFER") {
-            rules.cardTransferNumber = shop.cardTransferNumber;
-            rules.cardTransferHolder = shop.cardTransferHolder;
-            rules.cardTransferBank = shop.cardTransferBank;
-            rules.cardTransferTimeoutMin = shop.cardTransferTimeoutMin;
+          const method = String(body.paymentMethod || "").toUpperCase();
+          const payShop =
+            method === "CARD_TRANSFER"
+              ? { ...shop, cardTransferTimeoutMin: cardSnapshot.cardTransferTimeoutMin }
+              : shop;
+          const rules = checkoutRulesFrom(payShop, { paymentMethod: body.paymentMethod });
+          if (method === "CARD_TRANSFER") {
+            rules.cardTransferNumber = cardSnapshot.cardTransferNumber;
+            rules.cardTransferHolder = cardSnapshot.cardTransferHolder;
+            rules.cardTransferBank = cardSnapshot.cardTransferBank;
+            rules.cardTransferTimeoutMin = cardSnapshot.cardTransferTimeoutMin;
           }
           return rules;
         })(),
-        reservedUntil: placed.reservation === "none" ? new Date(Date.now() + 24 * 60 * 60 * 1000) : reservationDeadline(placed.reservation, checkoutRulesFrom(shop, { paymentMethod: body.paymentMethod })),
+        reservedUntil:
+          placed.reservation === "none"
+            ? new Date(Date.now() + 24 * 60 * 60 * 1000)
+            : reservationDeadline(
+                placed.reservation,
+                checkoutRulesFrom(
+                  String(body.paymentMethod || "").toUpperCase() === "CARD_TRANSFER"
+                    ? { ...shop, cardTransferTimeoutMin: cardSnapshot.cardTransferTimeoutMin }
+                    : shop,
+                  { paymentMethod: body.paymentMethod }
+                )
+              ),
         items: { create: preparedItems },
         payment: {
           create: {
@@ -656,8 +681,14 @@ const mockPay = asyncHandler(async (req, res) => {
   const owns = order.userId === req.user.id || order.customerPhone === req.user.phone;
   if (!owns) throw new AppError("Bu buyurtmaga ruxsat yo'q", 403, "FORBIDDEN");
 
-  if (["CASH", "CARD_TERMINAL"].includes(String(order.payment?.provider || "").toUpperCase())) {
-    throw new AppError("Bu buyurtmada online to'lov yo'q", 409, "PAYMENT_NOT_ALLOWED");
+  if (["CASH", "CARD_TERMINAL", "CARD_TRANSFER"].includes(String(order.payment?.provider || "").toUpperCase())) {
+    throw new AppError(
+      String(order.payment?.provider || "").toUpperCase() === "CARD_TRANSFER"
+        ? "Kartaga o'tkazma mock to'lov bilan yakunlanmaydi"
+        : "Bu buyurtmada online to'lov yo'q",
+      409,
+      "PAYMENT_NOT_ALLOWED"
+    );
   }
 
   if (order.status === "PAID") {

@@ -5,6 +5,8 @@ const { AppError } = require("../lib/response");
 const { runDbTransaction } = require("../lib/transaction");
 const { buildSearchText } = require("../lib/searchText");
 const { prescriptionPatch } = require("../lib/rxApply");
+const { classifyToCategory } = require("../lib/categoryEnsure");
+const { isJunkCategory } = require("../lib/categoryCatalog");
 
 const LEKKO_API_URL = process.env.LEKKO_API_URL || "https://pharmalekko.uz/api/public/v1";
 const LEKKO_TIMEOUT_MS = Number(process.env.LEKKO_TIMEOUT_MS || 15_000);
@@ -342,28 +344,9 @@ async function withBranchLock(branchId, task) {
 }
 
 async function ensureCategory(name) {
-  const label = String(name || "LEKKO katalogi").trim() || "LEKKO katalogi";
-  const slug = slugify(label, "lekko");
-
-  const existing = await prisma.category.findUnique({ where: { slug } });
-  if (existing) return existing;
-
-  const sortOrder = (await prisma.category.count()) + 1;
-  try {
-    return await prisma.category.create({
-      data: {
-        name: label,
-        slug,
-        icon: "pill",
-        sortOrder,
-      },
-    });
-  } catch (error) {
-    if (error.code === "P2002") {
-      return prisma.category.findUnique({ where: { slug } });
-    }
-    throw error;
-  }
+  // Legacy entrypoint: never create form-named junk categories — classify by label/name.
+  const { category } = await classifyToCategory({ name: String(name || "").trim() || "LEKKO" });
+  return category;
 }
 
 async function verifyKey(apiKey) {
@@ -384,19 +367,10 @@ async function verifyKey(apiKey) {
 }
 
 async function upsertMappedProducts(mapped) {
-  const categoryCache = new Map();
   let created = 0;
   let updated = 0;
   let skipped = 0;
   const medicineIds = [];
-
-  async function categoryFor(name) {
-    const label = String(name || "LEKKO katalogi").trim() || "LEKKO katalogi";
-    if (categoryCache.has(label)) return categoryCache.get(label);
-    const category = await ensureCategory(label);
-    categoryCache.set(label, category);
-    return category;
-  }
 
   const valid = mapped.filter((product) => product.drugId);
   skipped += mapped.length - valid.length;
@@ -415,14 +389,30 @@ async function upsertMappedProducts(mapped) {
       rxNeedsReview: true,
       activeIngredient: true,
       searchText: true,
+      categoryId: true,
+      categorySource: true,
+      category: { select: { id: true, name: true, slug: true } },
     },
   });
   const byExternalId = new Map(existing.map((item) => [item.externalApiId, item]));
 
   for (const product of valid) {
-    const category = await categoryFor(product.categoryName);
     const current = byExternalId.get(product.drugId);
     const { patch } = prescriptionPatch(product, current || null);
+    const classified = await classifyToCategory({
+      name: product.name,
+      dosageForm: product.dosageForm,
+      activeIngredient: product.activeIngredient,
+      atcCode: product.atcCode,
+    });
+    const preserveCategory =
+      current &&
+      (current.categorySource === "MANUAL" ||
+        current.categorySource === "IMPORT" ||
+        (current.categoryId && !isJunkCategory(current.category)));
+    const categoryId = preserveCategory ? current.categoryId : classified.category.id;
+    const categorySource = preserveCategory ? current.categorySource || "AUTO" : "AUTO";
+
     const data = {
       name: product.name,
       slug: `lekko-${product.drugId}`,
@@ -432,7 +422,8 @@ async function upsertMappedProducts(mapped) {
       barcode: product.barcode ? String(product.barcode) : null,
       ikpuCode: product.ikpuCode ? String(product.ikpuCode) : null,
       quantityInPack: product.quantityInPack,
-      categoryId: category.id,
+      categoryId,
+      categorySource,
       // imageUrl is intentionally absent: sync must never overwrite uploaded images.
       ...patch,
     };
@@ -447,9 +438,12 @@ async function upsertMappedProducts(mapped) {
         barcode: data.barcode,
         ikpuCode: data.ikpuCode,
         quantityInPack: data.quantityInPack,
-        categoryId: data.categoryId,
         searchText: data.searchText,
       };
+      if (!preserveCategory) {
+        update.categoryId = categoryId;
+        update.categorySource = "AUTO";
+      }
       if (patch.atcCode) update.atcCode = patch.atcCode;
       if (Object.prototype.hasOwnProperty.call(patch, "isPrescription")) {
         update.isPrescription = patch.isPrescription;
@@ -706,12 +700,12 @@ async function ensureMedicinesForLots(byDrug) {
   const missing = drugIds.filter((drugId) => !medicineByDrugId.has(drugId));
   if (!missing.length) return { medicineByDrugId, created: 0 };
 
-  const category = await ensureCategory("LEKKO katalogi");
   for (const drugId of missing) {
     const lot = byDrug.get(drugId);
     const name = lot.name || `LEKKO dori ${drugId}`;
     const dosageForm = "Noma'lum";
     const { patch } = prescriptionPatch({ name, dosageForm }, null);
+    const { category } = await classifyToCategory({ name, dosageForm });
     const created = await prisma.medicine.create({
       data: {
         name,
@@ -725,6 +719,7 @@ async function ensureMedicinesForLots(byDrug) {
         ikpuCode: lot.ikpuCode,
         quantityInPack: lot.quantityInPack,
         categoryId: category.id,
+        categorySource: "AUTO",
         ...patch,
         searchText: buildSearchText({
           name,

@@ -57,6 +57,13 @@ const medicineRxBulkSchema = z
   })
   .strict();
 
+const medicineCategoryBulkSchema = z
+  .object({
+    ids: z.array(z.string().trim().min(1)).min(1).max(200),
+    categoryId: z.string().trim().min(1, "Kategoriya majburiy"),
+  })
+  .strict();
+
 const medicineActiveSchema = z
   .object({
     isActive: z.boolean(),
@@ -271,7 +278,14 @@ const shopSettingsSchema = z
     pickupEnabled: z.boolean(),
     telegramBotToken: z.string().trim().max(200).optional().or(z.literal("")),
     messageTemplates: z.record(z.string().trim().min(1).max(500)).optional(),
-    contactPhone: z.string().trim().regex(/^\+998\d{9}$/, "Telefon +998XXXXXXXXX bo'lishi kerak"),
+    contactPhone: z
+      .string()
+      .trim()
+      .min(3, "Telefon majburiy")
+      .max(40)
+      .refine((value) => /^\+998\d{9}$/.test(value) || /^\d{3,6}$/.test(value), {
+        message: "Telefon +998XXXXXXXXX yoki qisqa raqam (masalan 1095) bo'lishi kerak",
+      }),
     localizedCopy: z.record(z.any()).optional(),
     contactPhoneAlt: z.string().trim().max(40).optional().or(z.literal("")),
     footerAbout: z.string().trim().min(2).max(500),
@@ -289,9 +303,11 @@ const shopSettingsSchema = z
     ) {
       ctx.addIssue({ code: "custom", path: ["cashEnabled"], message: "Kamida bitta to'lov turi yoqilishi kerak" });
     }
-    const digits = String(data.cardTransferNumber || "").replace(/\D/g, "");
+    const raw = String(data.cardTransferNumber || "").trim();
+    const masked = raw.includes("*");
+    const digits = raw.replace(/\D/g, "");
     if (data.cardTransferEnabled) {
-      if (digits.length !== 16) {
+      if (!masked && digits.length !== 16) {
         ctx.addIssue({
           code: "custom",
           path: ["cardTransferNumber"],
@@ -305,7 +321,7 @@ const shopSettingsSchema = z
           message: "Karta egasining ismi majburiy",
         });
       }
-    } else if (digits && digits.length !== 16) {
+    } else if (raw && !masked && digits.length !== 16) {
       ctx.addIssue({
         code: "custom",
         path: ["cardTransferNumber"],
@@ -367,6 +383,7 @@ module.exports = {
   medicineActiveSchema,
   medicineRxSchema,
   medicineRxBulkSchema,
+  medicineCategoryBulkSchema,
   categoryWriteSchema,
   importConfirmSchema,
   stockNetworkQuerySchema,

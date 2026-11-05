@@ -100,6 +100,7 @@ function medicineData(body, extra = {}) {
     quantityInPack: body.quantityInPack,
     manufacturer: body.manufacturer.trim(),
     categoryId: body.categoryId,
+    categorySource: "MANUAL",
     isPrescription: body.isPrescription === true,
     rxSource: "MANUAL",
     rxNeedsReview: false,
@@ -248,6 +249,36 @@ const setMedicinePrescriptionBulk = asyncHandler(async (req, res) => {
   return sendSuccess(res, { updated: rows.length, isPrescription }, "Retsept belgilari saqlandi");
 });
 
+const setMedicineCategoryBulk = asyncHandler(async (req, res) => {
+  const ids = [...new Set(req.body.ids.map((id) => String(id)))];
+  const categoryId = String(req.body.categoryId || "").trim();
+  const category = await prisma.category.findUnique({ where: { id: categoryId }, select: { id: true, name: true } });
+  if (!category) throw new AppError("Kategoriya topilmadi", 404, "NOT_FOUND");
+  const rows = await prisma.medicine.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, name: true, categoryId: true, categorySource: true },
+  });
+  if (!rows.length) throw new AppError("Dori topilmadi", 404, "NOT_FOUND");
+  await runDbTransaction(prisma, async (tx) => {
+    for (const row of rows) {
+      await tx.medicine.update({
+        where: { id: row.id },
+        data: { categoryId: category.id, categorySource: "MANUAL" },
+      });
+      await writeAudit(tx, {
+        req,
+        action: "MEDICINE_CATEGORY_SET",
+        entityType: "Medicine",
+        entityId: row.id,
+        summary: `${row.name}: kategoriya ${category.name}`,
+        before: { categoryId: row.categoryId, categorySource: row.categorySource },
+        after: { categoryId: category.id, categorySource: "MANUAL" },
+      });
+    }
+  });
+  return sendSuccess(res, { updated: rows.length, categoryId: category.id }, "Kategoriya belgilandi");
+});
+
 const createMedicine = asyncHandler(async (req, res) => {
   const category = await prisma.category.findUnique({ where: { id: req.body.categoryId }, select: { id: true } });
   if (!category) throw new AppError("Kategoriya topilmadi", 404, "NOT_FOUND");
@@ -281,6 +312,9 @@ const updateMedicine = asyncHandler(async (req, res) => {
   }
   await assertBarcodeFree(String(req.body.barcode || "").trim(), current.id);
   const data = withSearchText(medicineData(req.body));
+  if (req.body.categoryId && req.body.categoryId === current.categoryId) {
+    delete data.categorySource;
+  }
   if (req.body.isPrescription === current.isPrescription) {
     delete data.rxSource;
     delete data.rxNeedsReview;
@@ -501,6 +535,7 @@ const confirmImport = asyncHandler(async (req, res) => {
         quantityInPack: row.data.quantityInPack,
         manufacturer: row.data.manufacturer,
         categoryId: row.data.categoryId,
+        categorySource: "IMPORT",
         isPrescription: row.data.isPrescription,
         rxSource: "MANUAL",
         rxNeedsReview: false,
@@ -587,4 +622,5 @@ module.exports = {
   exportCatalog,
   setMedicinePrescription,
   setMedicinePrescriptionBulk,
+  setMedicineCategoryBulk,
 };

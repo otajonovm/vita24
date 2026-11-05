@@ -76,6 +76,7 @@ enum ReceiptStatus {
   PENDING
   APPROVED
   REJECTED
+  EXPIRED
 }
 
 enum SynonymType {
@@ -99,6 +100,12 @@ enum RxSource {
   LEKKO
   RULE
   MANUAL
+}
+
+enum CategorySource {
+  AUTO
+  MANUAL
+  IMPORT
 }
 
 model User {
@@ -205,6 +212,10 @@ model Branch {
   lastSyncedAt     DateTime?
   lekkoLastError   String?
   lekkoLastErrorAt DateTime?
+  cardTransferEnabled Boolean     @default(false)
+  cardTransferNumber  String      @default("")
+  cardTransferHolder  String      @default("")
+  cardTransferBank    String      @default("")
   stocks           BranchStock[]
   orders           Order[]
   staff            User[]
@@ -332,6 +343,7 @@ model Medicine {
   searchText        String        @default("")
   isActive          Boolean       @default(true)
   categoryId        String
+  categorySource CategorySource @default(AUTO)
   category       Category      @relation(fields: [categoryId], references: [id])
   stocks         BranchStock[]
   orderItems     OrderItem[]
@@ -344,6 +356,8 @@ model Medicine {
   @@index([isPrescription])
   @@index([rxSource])
   @@index([rxNeedsReview])
+  @@index([categorySource])
+  @@index([categoryId])
 }
 
 model BranchStock {

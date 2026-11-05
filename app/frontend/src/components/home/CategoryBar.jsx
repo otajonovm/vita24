@@ -1,72 +1,6 @@
 import { useTranslation } from "react-i18next";
-import { Baby, HeartPulse, Leaf, Pill, ShieldCheck, Thermometer, Zap } from "lucide-react";
-
-const PRESETS = [
-  {
-    id: "cat-flu",
-    name: "Shamollash va gripp",
-    shortName: "Shamollash",
-    slugs: ["shamollash"],
-    Icon: Thermometer,
-    color: "#ef4444",
-  },
-  {
-    id: "cat-stomach",
-    name: "Oshqozon muammolari",
-    shortName: "Oshqozon",
-    slugs: ["oshqozon"],
-    Icon: Pill,
-    color: "#f59e0b",
-  },
-  {
-    id: "cat-cardio",
-    name: "Yurak va qon bosimi",
-    shortName: "Yurak",
-    slugs: ["yurak"],
-    Icon: HeartPulse,
-    color: "#dc2626",
-  },
-  {
-    id: "cat-pain",
-    name: "Og'riq qoldiruvchi",
-    shortName: "Og'riq",
-    slugs: ["ogriq"],
-    Icon: Zap,
-    color: "#8b5cf6",
-  },
-  {
-    id: "cat-vitamin",
-    name: "Vitaminlar va immunitet",
-    shortName: "Vitamin",
-    slugs: ["vitaminlar"],
-    Icon: ShieldCheck,
-    color: "#10b981",
-  },
-  {
-    id: "cat-allergy",
-    name: "Allergiya vositalari",
-    shortName: "Allergiya",
-    slugs: ["allergiya"],
-    Icon: Leaf,
-    color: "#059669",
-  },
-  {
-    id: "cat-antibiotic",
-    name: "Antibiotiklar",
-    shortName: "Antibiotik",
-    slugs: ["antibiotiklar"],
-    Icon: Pill,
-    color: "#087b51",
-  },
-  {
-    id: "cat-kids",
-    name: "Bolalar",
-    shortName: "Bolalar",
-    slugs: ["bolalar"],
-    Icon: Baby,
-    color: "#0d9488",
-  },
-];
+import { LayoutGrid } from "lucide-react";
+import { resolveCategoryVisual } from "../../lib/categoryIcons";
 
 function localizedCategoryName(category, language) {
   const code = String(language || "uz");
@@ -77,24 +11,18 @@ function localizedCategoryName(category, language) {
 
 function resolveItems(categories = []) {
   return categories.map((category) => {
-    const slug = String(category.slug || "").toLowerCase();
-    const name = String(category.name || "").toLowerCase();
-    const preset =
-      PRESETS.find((item) => item.id === category.id) ||
-      PRESETS.find((item) => item.slugs.includes(slug)) ||
-      PRESETS.find((item) => name.includes(item.shortName.toLowerCase())) ||
-      PRESETS.find((item) => name.includes(item.name.toLowerCase().split(" ")[0]));
-
+    const visual = resolveCategoryVisual(category);
+    const label = category.nameUz || category.name || "";
     return {
       id: category.id,
-      presetId: preset?.id || "",
-      name: category.name || preset?.name || "",
+      name: label,
       nameUz: category.nameUz || "",
       nameUzCyrl: category.nameUzCyrl || "",
       nameRu: category.nameRu || "",
-      shortName: preset?.shortName || category.name || "",
-      Icon: preset?.Icon || Pill,
-      color: preset?.color || "#087b51",
+      shortName: label,
+      medicineCount: category.medicineCount || 0,
+      Icon: visual.Icon,
+      color: visual.color,
     };
   });
 }
@@ -127,6 +55,9 @@ function CategoryCard({ category, active, onSelect, compact = false }) {
       >
         {compact ? category.shortName : category.name}
       </span>
+      {!compact && category.medicineCount > 0 ? (
+        <span className="mt-1 block text-xs font-semibold text-slate-400">{category.medicineCount}</span>
+      ) : null}
     </button>
   );
 }
@@ -136,37 +67,44 @@ export default function CategoryBar({ categories = [], activeId, onSelect }) {
   const items = resolveItems(categories).map((item) => {
     const localized = localizedCategoryName(item, i18n.language);
     if (localized) return { ...item, name: localized, shortName: localized };
-    if (!item.presetId) {
-      return {
-        ...item,
-        name: item.name || t("category.other"),
-        shortName: item.shortName || t("category.other"),
-      };
-    }
-    const label = t(`category.${item.presetId}`);
-    return { ...item, name: label, shortName: label };
+    return {
+      ...item,
+      name: item.name || t("category.other"),
+      shortName: item.shortName || t("category.other"),
+    };
   });
+
+  const allChip = {
+    id: "",
+    name: t("home.allMedicines"),
+    shortName: t("home.allMedicines"),
+    medicineCount: 0,
+    Icon: LayoutGrid,
+    color: "#087b51",
+  };
+
+  const chips = [allChip, ...items];
   if (!items.length) return null;
 
   return (
     <section className="min-w-0">
       <div className="hidden grid-cols-3 gap-3 md:grid lg:grid-cols-6 lg:gap-4">
-        {items.map((category) => (
+        {chips.map((category) => (
           <CategoryCard
-            key={`desk-${category.id}`}
+            key={`desk-${category.id || "all"}`}
             category={category}
-            active={activeId === category.id}
+            active={String(activeId || "") === String(category.id || "")}
             onSelect={onSelect}
           />
         ))}
       </div>
 
       <div className="-mx-3 flex gap-2.5 overflow-x-auto overscroll-x-contain px-3 pb-1 no-scrollbar md:hidden">
-        {items.map((category) => (
+        {chips.map((category) => (
           <CategoryCard
-            key={`mob-${category.id}`}
+            key={`mob-${category.id || "all"}`}
             category={category}
-            active={activeId === category.id}
+            active={String(activeId || "") === String(category.id || "")}
             onSelect={onSelect}
             compact
           />

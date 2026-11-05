@@ -24,7 +24,7 @@ function resolveDosage(medicine) {
 
 /**
  * With a branch: price and stock come from that branch's BranchStock row.
- * Without a branch there is no single price, so price is null and
+ * Without a branch: price is null, minPrice/priceFrom = MIN across active stocks,
  * stockCount is the total across active branches.
  */
 function mapMedicine(medicine, branchId) {
@@ -38,6 +38,12 @@ function mapMedicine(medicine, branchId) {
     ? Number(branchStock?.reservedCount || 0)
     : stocks.reduce((sum, item) => sum + Number(item.reservedCount || 0), 0);
 
+  let minPrice = null;
+  if (!branchId) {
+    const prices = stocks.map((item) => Number(item.price)).filter((value) => Number.isFinite(value) && value > 0);
+    if (prices.length) minPrice = Math.min(...prices);
+  }
+
   return {
     id: medicine.id,
     name: medicine.name,
@@ -48,6 +54,8 @@ function mapMedicine(medicine, branchId) {
     showOnHome: Boolean(medicine.showOnHome),
     homeSortOrder: Number(medicine.homeSortOrder) || 0,
     price: branchStock ? Number(branchStock.price) : null,
+    minPrice,
+    priceFrom: minPrice,
     stockCount,
     category: medicine.category,
     slug: medicine.slug,
@@ -87,9 +95,18 @@ function branchStockWhere(branchId) {
 
 const listCategories = asyncHandler(async (req, res) => {
   const branchId = String(req.query.branchId || "").trim();
+  // With branch: stocked/priced in that branch. Without: any branch stock/price (browse UX).
   const ownedMedicines = { isActive: true, stocks: branchStockWhere(branchId) };
   const categories = await prisma.category.findMany({
-    where: { medicines: { some: ownedMedicines } },
+    where: {
+      medicines: { some: ownedMedicines },
+      NOT: {
+        OR: [
+          { slug: { startsWith: "lekko" } },
+          { slug: { in: ["krem", "maz", "gel", "tab", "kaps", "sirop", "kapli"] } },
+        ],
+      },
+    },
     orderBy: { sortOrder: "asc" },
     select: {
       id: true,
@@ -110,17 +127,19 @@ const listCategories = asyncHandler(async (req, res) => {
 
   return sendSuccess(
     res,
-    categories.map((category) => ({
-      id: category.id,
-      name: category.nameUz || category.name,
-      nameUz: category.nameUz || category.name,
-      nameUzCyrl: category.nameUzCyrl || "",
-      nameRu: category.nameRu || "",
-      slug: category.slug,
-      icon: category.icon,
-      sortOrder: category.sortOrder,
-      medicineCount: category._count.medicines,
-    })),
+    categories
+      .filter((category) => category._count.medicines > 0)
+      .map((category) => ({
+        id: category.id,
+        name: category.nameUz || category.name,
+        nameUz: category.nameUz || category.name,
+        nameUzCyrl: category.nameUzCyrl || "",
+        nameRu: category.nameRu || "",
+        slug: category.slug,
+        icon: category.icon,
+        sortOrder: category.sortOrder,
+        medicineCount: category._count.medicines,
+      })),
     "Toifalar ro'yxati"
   );
 });
@@ -172,12 +191,13 @@ async function resolveStorefrontBranchId(branchId) {
  */
 const listMedicines = asyncHandler(async (req, res) => {
   const { branchId, categoryId, search, inStockOnly, featured, page, limit, sort } = req.query;
-  const resolvedBranchId = await resolveStorefrontBranchId(branchId);
+  const hasBranch = Boolean(String(branchId || "").trim());
+  const resolvedBranchId = hasBranch ? await resolveStorefrontBranchId(branchId) : null;
   if (String(search || "").trim().length >= 2) {
     return listSmartMedicines({
       search,
-      branchId: branchId || null,
-      priceBranchId: resolvedBranchId,
+      branchId: hasBranch ? resolvedBranchId : null,
+      priceBranchId: hasBranch ? resolvedBranchId : null,
       categoryId,
       inStockOnly,
       featured,
@@ -187,8 +207,9 @@ const listMedicines = asyncHandler(async (req, res) => {
       res,
     });
   }
+  const catalogBranchId = resolvedBranchId || (await resolveStorefrontBranchId(branchId));
   const stockFilter = {
-    branchId: resolvedBranchId,
+    branchId: catalogBranchId,
     ...(inStockOnly ? { stockCount: { gt: 0 } } : {}),
   };
 
@@ -213,7 +234,7 @@ const listMedicines = asyncHandler(async (req, res) => {
   const include = {
     category: { select: { id: true, name: true, slug: true, icon: true } },
     stocks: {
-      where: { branchId: resolvedBranchId },
+      where: { branchId: catalogBranchId },
       select: { branchId: true, price: true, stockCount: true, reservedCount: true },
     },
   };
@@ -249,9 +270,9 @@ const listMedicines = asyncHandler(async (req, res) => {
     });
   }
 
-  const mapped = medicines.map((medicine) => mapMedicine(medicine, resolvedBranchId));
+  const mapped = medicines.map((medicine) => mapMedicine(medicine, catalogBranchId));
   const missed = variants.length > 0 && total === 0;
-  const hint = missed ? await searchMiss(resolvedBranchId, search) : { suggestion: "", popular: [], categories: [] };
+  const hint = missed ? await searchMiss(catalogBranchId, search) : { suggestion: "", popular: [], categories: [] };
 
   return sendSuccess(
     res,
@@ -260,7 +281,7 @@ const listMedicines = asyncHandler(async (req, res) => {
       page,
       limit,
       total,
-      branchId: resolvedBranchId,
+      branchId: catalogBranchId,
       suggestion: hint.suggestion,
       popular: hint.popular,
       categories: hint.categories,
@@ -294,7 +315,7 @@ async function listSmartMedicines({
   const include = {
     category: { select: { id: true, name: true, slug: true, icon: true } },
     stocks: {
-      where: { branchId: priceBranchId },
+      where: priceBranchId ? { branchId: priceBranchId } : { branch: { isActive: true } },
       select: { branchId: true, price: true, stockCount: true, reservedCount: true },
     },
   };
@@ -310,7 +331,7 @@ async function listSmartMedicines({
     .map((id) => {
       const medicine = byId.get(id);
       if (!medicine) return null;
-      const mapped = mapMedicine(medicine, priceBranchId);
+      const mapped = mapMedicine(medicine, priceBranchId || null);
       const reason = reasons.get(id);
       mapped.matchReason = reason?.matchReason || "";
       mapped.matchGroup = reason?.matchGroup || "name";
@@ -321,7 +342,7 @@ async function listSmartMedicines({
     items = applyCatalogSort(items, sort);
   }
   const popular = popularIds
-    .map((id) => (byId.get(id) ? mapMedicine(byId.get(id), priceBranchId) : null))
+    .map((id) => (byId.get(id) ? mapMedicine(byId.get(id), priceBranchId || null) : null))
     .filter(Boolean);
 
   return sendSuccess(

@@ -53,10 +53,10 @@ const PAYMENT_OPTIONS = [
   { id: "card_terminal", labelKey: "courier.pay.cardTerminal", flag: "cardTerminalEnabled", deliveryOnly: true },
 ];
 
-function visiblePayments(shop, deliveryType) {
+function visiblePayments(shop, deliveryType, branch) {
   return PAYMENT_OPTIONS.filter((option) => {
     if (option.deliveryOnly && deliveryType !== "DELIVERY") return false;
-    if (option.flag === "cardTransferEnabled") return Boolean(shop?.cardTransferEnabled);
+    if (option.flag === "cardTransferEnabled") return Boolean(branch?.cardTransferEnabled);
     return !shop || shop[option.flag] !== false;
   });
 }
@@ -100,7 +100,7 @@ export default function CartPage() {
     deliveryFee: shop?.deliveryFee,
     freeFrom: shop?.freeDeliveryFrom,
   });
-  const paymentOptions = visiblePayments(shop, deliveryType);
+  const paymentOptions = visiblePayments(shop, deliveryType, branch);
   const paymentOptionsKey = paymentOptions.map((option) => option.id).join(",");
   useEffect(() => {
     loadPublicSettings().then(setShop).catch(() => setShop(peekPublicSettings()));
@@ -108,11 +108,11 @@ export default function CartPage() {
   useEffect(() => {
     if (!shop) return;
     if (deliveryType === "PICKUP" && shop.pickupEnabled === false) setDeliveryType("DELIVERY");
-    const options = visiblePayments(shop, deliveryType);
+    const options = visiblePayments(shop, deliveryType, branch);
     if (paymentMethod && options.length && !options.some((option) => option.id === paymentMethod)) {
       setPaymentMethod("");
     }
-  }, [shop, deliveryType, paymentMethod, paymentOptionsKey, setDeliveryType, setPaymentMethod]);
+  }, [shop, branch, deliveryType, paymentMethod, paymentOptionsKey, setDeliveryType, setPaymentMethod]);
   const address = useCartStore((state) => state.savedAddress) || {
     street: "",
     apartment: "",

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { FileText, Heart, Minus, Pill, Plus, ShoppingCart } from "lucide-react";
-import { formatSom } from "../../lib/format";
+import { formatPriceLabel, formatSom } from "../../lib/format";
 import { readSearchContext } from "../../lib/searchMemory";
 import { logSearchClick } from "../../services/api";
 import { resolveMediaUrl } from "../../lib/media";
@@ -110,8 +110,13 @@ export default function MedicineCard({ medicine }) {
         {medicine.matchReason ? <p className="mt-0.5 line-clamp-2 text-[11px] text-slate-500">{medicine.matchReason}</p> : null}
 
         <strong className="mt-auto pt-2 text-sm font-bold tabular-nums text-slate-900">
-          {branch ? formatSom(medicine.price) : t("medicine.pickBranch")}
+          {branch ? formatSom(medicine.price) : formatPriceLabel(medicine, t)}
         </strong>
+        {branch ? (
+          <p className={`mt-0.5 text-[11px] font-semibold ${soldOut ? "text-slate-400" : "text-[#087B51]"}`}>
+            {soldOut ? t("search.outOfStock") : t("search.inStock")}
+          </p>
+        ) : null}
         {branch && stockCount > 0 && stockCount <= 5 && (
           <p className="mt-1 text-[11px] font-semibold text-amber-700">{t("cart.lowStock")}</p>
         )}

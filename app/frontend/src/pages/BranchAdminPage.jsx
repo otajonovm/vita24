@@ -10,6 +10,7 @@ import StatsTab from "../components/branch-admin/StatsTab";
 import CouriersTab from "../components/branch-admin/CouriersTab";
 import HandoversTab from "../components/branch-admin/HandoversTab";
 import StockTab from "../components/branch-admin/StockTab";
+import CardSettingsTab from "../components/branch-admin/CardSettingsTab";
 import { PanelToast, apiError, beep } from "../components/branch-admin/panelShared";
 import { ErrorState } from "../components/ui";
 import { fetchBranches, fetchPanelSummary, setBranchOpen, verifyPrescription } from "../services/api";
@@ -144,7 +145,12 @@ export default function BranchAdminPage() {
           const parts = buffer.split("\n\n");
           buffer = parts.pop() || "";
           if (parts.some((part) => /event:\s*(order(?:\.updated)?|receipt(?:\.(?:uploaded|approved|rejected))?|branch)/.test(part))) {
-            if (parts.some((part) => /event:\s*receipt\.uploaded/.test(part)) && sound) beep();
+            if (parts.some((part) => /event:\s*receipt\.uploaded/.test(part))) {
+              if (sound) beep();
+              showToast(t("panel.receipt.newUpload", "Yangi chek tekshiruvga keldi"));
+              setTab("orders");
+              setFocus({ status: "payment_review", at: Date.now() });
+            }
             setPulse((value) => value + 1);
           }
         }
@@ -372,6 +378,7 @@ export default function BranchAdminPage() {
         />
       )}
       {tab === "stats" && <StatsTab branchId={branchId} onToast={showToast} />}
+      {tab === "card" && !readOnly && <CardSettingsTab onToast={showToast} />}
       {tab === "couriers" && !readOnly && <CouriersTab onToast={showToast} />}
       {tab === "handovers" && !readOnly && <HandoversTab onToast={showToast} />}
       {review && (

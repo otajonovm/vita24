@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
+import { Store } from "lucide-react";
 import MedicineCard from "../components/cards/MedicineCard";
 import ProductGrid from "../components/cards/ProductGrid";
 import CategoryBar from "../components/home/CategoryBar";
@@ -18,6 +19,7 @@ export default function CatalogPage() {
   const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
   const branch = useBranchStore((state) => state.branch);
+  const openModal = useBranchStore((state) => state.openModal);
   const [categories, setCategories] = useState([]);
   const [categoryError, setCategoryError] = useState("");
   const [categoryReloadKey, setCategoryReloadKey] = useState(0);
@@ -42,13 +44,9 @@ export default function CatalogPage() {
   }, [branch?.id, categoryId, query, sort, inStockOnly]);
 
   useEffect(() => {
-    if (!branch?.id) {
-      setCategories([]);
-      return undefined;
-    }
     let active = true;
     setCategoryError("");
-    fetchCategories(branch.id)
+    fetchCategories(branch?.id || "")
       .then((data) => {
         if (active) setCategories(Array.isArray(data) ? data : []);
       })
@@ -63,8 +61,10 @@ export default function CatalogPage() {
   }, [branch?.id, t, categoryReloadKey]);
 
   useEffect(() => {
-    if (!branch && !query.trim()) {
+    if (!branch?.id && !query.trim() && !categoryId) {
       setMedicines([]);
+      setLoading(false);
+      setHasMore(false);
       return undefined;
     }
     let active = true;
@@ -73,7 +73,7 @@ export default function CatalogPage() {
     if (page === 1) setLoading(true);
     setError("");
     getMedicines({
-      branchId: branch.id,
+      branchId: branch?.id || undefined,
       categoryId,
       search: query,
       sort: sort === "popular" ? "popular" : sort,
@@ -107,7 +107,7 @@ export default function CatalogPage() {
       active = false;
       controller.abort();
     };
-  }, [branch, categoryId, query, sort, inStockOnly, page, reloadKey, t]);
+  }, [branch?.id, categoryId, query, sort, inStockOnly, page, reloadKey, t]);
 
   const setCategory = (id) => {
     const next = new URLSearchParams(searchParams);
@@ -127,11 +127,24 @@ export default function CatalogPage() {
 
   return (
     <div className="grid gap-4">
+      {!branch?.id ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
+          <p className="text-sm font-semibold text-amber-900">{t("catalog.priceHint")}</p>
+          <button
+            type="button"
+            onClick={openModal}
+            className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#087B51] px-3 text-sm font-bold text-white"
+          >
+            <Store className="h-4 w-4" aria-hidden />
+            {t("catalog.pickBranch")}
+          </button>
+        </div>
+      ) : null}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0 max-w-full">
           <h1 className="text-xl font-extrabold text-slate-900">{t("catalog.title")}</h1>
           <p className="mt-1 break-words text-sm text-slate-500">
-            {branch ? `${branch.name}${query ? ` · "${query}"` : ""}` : t("catalog.pickBranch")}
+            {branch ? `${branch.name}${query ? ` · "${query}"` : ""}` : query ? `"${query}"` : t("catalog.pickBranch")}
           </p>
         </div>
         <div className="flex flex-wrap items-end gap-3">

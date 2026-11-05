@@ -6,7 +6,7 @@ const { assertBranchAccess } = require("../middlewares/authMiddleware");
 const { runDbTransaction } = require("../lib/transaction");
 const { writeAudit } = require("../lib/audit");
 const { settlePayment } = require("../lib/paymentSettlement");
-const { emitOrder, notifyStatus, writeHistory } = require("../lib/orderFlow");
+const { emitOrder, writeHistory } = require("../lib/orderFlow");
 const { publish } = require("../lib/panelEvents");
 const { expectedPayable } = require("../lib/paymentSettlement");
 const { notifyCustomer, sendMessage } = require("../bot/services");
@@ -18,8 +18,10 @@ const {
 } = require("../lib/cardTransfer");
 const {
   MAX_BYTES,
+  detectMimeFromBuffer,
   extensionFor,
   saveReceiptBuffer,
+  deleteReceiptFile,
   readReceiptFile,
   isStorageKey,
   signReceiptAccess,
@@ -30,7 +32,8 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: MAX_BYTES, files: 1 },
   fileFilter: (_req, file, cb) => {
-    if (!extensionFor(file.mimetype)) {
+    // MIME faqat dastlabki filtr; yakuniy tekshiruv magic bytes bilan
+    if (file.mimetype && !extensionFor(file.mimetype) && file.mimetype !== "application/octet-stream") {
       cb(new AppError("Faqat JPG, PNG, WEBP, HEIC yoki PDF yuklash mumkin", 400, "INVALID_FILE_TYPE"));
       return;
     }
@@ -133,44 +136,55 @@ const uploadOrderReceipt = asyncHandler(async (req, res) => {
     throw new AppError("Chek tekshiruvda, yangisini yuklash mumkin emas", 409, "RECEIPT_PENDING");
   }
 
-  const fileUrl = saveReceiptBuffer({
-    buffer: req.file.buffer,
-    mimetype: req.file.mimetype,
-    userId: req.user.id,
-  });
-  const reservedUntil = new Date(Date.now() + RECEIPT_REVIEW_MS);
+  if (!detectMimeFromBuffer(req.file.buffer)) {
+    throw new AppError("Fayl turi aniqlanmadi. Faqat JPG, PNG, WEBP, HEIC yoki PDF yuklash mumkin", 400, "INVALID_FILE_TYPE");
+  }
 
-  const receipt = await runDbTransaction(prisma, async (tx) => {
-    const locked = await tx.order.findUnique({
-      where: { id: order.id },
-      include: { payment: true },
+  const reservedUntil = new Date(Date.now() + RECEIPT_REVIEW_MS);
+  let fileUrl = null;
+
+  let receipt;
+  try {
+    fileUrl = saveReceiptBuffer({
+      buffer: req.file.buffer,
+      mimetype: req.file.mimetype,
+      userId: req.user.id,
     });
-    if (!locked || locked.status !== "WAITING_PAYMENT") {
-      throw new AppError("Buyurtma holati o'zgargan", 409, "INVALID_STATUS");
-    }
-    const created = await tx.paymentReceipt.create({
-      data: {
-        orderId: order.id,
-        fileUrl,
-        fileName: req.file.originalname || "chek",
-        status: "PENDING",
-      },
+    receipt = await runDbTransaction(prisma, async (tx) => {
+      const locked = await tx.order.findUnique({
+        where: { id: order.id },
+        include: { payment: true },
+      });
+      if (!locked || locked.status !== "WAITING_PAYMENT") {
+        throw new AppError("Buyurtma holati o'zgargan", 409, "INVALID_STATUS");
+      }
+      const created = await tx.paymentReceipt.create({
+        data: {
+          orderId: order.id,
+          fileUrl,
+          fileName: req.file.originalname || "chek",
+          status: "PENDING",
+        },
+      });
+      await tx.order.update({
+        where: { id: order.id },
+        data: { reservedUntil },
+      });
+      await writeAudit(tx, {
+        req,
+        action: "RECEIPT_UPLOADED",
+        entityType: "PaymentReceipt",
+        entityId: created.id,
+        branchId: order.branchId,
+        summary: `${order.orderNumber || order.id} chek yuklandi`,
+        after: { fileName: created.fileName, status: "PENDING" },
+      });
+      return created;
     });
-    await tx.order.update({
-      where: { id: order.id },
-      data: { reservedUntil },
-    });
-    await writeAudit(tx, {
-      req,
-      action: "RECEIPT_UPLOADED",
-      entityType: "PaymentReceipt",
-      entityId: created.id,
-      branchId: order.branchId,
-      summary: `${order.orderNumber || order.id} chek yuklandi`,
-      after: { fileName: created.fileName, status: "PENDING" },
-    });
-    return created;
-  });
+  } catch (error) {
+    if (fileUrl) deleteReceiptFile(fileUrl);
+    throw error;
+  }
 
   emitOrder(order.branchId, { ...order, status: "WAITING_PAYMENT" });
   publish(order.branchId, {
@@ -330,8 +344,7 @@ const approveReceipt = asyncHandler(async (req, res) => {
       receiptStatus: "APPROVED",
       status: preparing.status,
     });
-    notifyStatus(preparing, "PAID", "To'lov tasdiqlandi");
-    if (preparing.status === "PREPARING") notifyStatus(preparing, "PREPARING");
+    // settlePayment allaqachon bitta PAID bildirishnoma yuboradi — qayta yuborilmaydi
   }
 
   return sendSuccess(

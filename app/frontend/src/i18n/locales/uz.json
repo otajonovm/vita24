@@ -18,6 +18,10 @@
   "search.symptomGroup": "Kasallik bo'yicha",
   "search.inStock": "Mavjud",
   "search.outOfStock": "Tugagan",
+  "search.analogs": "O'xshash / analoglar",
+  "search.clear": "Tozalash",
+  "search.askPharmacist": "Farmatsevtdan so'rash",
+  "search.openTelegram": "Telegramda yozish",
   "empty.notFound": "Hech narsa topilmadi",
   "lang.uz": "O'zbek lotin",
   "lang.uzCyrl": "Ўзбек кирилл",
@@ -263,13 +267,15 @@
   "catalog": {
     "title": "Katalog",
     "pickBranch": "Katalog uchun filial tanlang",
+    "priceHint": "Aniq narx va qoldiq uchun filialni tanlang",
     "sortLabel": "Saralash",
     "inStockOnly": "Faqat mavjudlar",
     "sort": {
       "popular": "Mashhurlik",
       "cheap": "Narx: arzonidan",
       "expensive": "Narx: qimmatidan",
-      "name": "Nomi A–Z"
+      "name": "Nomi A–Z",
+      "stock": "Omborda borlar"
     },
     "empty": "Bu katalogda dorilar topilmadi.",
     "more": "Yana ko'rsatish",
@@ -582,6 +588,7 @@
   },
   "money": {
     "som": "{{amount}} so'm",
+    "from": "{{amount}} so'm dan",
     "left": "{{minutes}} daq {{seconds}} son"
   },
   "admin": {
@@ -913,6 +920,10 @@
     "rxBulkHint": "{{count}} ta dori belgisi o'zgaradi va qo'lda saqlanadi.",
     "rxSaved": "Retsept belgisi saqlandi",
     "rxNoneSelected": "Dori tanlanmagan",
+    "categoryBulk": "Ommaviy kategoriya",
+    "categoryBulkApply": "Kategoriyani qo'llash",
+    "categoryBulkHint": "{{count}} ta dori kategoriyasi qo'lda saqlanadi.",
+    "categoryBulkSaved": "Kategoriya yangilandi",
     "usage": "Qo'llanilishi",
     "contraindications": "Qarshi ko'rsatmalar",
     "storage": "Saqlash sharoiti",
@@ -1078,6 +1089,8 @@
     "customerNote": "Mijoz izohi",
     "saveNote": "Izohni saqlash",
     "noteSaved": "Izoh saqlandi",
+    "changeStatus": "Holatni o'zgartirish",
+    "applyStatus": "Holatni saqlash",
     "reason": "Sabab",
     "reasonRequired": "Sabab kamida 3 ta belgi",
     "statusSaved": "Holat yangilandi",
@@ -1212,13 +1225,20 @@
       "medicines": "Dorilar",
       "errorCol": "Xato"
     },
-    "settingsCardTransfer": "Kartaga o'tkazma",
-    "settingsCardTransferEnable": "Kartaga o'tkazmani yoqish",
+    "settingsCardTransfer": "Kartaga o'tkazma (zaxira)",
+    "settingsCardTransferEnable": "Global zaxira kartani yoqish",
     "settingsCardTransferHint": "Payme/Click ulangandan keyin kartaga o'tkazmani o'chirishni tavsiya qilamiz",
+    "settingsCardTransferFallback": "Bu karta faqat filialda o'z kartasi yo'q bo'lganda ishlatiladi. Asosiy karta farmatsevt panelida kiritiladi.",
     "settingsCardNumber": "Karta raqami",
     "settingsCardHolder": "Karta egasi",
     "settingsCardBank": "Bank (ixtiyoriy)",
-    "settingsCardTimeout": "To'lov muddati (daqiqa)"
+    "settingsCardTimeout": "To'lov muddati (daqiqa)",
+    "branchCard": "Filial kartasi",
+    "branchCardOn": "Yoqilgan",
+    "branchCardOff": "Yo'q",
+    "branchCardDisable": "Kartani o'chirish",
+    "branchCardDisableHint": "{{name}} filialining kartaga o'tkazmasini o'chirasizmi?",
+    "branchCardDisabled": "Filial kartasi o'chirildi"
   },
   "courier": {
     "stage": {
@@ -1444,9 +1464,22 @@
       "paymentReview": "To'lov tekshiruvi"
     },
     "shiftCardTransfer": "Kartaga o'tkazma",
+    "card": {
+      "tab": "To'lov kartasi",
+      "title": "Filial to'lov kartasi",
+      "hint": "Mijozlar shu filialga buyurtma berganda shu kartaga o'tkazadi.",
+      "enable": "Kartaga o'tkazmani yoqish",
+      "number": "Karta raqami",
+      "holder": "Karta egasi",
+      "bank": "Bank nomi (ixtiyoriy)",
+      "numberInvalid": "Karta raqami 16 ta raqamdan iborat bo'lishi kerak",
+      "holderRequired": "Karta egasining ismi majburiy",
+      "saved": "Karta sozlamalari saqlandi"
+    },
     "receipt": {
       "title": "To'lov cheki",
       "uploadedAt": "Yuklangan vaqt",
+      "newUpload": "Yangi chek tekshiruvga keldi",
       "approve": "To'lov tushdi — tasdiqlash",
       "reject": "Rad etish",
       "approveConfirm": "Bankda {{amount}} tushganini tekshirdingizmi?",

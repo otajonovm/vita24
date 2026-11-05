@@ -1,6 +1,15 @@
 const { Prisma } = require("../../generated/prisma");
 const prisma = require("./prisma");
-const { normalizeSearch, escapeLike, extractDosageNumbers } = require("./searchText");
+const {
+  normalizeSearch,
+  escapeLike,
+  extractDosageNumbers,
+  fixRuLayoutToLatin,
+  fixEnLayoutToCyrillic,
+  adjacentSwaps,
+  toLatin,
+  levenshtein,
+} = require("./searchText");
 
 const CANDIDATE_LIMIT = 400;
 const SYNONYM_TTL_MS = 30_000;
@@ -30,33 +39,125 @@ async function loadSynonyms() {
   return synonymCache.rows;
 }
 
-function expandQuery(raw, synonyms) {
+function collectQueryForms(raw) {
   const { text, numbers } = extractDosageNumbers(raw);
-  const normalized = normalizeSearch(text);
-  const tokens = normalized.split(" ").filter((token) => token.length >= 2);
+  const primary = normalizeSearch(text);
+  const forms = new Set([primary].filter(Boolean));
+  const rawLower = String(text || raw || "").toLowerCase();
+  // hf↔fh — QWERTY da а/р (f/h) eslashda tez-tez aralashadi (ghfhwtnfvjk → gfhfwtnfvjk).
+  const hfFlipped = rawLower.includes("hf") || rawLower.includes("fh") ? rawLower.replace(/hf/g, "\0").replace(/fh/g, "hf").replace(/\0/g, "fh") : "";
+  const layoutSources = [rawLower, hfFlipped].filter(Boolean);
+  for (const source of layoutSources) {
+    const layoutLatin = normalizeSearch(fixRuLayoutToLatin(source));
+    const layoutFromEn = normalizeSearch(toLatin(fixEnLayoutToCyrillic(source)));
+    if (layoutLatin) forms.add(layoutLatin);
+    if (layoutFromEn) forms.add(layoutFromEn);
+  }
+  // Faqat asosiy + layout formalariga bitta adjacent-swap qatlami (portlashni oldini olish).
+  const swapBases = [primary, ...[...forms].filter((item) => item !== primary)].slice(0, 3);
+  for (const form of swapBases) {
+    if (form && form.length >= 4 && form.length <= 14) {
+      for (const swap of adjacentSwaps(form)) forms.add(normalizeSearch(swap));
+    }
+  }
+  return { text, numbers, primary, forms: [...forms].filter((item) => item && item.length >= 2) };
+}
+
+function expandQuery(raw, synonyms) {
+  const collected = collectQueryForms(raw);
+  const { numbers, primary } = collected;
+  const formSet = new Set(collected.forms);
+  // Layout/typo natijasini sinonim termlariga yaqinlashtirish (prarsetamol → parasetamol).
+  for (const form of [...formSet]) {
+    if (!form || form.length < 6) continue;
+    for (const row of synonyms) {
+      for (const target of [row.termNorm, row.canonicalNorm]) {
+        if (!target || target.length < 6) continue;
+        if (Math.abs(target.length - form.length) > 2) continue;
+        const limit = target.length <= 8 ? 1 : 2;
+        if (levenshtein(form, target) <= limit) formSet.add(target);
+      }
+    }
+  }
+  const forms = [...formSet];
+  const normalized = primary || forms[0] || "";
+  const tokens = [...new Set(forms.flatMap((form) => form.split(" ").filter((token) => token.length >= 2)))];
   const seen = new Map();
 
-  for (const row of synonyms) {
-    if (!row.termNorm || row.termNorm.length < 2) continue;
-    const hit =
-      normalized === row.termNorm ||
-      tokens.includes(row.termNorm) ||
-      (row.termNorm.includes(" ") && normalized.includes(row.termNorm));
-    if (!hit || !row.canonicalNorm) continue;
-    const key = `${row.type}:${row.canonicalNorm}`;
-    const next = {
-      norm: row.canonicalNorm,
-      type: row.type,
-      label: row.canonical,
-      term: row.term,
-      termNorm: row.termNorm,
-    };
+  function addExpansion(next, key) {
     const previous = seen.get(key);
-    if (previous && previous.termNorm.length >= next.termNorm.length) continue;
+    if (previous && previous.termNorm.length >= next.termNorm.length) return;
     seen.set(key, next);
   }
 
-  return { raw: String(raw || "").trim(), normalized, tokens, numbers, expansions: [...seen.values()] };
+  for (const row of synonyms) {
+    if (!row.termNorm || row.termNorm.length < 2 || !row.canonicalNorm) continue;
+    const hit = forms.some(
+      (form) =>
+        form === row.termNorm ||
+        form.split(" ").includes(row.termNorm) ||
+        (row.termNorm.includes(" ") && form.includes(row.termNorm)) ||
+        (form.length >= 3 && row.termNorm.startsWith(form) && row.termNorm.length <= form.length + 6)
+    );
+    if (!hit) continue;
+    addExpansion(
+      {
+        norm: row.canonicalNorm,
+        type: row.type,
+        label: row.canonical,
+        term: row.term,
+        termNorm: row.termNorm,
+      },
+      `${row.type}:${row.canonicalNorm}`
+    );
+  }
+
+  // Canonical (ingredient) qidirilsa — BRAND termlarini ham candidate qilish (дротаверин → но-шпа).
+  for (const form of forms) {
+    for (const row of synonyms) {
+      if (row.type !== "BRAND" || !row.termNorm || row.canonicalNorm !== form) continue;
+      addExpansion(
+        {
+          norm: row.termNorm,
+          type: "BRAND",
+          label: row.term,
+          term: row.canonical,
+          termNorm: row.termNorm,
+          brandOf: row.canonicalNorm,
+        },
+        `BRANDTERM:${row.termNorm}`
+      );
+    }
+  }
+
+  // Brand prefix orqali topilgan ingredient uchun boshqa brand/analog termlari.
+  for (const expansion of [...seen.values()]) {
+    if (expansion.type !== "BRAND" && expansion.type !== "INGREDIENT" && expansion.type !== "SPELLING") continue;
+    const canonical = expansion.norm;
+    for (const row of synonyms) {
+      if (row.type !== "BRAND" || row.canonicalNorm !== canonical || !row.termNorm) continue;
+      addExpansion(
+        {
+          norm: row.termNorm,
+          type: "BRAND",
+          label: row.term,
+          term: row.canonical,
+          termNorm: row.termNorm,
+          brandOf: canonical,
+        },
+        `BRANDTERM:${row.termNorm}`
+      );
+    }
+  }
+
+  return {
+    raw: String(raw || "").trim(),
+    normalized,
+    forms,
+    tokens,
+    numbers,
+    expansions: [...seen.values()],
+  };
 }
 
 function doseSource(medicine) {
@@ -73,64 +174,111 @@ function matchesDose(medicine, numbers) {
 function scoreRow(row, query) {
   const text = String(row.searchText || "");
   const nameNorm = normalizeSearch(row.name);
+  const actNorm = row.activeIngredient ? normalizeSearch(row.activeIngredient) : "";
+  const forms = query.forms?.length ? query.forms : [query.normalized].filter(Boolean);
   let score = 0;
   let matchReason = "";
   let matchGroup = "name";
 
-  if (query.normalized && (nameNorm === query.normalized || text === query.normalized)) {
-    score = 100;
-    matchReason = "To'liq nom";
-  } else if (
-    query.normalized &&
-    (nameNorm.startsWith(query.normalized) || text.startsWith(`${query.normalized} `) || text.startsWith(query.normalized))
-  ) {
-    score = 80;
-    matchReason = "Nom mosligi";
+  for (const form of forms) {
+    if (!form) continue;
+    if (nameNorm === form || text === form) {
+      score = Math.max(score, 100);
+      matchReason = "To'liq nom";
+      matchGroup = "name";
+    } else if (nameNorm.startsWith(form) || text.startsWith(`${form} `) || text.startsWith(form)) {
+      if (score < 80) {
+        score = 80;
+        matchReason = "Nom mosligi";
+        matchGroup = "name";
+      }
+    }
   }
 
   for (const expansion of query.expansions) {
-    const hit = text.includes(expansion.norm) || nameNorm.includes(expansion.norm);
+    const hitName = nameNorm.includes(expansion.norm) || text.includes(expansion.norm);
+    const hitIngredient = actNorm && (actNorm.includes(expansion.norm) || expansion.norm.includes(actNorm));
+    const hit = hitName || hitIngredient;
     if (!hit) continue;
-    if (expansion.type === "SYMPTOM" && score < 30) {
-      score = 30;
-      matchReason = `${expansion.term} uchun`;
-      matchGroup = "symptom";
-    } else if (expansion.type !== "SYMPTOM" && score < 70) {
+
+    if (expansion.type === "BRAND") {
+      // brandOf: ingredient → brand (дротаверин → но-шпа). Aks holda brand → ingredient analog.
+      const queryLooksLikeThisBrand = forms.some(
+        (form) => form && (nameNorm.startsWith(form) || nameNorm.includes(form) || expansion.termNorm?.startsWith(form))
+      );
+      if (expansion.brandOf && hitName) {
+        if (score < 92) {
+          score = 92;
+          matchReason = expansion.label;
+          matchGroup = "name";
+        }
+      } else if (hitName && queryLooksLikeThisBrand && expansion.termNorm && nameNorm.includes(expansion.termNorm.slice(0, Math.min(4, expansion.termNorm.length)))) {
+        if (score < 92) {
+          score = 92;
+          matchReason = expansion.label;
+          matchGroup = "name";
+        }
+      } else if (hit) {
+        if (score < 70) {
+          score = 70;
+          matchReason = `Ta'sir etuvchi modda: ${expansion.label}`;
+          matchGroup = "ingredient";
+        }
+      }
+      continue;
+    }
+
+    if (expansion.type === "SYMPTOM") {
+      const canonicalHit =
+        (actNorm && (actNorm.includes(expansion.norm) || expansion.norm.includes(actNorm))) ||
+        text.includes(expansion.norm) ||
+        nameNorm.includes(expansion.norm);
+      const next = canonicalHit ? 78 : 45;
+      if (score < next) {
+        score = next;
+        matchReason = `${expansion.term} uchun`;
+        matchGroup = "symptom";
+      }
+      continue;
+    }
+
+    if (expansion.type !== "SYMPTOM" && score < 70) {
       score = 70;
       matchReason = `Ta'sir etuvchi modda: ${expansion.label}`;
       matchGroup = "ingredient";
     }
   }
 
-  if (score < 60 && query.normalized && (text.includes(query.normalized) || nameNorm.includes(query.normalized))) {
-    score = 60;
-    if (matchGroup === "name") {
-      matchReason = "Nom ichida";
+  for (const form of forms) {
+    if (!form) continue;
+    if (score < 60 && (text.includes(form) || nameNorm.includes(form))) {
+      score = 60;
+      if (matchGroup === "name") matchReason = "Nom ichida";
     }
-  }
-
-  const actNorm = row.activeIngredient ? normalizeSearch(row.activeIngredient) : "";
-  if (score < 60 && query.normalized && actNorm && actNorm.includes(query.normalized)) {
-    score = 60;
-    if (matchGroup === "name") {
+    if (score < 60 && actNorm && actNorm.includes(form)) {
+      score = 60;
       matchReason = "Ta'sir etuvchi modda: " + row.activeIngredient;
       matchGroup = "ingredient";
     }
   }
 
   const similarity = Number(row.similarity || 0);
-  const fuzzy = similarity > 0.35 ? 40 * similarity : 0;
+  const fuzzy = similarity > 0.28 ? 40 * similarity : 0;
   if (fuzzy > score) {
     score = fuzzy;
     matchReason = "O'xshash yozuv";
     matchGroup = "name";
   }
 
-  const flatQuery = query.normalized.replace(/ /g, "");
-  const flatText = text.replace(/ /g, "");
-  if (flatQuery.length >= 4 && flatText.includes(flatQuery) && score < 65) {
-    score = 65;
-    if (matchGroup === "name") matchReason = "Nom ichida";
+  for (const form of forms) {
+    if (!form || form.length < 4) continue;
+    const flatQuery = form.replace(/ /g, "");
+    const flatText = text.replace(/ /g, "");
+    const flatName = nameNorm.replace(/ /g, "");
+    if ((flatText.includes(flatQuery) || flatName.includes(flatQuery)) && score < 65) {
+      score = 65;
+      if (matchGroup === "name") matchReason = "Nom ichida";
+    }
   }
 
   const doseHit = matchesDose(row, query.numbers);
@@ -163,16 +311,29 @@ function medicineSearchSql(rawQuery) {
 }
 
 async function findCandidates(query, { categoryId, featured, includeInactive, inactiveOnly }) {
-  const terms = [...new Set([query.normalized, ...query.expansions.map((item) => item.norm)])].filter(
-    (term) => term && term.length >= 2
-  );
+  const forms = query.forms?.length ? query.forms : [query.normalized].filter(Boolean);
+  const expansionNorms = query.expansions.map((item) => item.norm).filter(Boolean);
+  const preferred = new Set([query.normalized, ...expansionNorms].filter(Boolean));
+  const terms = [
+    ...new Set([...expansionNorms, query.normalized, ...forms]),
+  ]
+    .filter((term) => term && term.length >= 2)
+    .sort((a, b) => {
+      const pref = Number(preferred.has(b)) - Number(preferred.has(a));
+      if (pref) return pref;
+      // Prefer letter-heavy dictionary-like tokens over keyboard mash.
+      const vowel = (value) => (value.match(/[aeiou]/g) || []).length;
+      return vowel(b) - vowel(a) || b.length - a.length;
+    })
+    .slice(0, 20);
   const likeParts = terms.map(
     (term) => Prisma.sql`m."searchText" ILIKE ${`%${escapeLike(term)}%`} ESCAPE ${"\\"}`
   );
   const likeSql = likeParts.length ? Prisma.join(likeParts, " OR ") : Prisma.sql`FALSE`;
+  const trigramNeedle = forms.find((form) => form.length >= 3) || query.normalized;
   const trigramSql =
-    query.normalized.length >= 3
-      ? Prisma.sql`OR ${query.normalized}::text <% m."searchText"`
+    trigramNeedle && trigramNeedle.length >= 3
+      ? Prisma.sql`OR ${trigramNeedle}::text <% m."searchText"`
       : Prisma.empty;
 
   const rawTerm = String(query.raw || "").trim();
@@ -198,8 +359,9 @@ async function findCandidates(query, { categoryId, featured, includeInactive, in
   const categorySql = categoryId ? Prisma.sql`AND m."categoryId" = ${categoryId}` : Prisma.empty;
   const featuredSql = featured ? Prisma.sql`AND m."showOnHome" = true` : Prisma.empty;
 
+  const simNeedle = trigramNeedle || query.normalized || "";
   return prisma.$transaction(async (tx) => {
-    await tx.$executeRaw`SELECT set_config('pg_trgm.word_similarity_threshold', '0.35', true)`;
+    await tx.$executeRaw`SELECT set_config('pg_trgm.word_similarity_threshold', '0.28', true)`;
     return tx.$queryRaw`
       SELECT
         m.id,
@@ -208,8 +370,8 @@ async function findCandidates(query, { categoryId, featured, includeInactive, in
         COALESCE(m."activeIngredient", '') AS "activeIngredient",
         m."searchText" AS "searchText",
         GREATEST(
-          word_similarity(${query.normalized}, m."searchText"),
-          word_similarity(${query.normalized}, m.name)
+          word_similarity(${simNeedle}, m."searchText"),
+          word_similarity(${simNeedle}, m.name)
         ) AS similarity
       FROM "Medicine" m
       WHERE (
@@ -225,8 +387,8 @@ async function findCandidates(query, { categoryId, featured, includeInactive, in
         CASE WHEN (${likeSql}) THEN 1 ELSE 0 END DESC,
         CASE WHEN (${fallbackCond !== Prisma.empty ? fallbackCond : Prisma.sql`FALSE`}) THEN 1 ELSE 0 END DESC,
         GREATEST(
-          word_similarity(${query.normalized}, m."searchText"),
-          word_similarity(${query.normalized}, m.name)
+          word_similarity(${simNeedle}, m."searchText"),
+          word_similarity(${simNeedle}, m.name)
         ) DESC
       LIMIT ${CANDIDATE_LIMIT}
     `;
@@ -281,6 +443,7 @@ async function rankMedicines({
   limit = 24,
   offset = 0,
   log = false,
+  logZero = false,
 }) {
   const synonyms = await loadSynonyms();
   const query = expandQuery(rawQuery, synonyms);
@@ -290,6 +453,8 @@ async function rankMedicines({
 
   const candidates = await findCandidates(query, { categoryId, featured, includeInactive, inactiveOnly });
   let scored = candidates.map((row) => scoreRow(row, query)).filter(Boolean);
+  // Zaif fuzzy (xyzqwe → tasodifiy) ni kesib tashlash.
+  scored = scored.filter((row) => row.score >= 40 || row.matchGroup === "symptom");
   if (scored.some((row) => row.score >= 60)) {
     scored = scored.filter((row) => row.score >= 60 || row.matchGroup === "symptom");
   }
@@ -330,9 +495,46 @@ async function rankMedicines({
     orders: ordersById.get(row.id) || 0,
   }));
   if (inStockOnly) ranked = ranked.filter((row) => row.inStock);
+
+  // Omborda borlar avval; OOS pastga. Score ikkinchi darajali.
   ranked.sort(
-    (a, b) => b.score - a.score || Number(b.inStock) - Number(a.inStock) || b.orders - a.orders || a.name.localeCompare(b.name, "uz")
+    (a, b) =>
+      Number(b.inStock) - Number(a.inStock) ||
+      b.score - a.score ||
+      b.orders - a.orders ||
+      a.name.localeCompare(b.name, "uz")
   );
+
+  // Suggest/limit kichik bo'lganda faqat OOS chiqsa — ingredient/brand analoglarini majburan qo'sh.
+  const pageSlice = ranked.slice(offset, offset + limit);
+  const pageHasStock = pageSlice.some((row) => row.inStock);
+  if (!pageHasStock && pageSlice.length > 0 && offset === 0) {
+    const ingredientNorms = [
+      ...new Set(
+        query.expansions
+          .filter((item) => item.type === "BRAND" || item.type === "INGREDIENT" || item.type === "SPELLING")
+          .map((item) => item.brandOf || item.norm)
+          .filter(Boolean)
+      ),
+    ];
+    if (ingredientNorms.length) {
+      const analogCandidates = ranked.filter(
+        (row) =>
+          row.inStock &&
+          (row.matchGroup === "ingredient" ||
+            ingredientNorms.some((norm) => normalizeSearch(row.name).includes(norm) || String(nameById.get(row.id) || "").toLowerCase().includes(norm)))
+      );
+      // Candidates may already be in ranked but below the OOS-only window — promote them.
+      const promote = ranked.filter((row) => row.inStock && row.matchGroup === "ingredient").slice(0, Math.max(2, Math.min(4, limit - 1)));
+      if (promote.length) {
+        const promoteIds = new Set(promote.map((row) => row.id));
+        ranked = [...promote, ...ranked.filter((row) => !promoteIds.has(row.id))];
+      } else if (analogCandidates.length) {
+        const promoteIds = new Set(analogCandidates.slice(0, 3).map((row) => row.id));
+        ranked = [...analogCandidates.slice(0, 3), ...ranked.filter((row) => !promoteIds.has(row.id))];
+      }
+    }
+  }
 
   const total = ranked.length;
   const hits = ranked.slice(offset, offset + limit);
@@ -340,13 +542,28 @@ async function rankMedicines({
   let popularIds = [];
   let categories = [];
   if (total === 0) {
-    const [near, shelf] = await Promise.all([closestNames(query.normalized), fallbackShelf(branchId)]);
-    suggestions = near.map((row) => ({ id: row.id, name: row.name }));
+    const nearNeedles = [...new Set([query.normalized, ...(query.forms || [])])].filter(
+      (item) => item && item.length >= 3
+    );
+    const [nearLists, shelf] = await Promise.all([
+      Promise.all(nearNeedles.slice(0, 3).map((needle) => closestNames(needle))),
+      fallbackShelf(branchId),
+    ]);
+    const seenNames = new Set();
+    suggestions = nearLists
+      .flat()
+      .filter((row) => {
+        if (seenNames.has(row.name)) return false;
+        seenNames.add(row.name);
+        return true;
+      })
+      .slice(0, 5)
+      .map((row) => ({ id: row.id, name: row.name }));
     popularIds = shelf.popularIds;
     categories = shelf.categories;
   }
 
-  if (log) {
+  if (log || (logZero && total === 0)) {
     void logSearch({
       query: query.raw,
       normalized: query.normalized,
@@ -423,15 +640,78 @@ function topGroups(rows, limit) {
     .filter((row) => row.query);
 }
 
+function looksLikeTypoOf(candidate, known) {
+  const a = normalizeSearch(candidate);
+  const b = normalizeSearch(known);
+  if (!a || !b || a === b) return a === b;
+  if (Math.abs(a.length - b.length) > 2) return false;
+  let diff = 0;
+  const max = Math.max(a.length, b.length);
+  for (let i = 0, j = 0; i < a.length || j < b.length; ) {
+    if (a[i] === b[j]) {
+      i += 1;
+      j += 1;
+      continue;
+    }
+    diff += 1;
+    if (diff > 2) return false;
+    if (a.length > b.length) i += 1;
+    else if (b.length > a.length) j += 1;
+    else {
+      i += 1;
+      j += 1;
+    }
+  }
+  return diff > 0 && diff <= 2 && max >= 6;
+}
+
 async function popularQueries(limit = 8) {
   const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-  const rows = await prisma.searchLog.groupBy({
-    by: ["normalized"],
-    where: { createdAt: { gte: since }, resultsCount: { gt: 0 } },
-    _count: { _all: true },
-    _max: { query: true },
-  });
-  return topGroups(rows, limit).map(({ query, count }) => ({ query, count }));
+  const [rows, synonyms] = await Promise.all([
+    prisma.searchLog.groupBy({
+      by: ["normalized"],
+      where: { createdAt: { gte: since }, resultsCount: { gt: 0 } },
+      _count: { _all: true },
+      _max: { query: true },
+    }),
+    loadSynonyms(),
+  ]);
+  const synonymTerms = synonyms.map((row) => row.term).filter(Boolean);
+  const preferredByNorm = new Map();
+  for (const row of synonyms) {
+    const key = row.termNorm;
+    if (!key) continue;
+    // Prefer latin UI terms over mixed/cyrillic duplicates.
+    const current = preferredByNorm.get(key);
+    const isLatin = /^[\x00-\x7F]+$/.test(row.term);
+    if (!current || (isLatin && !/^[\x00-\x7F]+$/.test(current))) {
+      preferredByNorm.set(key, row.term);
+    }
+  }
+
+  const cleaned = [];
+  const seen = new Set();
+  for (const item of topGroups(rows, limit * 4)) {
+    let display = String(item.query || "").trim();
+    if (display.length < 2) continue;
+    const norm = normalizeSearch(display);
+    if (!norm || norm.length < 2) continue;
+    // Typo filter: tish og'rg'i → tish og'rig'i (sinonim yoki yaqin to'g'ri yozuv).
+    const exactSyn = synonymTerms.find((term) => normalizeSearch(term) === norm);
+    const nearSyn = exactSyn
+      ? null
+      : synonymTerms.find((term) => looksLikeTypoOf(display, term));
+    if (nearSyn) display = nearSyn;
+    else if (preferredByNorm.has(norm)) display = preferredByNorm.get(norm);
+    else display = toLatin(display) || display;
+
+    const key = normalizeSearch(display);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    cleaned.push({ query: display, count: item.count });
+    if (cleaned.length >= limit) break;
+  }
+  return cleaned;
 }
 
 async function searchStats() {
@@ -488,6 +768,7 @@ module.exports = {
   loadSynonyms,
   medicineSearchSql,
   rankMedicines,
+  findCandidates,
   markSearchClick,
   pruneSearchLogs,
   popularQueries,

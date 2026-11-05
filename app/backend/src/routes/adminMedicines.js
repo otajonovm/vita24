@@ -15,6 +15,7 @@ const {
   exportCatalog,
   setMedicinePrescription,
   setMedicinePrescriptionBulk,
+  setMedicineCategoryBulk,
 } = require("../controllers/adminCatalogController");
 const { authenticateToken, requireRole } = require("../middlewares/authMiddleware");
 const { validateRequest } = require("../middlewares/validateRequest");
@@ -25,6 +26,7 @@ const {
   medicineActiveSchema,
   medicineRxSchema,
   medicineRxBulkSchema,
+  medicineCategoryBulkSchema,
   categoryWriteSchema,
   importConfirmSchema,
   showcaseQuerySchema,
@@ -72,6 +74,7 @@ router.post("/import/preview", admin, uploadCatalogFile, previewImport);
 router.post("/import/confirm", admin, validateRequest(importConfirmSchema), confirmImport);
 router.get("/export", admin, validateRequest(exportQuerySchema, "query"), exportCatalog);
 router.post("/rx/bulk", admin, validateRequest(medicineRxBulkSchema), setMedicinePrescriptionBulk);
+router.post("/category/bulk", admin, validateRequest(medicineCategoryBulkSchema), setMedicineCategoryBulk);
 router.get("/home", admin, validateRequest(showcaseQuerySchema, "query"), listShowcase);
 router.patch("/home/order", admin, validateRequest(showcaseOrderSchema), reorderShowcase);
 

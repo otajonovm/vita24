@@ -12,7 +12,9 @@ function errorText(error, fallback) {
 }
 
 function formatCardInput(value) {
-  return String(value || "")
+  const raw = String(value || "");
+  if (raw.includes("*")) return raw;
+  return raw
     .replace(/\D/g, "")
     .slice(0, 16)
     .replace(/(\d{4})(?=\d)/g, "$1 ")
@@ -30,7 +32,7 @@ function formFrom(data) {
     cashEnabled: data.cashEnabled !== false,
     cardTerminalEnabled: data.cardTerminalEnabled !== false,
     cardTransferEnabled: Boolean(data.cardTransferEnabled),
-    cardTransferNumber: formatCardInput(data.cardTransferNumber || ""),
+    cardTransferNumber: formatCardInput(data.cardTransferNumberMasked || data.cardTransferNumber || ""),
     cardTransferHolder: data.cardTransferHolder || "",
     cardTransferBank: data.cardTransferBank || "",
     cardTransferTimeoutMin: String(data.cardTransferTimeoutMin ?? 30),
@@ -102,7 +104,9 @@ export function SettingsPanel() {
       cashEnabled: form.cashEnabled,
       cardTerminalEnabled: form.cardTerminalEnabled,
       cardTransferEnabled: form.cardTransferEnabled,
-      cardTransferNumber: form.cardTransferNumber.replace(/\D/g, ""),
+      cardTransferNumber: form.cardTransferNumber.includes("*")
+        ? form.cardTransferNumber
+        : form.cardTransferNumber.replace(/\D/g, ""),
       cardTransferHolder: form.cardTransferHolder.trim(),
       cardTransferBank: form.cardTransferBank.trim(),
       cardTransferTimeoutMin: Number(form.cardTransferTimeoutMin),
@@ -153,6 +157,7 @@ export function SettingsPanel() {
           </div>
           <div className="grid gap-3 rounded-2xl border border-slate-100 bg-slate-50 p-4">
             <p className="text-sm font-extrabold text-slate-900">{t("admin.settingsCardTransfer")}</p>
+            <p className="text-xs text-slate-600">{t("admin.settingsCardTransferFallback")}</p>
             {(form.paymeEnabled || form.clickEnabled) && (
               <p className="text-xs text-amber-800">{t("admin.settingsCardTransferHint")}</p>
             )}
@@ -168,6 +173,9 @@ export function SettingsPanel() {
                   inputMode="numeric"
                   value={form.cardTransferNumber}
                   onChange={(event) => setField("cardTransferNumber", formatCardInput(event.target.value))}
+                  onFocus={() => {
+                    if (String(form.cardTransferNumber || "").includes("*")) setField("cardTransferNumber", "");
+                  }}
                   placeholder="8600 1234 5678 9012"
                 />
               </Field>
