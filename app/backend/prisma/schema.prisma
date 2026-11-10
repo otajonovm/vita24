@@ -100,6 +100,28 @@ enum RxSource {
   LEKKO
   RULE
   MANUAL
+  REGISTRY
+  DEFAULT
+}
+
+enum MatchStatus {
+  AUTO
+  REVIEW
+  CONFIRMED
+  REJECTED
+  NONE
+}
+
+enum ImageSource {
+  MANUAL
+  REGISTRY
+  NONE
+}
+
+enum ImageStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }
 
 enum CategorySource {
@@ -314,6 +336,32 @@ model Category {
   medicines  Medicine[]
 }
 
+model RegistryDrug {
+  id                   String     @id @default(uuid())
+  mpaId                String     @unique
+  shortName            String
+  fullName             String
+  mnn                  String?
+  dosageForm           String?
+  strength             String?
+  manufacturer         String?
+  country              String?
+  registrationCode     String?
+  atxCode              String?
+  isPrescription       Boolean    @default(false)
+  dispensingConditions String?
+  imgUrls              Json?
+  normalizedName       String
+  fetchedAt            DateTime
+  medicines            Medicine[]
+  createdAt            DateTime   @default(now())
+  updatedAt            DateTime   @updatedAt
+
+  @@index([normalizedName])
+  @@index([mnn])
+  @@index([isPrescription])
+}
+
 model Medicine {
   id             String        @id @default(uuid())
   name           String
@@ -330,6 +378,13 @@ model Medicine {
   homeSortOrder       Int           @default(0)
   imageEmoji     String
   imageUrl       String?
+  registryDrugId String?
+  registryDrug   RegistryDrug? @relation(fields: [registryDrugId], references: [id], onDelete: SetNull)
+  matchScore     Float?
+  matchStatus    MatchStatus   @default(NONE)
+  imageSource    ImageSource   @default(NONE)
+  imageStatus    ImageStatus?
+  registryImageCandidates Json?
   externalApiId  Int?          @unique
   barcode        String?
   ikpuCode       String?
@@ -358,6 +413,10 @@ model Medicine {
   @@index([rxNeedsReview])
   @@index([categorySource])
   @@index([categoryId])
+  @@index([matchStatus])
+  @@index([imageSource])
+  @@index([imageStatus])
+  @@index([registryDrugId])
 }
 
 model BranchStock {

@@ -3,6 +3,7 @@ const { asyncHandler, sendSuccess, AppError } = require("../lib/response");
 const { availableCount, stockLevel } = require("../lib/stock");
 const { searchVariants, suggestName } = require("../lib/searchText");
 const { rankMedicines } = require("../lib/search");
+const { publicImageUrl, formIconKey } = require("../lib/medicineImage");
 
 // Strength such as "500 mg", "100 mg/5 ml", "5мг/10мг", "200мл" taken from the product name.
 const DOSAGE_PATTERN =
@@ -49,7 +50,9 @@ function mapMedicine(medicine, branchId) {
     name: medicine.name,
     dosage: String(medicine.dosage || "").trim() || strengthOnly(medicine),
     dosageLabel: resolveDosage(medicine),
-    imageUrl: medicine.imageUrl || null,
+    imageUrl: publicImageUrl(medicine),
+    imageSource: medicine.imageSource || "NONE",
+    formIcon: formIconKey(medicine.dosageForm),
     isPrescription: medicine.isPrescription,
     showOnHome: Boolean(medicine.showOnHome),
     homeSortOrder: Number(medicine.homeSortOrder) || 0,
@@ -79,7 +82,7 @@ function mapMedicine(medicine, branchId) {
 function compareForStorefront(a, b) {
   return (
     Number(b.stockCount > 0) - Number(a.stockCount > 0) ||
-    Number(Boolean(b.imageUrl)) - Number(Boolean(a.imageUrl)) ||
+    Number(Boolean(publicImageUrl(b))) - Number(Boolean(publicImageUrl(a))) ||
     a.name.localeCompare(b.name, "uz")
   );
 }

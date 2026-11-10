@@ -39,9 +39,11 @@ function ResultButton({ medicine, query, active, onPick, onAdd, t, branchId }) {
       >
         <span className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-lg bg-emerald-50 text-[10px] font-bold text-[#087B51]">
           {imageSrc ? (
-            <img src={imageSrc} alt="" className="h-full w-full object-contain p-0.5" loading="lazy" />
+            <img src={imageSrc} alt="" width={40} height={40} className="h-full w-full object-contain p-0.5" loading="lazy" />
           ) : (
-            "Rx"
+            <span className="text-[9px] font-bold uppercase tracking-wide opacity-70">
+              {medicine.isPrescription ? "Rx" : "OTC"}
+            </span>
           )}
         </span>
         <span className="min-w-0 flex-1">

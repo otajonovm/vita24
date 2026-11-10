@@ -146,7 +146,19 @@ export default function StockTab({ branch, branchId, focus, readOnly = false, on
     setUploadError((current) => ({ ...current, [row.id]: "" }));
     try {
       const updated = await uploadMedicineImage(row.medicineId, file);
-      setRows((current) => current.map((item) => (item.id === row.id ? { ...item, imageUrl: updated.imageUrl } : item)));
+      setRows((current) =>
+        current.map((item) =>
+          item.id === row.id
+            ? {
+                ...item,
+                imageUrl: updated.imageUrl,
+                imageSource: updated.imageSource || "MANUAL",
+                imageStatus: updated.imageStatus || "APPROVED",
+                needsManualImage: false,
+              }
+            : item
+        )
+      );
       onToast(t("panel.imageSaved", "Rasm saqlandi"));
     } catch (error) {
       const message = apiError(error, t("panel.badImage", "Faqat JPEG, PNG yoki WEBP rasm yuklash mumkin"));
@@ -231,6 +243,9 @@ export default function StockTab({ branch, branchId, focus, readOnly = false, on
           ["low", `Kam qolganlar (${tallies.low})`],
           ["out", `Tugaganlar (${tallies.out})`],
           ["rx", `Retseptli (${tallies.rx})`],
+          ["needs-image", t("panel.filters.needsImage", "Rasm almashtirish")],
+          ["registry-image", t("panel.filters.registryImage", "MPA rasmi")],
+          ["no-image", t("panel.filters.noImage", "Rasmsiz / ikonka")],
         ].map(([id, label]) => (
           <button key={id || "all"} type="button" onClick={() => setFilter(id)} className={`rounded-full px-3 py-1.5 text-xs font-bold ${filter === id ? "bg-slate-900 text-white" : "bg-white"}`}>{label}</button>
         ))}

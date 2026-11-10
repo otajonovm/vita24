@@ -295,7 +295,8 @@
     "unitCapsule": "капсула",
     "unitTablet": "таблетка",
     "low": "Мало осталось",
-    "rxNote": "Фото рецепта загрузите в корзине — фармацевт проверит и подтвердит"
+    "rxNote": "Фото рецепта загрузите в корзине — фармацевт проверит и подтвердит",
+    "otcBadge": "Без рецепта"
   },
   "favorites": {
     "title": "Избранное",
@@ -735,7 +736,8 @@
       "promos": "Промокоды",
       "lekko": "Lekko",
       "settings": "Настройки",
-      "audit": "Журнал аудита"
+      "audit": "Журнал аудита",
+      "registry": "Рецепт и фото"
     },
     "validation": {
       "required": "Заполните это поле",
@@ -1203,7 +1205,42 @@
     "branchCardOff": "Нет",
     "branchCardDisable": "Отключить карту",
     "branchCardDisableHint": "Отключить перевод на карту для филиала {{name}}?",
-    "branchCardDisabled": "Карта филиала отключена"
+    "branchCardDisabled": "Карта филиала отключена",
+    "registry": {
+      "title": "Проверка рецепта и фото",
+      "hint": "Подтверждайте сопоставление MPA и фото. MANUAL рецепт/фото синхронизация не меняет.",
+      "statRx": "По рецепту",
+      "statOtc": "Без рецепта",
+      "statReview": "Нужна проверка",
+      "statUnmatched": "Без совпадения",
+      "statNoImage": "Без фото",
+      "statPending": "Фото ждёт одобрения",
+      "tabMatches": "Проверка сопоставления",
+      "tabImages": "Проверка фото",
+      "search": "Поиск",
+      "selected": "Выбрано: {{count}}",
+      "bulkApprove": "Одобрить выбранные",
+      "bulkReject": "Отклонить выбранные",
+      "selectRow": "Выбрать строку",
+      "rxYes": "По рецепту",
+      "rxNo": "Без рецепта",
+      "needsReview": "Нужна проверка",
+      "mpaCandidate": "Кандидат MPA",
+      "score": "Балл",
+      "noCandidate": "Нет кандидата MPA",
+      "confirm": "Подтвердить",
+      "pickOther": "Выбрать другой",
+      "reject": "Отклонить",
+      "markOtc": "Сделать без рецепта",
+      "markRx": "Сделать по рецепту",
+      "noImage": "Нет фото",
+      "approveImage": "Одобрить фото",
+      "rejectImage": "Отклонить фото",
+      "otherSide": "Другая сторона",
+      "pickTitle": "Выберите запись MPA",
+      "noLocalHits": "В локальном реестре не найдено",
+      "actionFailed": "Действие не выполнено"
+    }
   },
   "orders.active": "Активные",
   "orders.history": "История",
@@ -1461,7 +1498,10 @@
   },
   "panel": {
     "filters": {
-      "paymentReview": "Проверка оплаты"
+      "paymentReview": "Проверка оплаты",
+      "needsImage": "Заменить фото",
+      "registryImage": "Фото MPA",
+      "noImage": "Без фото / иконка"
     },
     "shiftCardTransfer": "Перевод на карту",
     "card": {
@@ -1493,7 +1533,10 @@
         "unreadable": "Чек нечитаем",
         "other": "Другое"
       }
-    }
+    },
+    "uploadImage": "Загрузить фото",
+    "registryImageHint": "Фото MPA — замените своим",
+    "iconImageHint": "Пока иконка / без фото"
   },
   "panel.filters.paymentReview": "Проверка оплаты",
   "panel.shiftCardTransfer": "Перевод на карту",

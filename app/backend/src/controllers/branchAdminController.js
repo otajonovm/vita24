@@ -240,6 +240,8 @@ const stockMedicineSelect = {
   ikpuCode: true,
   quantityInPack: true,
   imageUrl: true,
+  imageSource: true,
+  imageStatus: true,
   isPrescription: true,
   category: { select: { id: true, name: true, slug: true } },
 };
@@ -260,6 +262,9 @@ function serializeStockRow(stock, threshold = LOW_STOCK_THRESHOLD) {
     ikpuCode: stock.medicine?.ikpuCode || null,
     quantityInPack: stock.medicine?.quantityInPack || 1,
     imageUrl: stock.medicine?.imageUrl || null,
+    imageSource: stock.medicine?.imageSource || "NONE",
+    imageStatus: stock.medicine?.imageStatus || null,
+    needsManualImage: stock.medicine?.imageSource !== "MANUAL",
     isPrescription: Boolean(stock.medicine?.isPrescription),
     category: stock.medicine?.category
       ? {
@@ -634,6 +639,14 @@ function stockConditionSql(branchId, { search, filter, barcode, threshold }) {
     parts.push(Prisma.sql`(s."stockCount" - s."reservedCount") <= 0`);
   } else if (filter === "rx") {
     parts.push(Prisma.sql`m."isPrescription" = true`);
+  } else if (filter === "needs-image") {
+    parts.push(Prisma.sql`(m."imageSource" IS NULL OR m."imageSource" <> 'MANUAL')`);
+  } else if (filter === "registry-image") {
+    parts.push(Prisma.sql`m."imageSource" = 'REGISTRY'`);
+  } else if (filter === "no-image") {
+    parts.push(
+      Prisma.sql`(m."imageUrl" IS NULL OR m."imageUrl" = '' OR m."imageSource" = 'NONE')`
+    );
   }
   return Prisma.join(parts, " AND ");
 }

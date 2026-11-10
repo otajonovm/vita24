@@ -424,7 +424,8 @@ async function upsertMappedProducts(mapped) {
       quantityInPack: product.quantityInPack,
       categoryId,
       categorySource,
-      // imageUrl is intentionally absent: sync must never overwrite uploaded images.
+      // imageUrl / imageSource / registryDrugId / matchStatus intentionally absent:
+      // Lekko sync must never overwrite MANUAL images or MPA match fields.
       ...patch,
     };
     data.searchText = buildSearchText(data);

@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
-import { FileText, Heart, Minus, Pill, Plus, ShoppingCart } from "lucide-react";
+import { FileText, Heart, Minus, Plus, ShoppingCart } from "lucide-react";
 import { formatPriceLabel, formatSom } from "../../lib/format";
 import { readSearchContext } from "../../lib/searchMemory";
 import { logSearchClick } from "../../services/api";
 import { resolveMediaUrl } from "../../lib/media";
 import { unitMultiplier } from "../../lib/mockData";
+import FormIcon from "../medicine/FormIcon";
 import { useBranchStore } from "../../store/useBranchStore";
 import { useCartStore } from "../../store/useCartStore";
 import { useFavoritesStore } from "../../store/useFavoritesStore";
@@ -72,16 +73,16 @@ export default function MedicineCard({ medicine }) {
           />
         ) : (
           <span className="grid h-full w-full place-items-center rounded-xl border border-emerald-100/50 bg-emerald-50/70 text-[#087B51]">
-            <Pill className="h-12 w-12 stroke-[1.5]" aria-hidden />
+            <FormIcon form={medicine.formIcon || medicine.dosageForm} className="h-12 w-12" />
           </span>
         )}
 
-        {medicine.isPrescription && (
+        {medicine.isPrescription ? (
           <span className="absolute left-1.5 top-1.5 inline-flex max-w-[calc(100%-2.75rem)] items-center gap-1 rounded-full border border-red-200 bg-red-50 px-1.5 py-0.5 text-[10px] font-semibold text-red-600">
             <FileText className="h-3 w-3 shrink-0" aria-hidden />
             <span className="truncate">{t("medicine.rxBadge")}</span>
           </span>
-        )}
+        ) : null}
 
         <button
           type="button"

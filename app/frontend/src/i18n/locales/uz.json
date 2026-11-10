@@ -315,7 +315,8 @@
     "favOn": "Sevimlilarga qo'shildi",
     "favOff": "Sevimlilardan olindi",
     "decrease": "Kamaytirish",
-    "increase": "Ko'paytirish"
+    "increase": "Ko'paytirish",
+    "otcBadge": "Retseptsiz"
   },
   "favorites": {
     "title": "Sevimlilar",
@@ -769,7 +770,8 @@
       "promos": "Promokodlar",
       "lekko": "Lekko",
       "settings": "Sozlamalar",
-      "audit": "Audit jurnali"
+      "audit": "Audit jurnali",
+      "registry": "Retsept va rasm"
     },
     "searchPlaceholder": "Qidirish",
     "validation": {
@@ -1238,7 +1240,42 @@
     "branchCardOff": "Yo'q",
     "branchCardDisable": "Kartani o'chirish",
     "branchCardDisableHint": "{{name}} filialining kartaga o'tkazmasini o'chirasizmi?",
-    "branchCardDisabled": "Filial kartasi o'chirildi"
+    "branchCardDisabled": "Filial kartasi o'chirildi",
+    "registry": {
+      "title": "Retsept va rasm tekshiruvi",
+      "hint": "MPA moslashuvi va rasmlarni tasdiqlang. MANUAL retsept/rasm sinxron bilan o'zgarmaydi.",
+      "statRx": "Retseptli",
+      "statOtc": "Retseptsiz",
+      "statReview": "Tekshirish kerak",
+      "statUnmatched": "Moslashmagan",
+      "statNoImage": "Rasmsiz",
+      "statPending": "Rasm tasdiq kutmoqda",
+      "tabMatches": "Moslashuvni tekshirish",
+      "tabImages": "Rasmni tekshirish",
+      "search": "Qidirish",
+      "selected": "{{count}} ta tanlandi",
+      "bulkApprove": "Tanlanganlarni tasdiqlash",
+      "bulkReject": "Tanlanganlarni rad etish",
+      "selectRow": "Qatorni tanlash",
+      "rxYes": "Retseptli",
+      "rxNo": "Retseptsiz",
+      "needsReview": "Tekshirish kerak",
+      "mpaCandidate": "MPA nomzodi",
+      "score": "Ball",
+      "noCandidate": "MPA nomzodi yo'q",
+      "confirm": "Tasdiqlash",
+      "pickOther": "Boshqasini tanlash",
+      "reject": "Rad etish",
+      "markOtc": "Retseptsiz qilish",
+      "markRx": "Retseptli qilish",
+      "noImage": "Rasm yo'q",
+      "approveImage": "Rasmni tasdiqlash",
+      "rejectImage": "Rasmni rad etish",
+      "otherSide": "Boshqa tomon",
+      "pickTitle": "MPA yozuvini tanlang",
+      "noLocalHits": "Mahalliy reyestrda topilmadi",
+      "actionFailed": "Amal bajarilmadi"
+    }
   },
   "courier": {
     "stage": {
@@ -1461,7 +1498,10 @@
   },
   "panel": {
     "filters": {
-      "paymentReview": "To'lov tekshiruvi"
+      "paymentReview": "To'lov tekshiruvi",
+      "needsImage": "Rasm almashtirish",
+      "registryImage": "MPA rasmi",
+      "noImage": "Rasmsiz / ikonka"
     },
     "shiftCardTransfer": "Kartaga o'tkazma",
     "card": {
@@ -1493,7 +1533,10 @@
         "unreadable": "Chek o'qilmaydi",
         "other": "Boshqa"
       }
-    }
+    },
+    "uploadImage": "Rasm yuklash",
+    "registryImageHint": "MPA rasmi — o'zingiznikiga almashtiring",
+    "iconImageHint": "Hali ikonka / rasmsiz"
   },
   "panel.filters.paymentReview": "To'lov tekshiruvi",
   "panel.shiftCardTransfer": "Kartaga o'tkazma",

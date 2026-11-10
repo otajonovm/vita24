@@ -30,7 +30,7 @@ const branchIdQuerySchema = z
     sort: z.enum(["urgent", "newest", "oldest"]).optional(),
     page: pageQuery,
     limit: limitQuery,
-    filter: z.enum(["low", "out", "rx"]).optional(),
+    filter: z.enum(["low", "out", "rx", "needs-image", "registry-image", "no-image"]).optional(),
     barcode: z.string().trim().max(64).optional(),
   })
   .strict();

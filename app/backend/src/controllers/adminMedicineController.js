@@ -33,8 +33,12 @@ const updateMedicineImage = asyncHandler(async (req, res) => {
   try {
     updated = await prisma.medicine.update({
       where: { id: medicine.id },
-      data: { imageUrl },
-      select: { id: true, name: true, imageUrl: true },
+      data: {
+        imageUrl,
+        imageSource: "MANUAL",
+        imageStatus: "APPROVED",
+      },
+      select: { id: true, name: true, imageUrl: true, imageSource: true, imageStatus: true },
     });
   } catch (error) {
     removeUploadedFile(req.file.path);
@@ -47,7 +51,13 @@ const updateMedicineImage = asyncHandler(async (req, res) => {
 
   return sendSuccess(
     res,
-    { medicineId: updated.id, name: updated.name, imageUrl: updated.imageUrl },
+    {
+      medicineId: updated.id,
+      name: updated.name,
+      imageUrl: updated.imageUrl,
+      imageSource: updated.imageSource,
+      imageStatus: updated.imageStatus,
+    },
     "Dori rasmi yangilandi"
   );
 });

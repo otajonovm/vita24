@@ -28,3 +28,15 @@ Retseptlar `private/prescriptions` da. Eski base64 yozuvlar:
 ```bash
 npm run db:migrate-prescriptions
 ```
+
+## MPA retsept / rasm
+
+MPA dori reyestri (retsept belgisi + vaqtinchalik rasmlar): buyruqlar tartibi, ustuvorlik va ogohlantirishlar — [docs/mpa-integration.md](../docs/mpa-integration.md).
+
+```bash
+npm run mpa:sync
+npm run rx:match
+npm run rx:match -- --apply
+npm run mpa:images -- --dry-run
+npm run mpa:images -- --apply
+```

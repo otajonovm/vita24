@@ -194,6 +194,8 @@ function normalizeMedicine(raw, branchId) {
     categoryName: raw.category?.name || raw.categoryName || "",
     isPrescription: Boolean(raw.isPrescription ?? raw.requiresPrescription),
     imageUrl: raw.imageUrl || "",
+    imageSource: raw.imageSource || "",
+    formIcon: raw.formIcon || "",
     showOnHome: Boolean(raw.showOnHome),
     matchReason: raw.matchReason || "",
     matchGroup: raw.matchGroup || "",
@@ -959,6 +961,38 @@ export async function setAdminMedicineActive(id, isActive) {
 
 export async function setAdminMedicineRx(id, isPrescription) {
   return unwrap(await client.patch(`/admin/medicines/${id}/rx`, { isPrescription }));
+}
+
+export async function fetchRegistryStats() {
+  return unwrap(await client.get("/admin/registry/stats"));
+}
+
+export async function fetchRegistryReview(params) {
+  return unwrap(await client.get("/admin/registry/review", { params }));
+}
+
+export async function searchRegistryDrugs(q) {
+  return unwrap(await client.get("/admin/registry/search", { params: { q } }));
+}
+
+export async function confirmRegistryMatch(id, registryDrugId) {
+  return unwrap(await client.post(`/admin/registry/medicines/${id}/match/confirm`, { registryDrugId }));
+}
+
+export async function rejectRegistryMatch(id) {
+  return unwrap(await client.post(`/admin/registry/medicines/${id}/match/reject`));
+}
+
+export async function setRegistryMatch(id, registryDrugId) {
+  return unwrap(await client.post(`/admin/registry/medicines/${id}/match`, { registryDrugId }));
+}
+
+export async function decideRegistryImage(id, payload) {
+  return unwrap(await client.post(`/admin/registry/medicines/${id}/image`, payload));
+}
+
+export async function bulkRegistryImages(ids, action) {
+  return unwrap(await client.post("/admin/registry/images/bulk", { ids, action }));
 }
 
 export async function setAdminMedicineRxBulk(ids, isPrescription) {

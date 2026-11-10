@@ -46,7 +46,7 @@ const catalogQuerySchema = z
     categoryId: z.string().trim().optional(),
     active: z.enum(["all", "active", "inactive"]).optional(),
     prescription: z.enum(["all", "yes", "no", "review"]).optional(),
-    rxSource: z.enum(["LEKKO", "RULE", "MANUAL"]).optional(),
+    rxSource: z.enum(["LEKKO", "RULE", "MANUAL", "REGISTRY", "DEFAULT"]).optional(),
     page: pageQuery,
     limit: limitQuery,
   })

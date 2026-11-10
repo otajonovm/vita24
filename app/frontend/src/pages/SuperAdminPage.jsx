@@ -4,6 +4,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { Lock, Phone } from "lucide-react";
 import AdminLayout from "../components/admin/AdminLayout";
 import { CatalogManager } from "../components/admin/AdminCatalog";
+import { RegistryReviewPanel } from "../components/admin/AdminRegistry";
 import { ShowcasePanel } from "../components/admin/AdminShowcase";
 import { PromoManager } from "../components/admin/AdminPromos";
 import { NetworkStock } from "../components/admin/AdminStock";
@@ -194,6 +195,7 @@ export default function SuperAdminPage() {
             element={<StaffGate permission="customers.manage"><CustomerManager /></StaffGate>}
           />
           <Route path="catalog" element={<StaffGate permission="catalog.manage"><CatalogManager /></StaffGate>} />
+          <Route path="registry" element={<StaffGate permission="catalog.manage"><RegistryReviewPanel /></StaffGate>} />
           <Route path="search" element={<StaffGate permission="settings.manage"><SearchAdminPanel /></StaffGate>} />
           <Route path="stock" element={<StaffGate permission="stock.manage"><NetworkStock /></StaffGate>} />
           <Route path="showcase" element={<StaffGate permission="catalog.manage"><ShowcasePanel /></StaffGate>} />

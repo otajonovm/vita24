@@ -295,7 +295,8 @@
     "unitCapsule": "капсула",
     "unitTablet": "таблетка",
     "low": "Кам қолди",
-    "rxNote": "Рецепт суратини саватчада юклайсиз — фармацевт текшириб тасдиқлайди"
+    "rxNote": "Рецепт суратини саватчада юклайсиз — фармацевт текшириб тасдиқлайди",
+    "otcBadge": "Рецептсиз"
   },
   "favorites": {
     "title": "Севимлилар",
@@ -735,7 +736,8 @@
       "promos": "Промокодлар",
       "lekko": "Lekko",
       "settings": "Созламалар",
-      "audit": "Аудит журнали"
+      "audit": "Аудит журнали",
+      "registry": "Рецепт ва расм"
     },
     "validation": {
       "required": "Бу майдонни тўлдиринг",
@@ -1203,7 +1205,42 @@
     "branchCardOff": "Йўқ",
     "branchCardDisable": "Картани ўчириш",
     "branchCardDisableHint": "{{name}} филиалининг картага ўтказмасини ўчирасизми?",
-    "branchCardDisabled": "Филиал картаси ўчирилди"
+    "branchCardDisabled": "Филиал картаси ўчирилди",
+    "registry": {
+      "title": "Рецепт ва расм текшируви",
+      "hint": "MPA мослашуви ва расмларни тасдиқланг. MANUAL рецепт/расм синхрон билан ўзгармайди.",
+      "statRx": "Рецептли",
+      "statOtc": "Рецептсиз",
+      "statReview": "Текшириш керак",
+      "statUnmatched": "Мослашмаган",
+      "statNoImage": "Расмсиз",
+      "statPending": "Расм тасдиқ кутмоқда",
+      "tabMatches": "Мослашувни текшириш",
+      "tabImages": "Расмни текшириш",
+      "search": "Қидириш",
+      "selected": "{{count}} та танланди",
+      "bulkApprove": "Танланганларни тасдиқлаш",
+      "bulkReject": "Танланганларни рад этиш",
+      "selectRow": "Қаторни танлаш",
+      "rxYes": "Рецептли",
+      "rxNo": "Рецептсиз",
+      "needsReview": "Текшириш керак",
+      "mpaCandidate": "MPA номзоди",
+      "score": "Балл",
+      "noCandidate": "MPA номзоди йўқ",
+      "confirm": "Тасдиқлаш",
+      "pickOther": "Бошқасини танлаш",
+      "reject": "Рад этиш",
+      "markOtc": "Рецептсиз қилиш",
+      "markRx": "Рецептли қилиш",
+      "noImage": "Расм йўқ",
+      "approveImage": "Расмни тасдиқлаш",
+      "rejectImage": "Расмни рад этиш",
+      "otherSide": "Бошқа томон",
+      "pickTitle": "MPA ёзувини танланг",
+      "noLocalHits": "Маҳаллий реестрда топилмади",
+      "actionFailed": "Амал бажарилмади"
+    }
   },
   "orders.active": "Фаол",
   "orders.history": "Тарих",
@@ -1461,7 +1498,10 @@
   },
   "panel": {
     "filters": {
-      "paymentReview": "Тўлов текшируви"
+      "paymentReview": "Тўлов текшируви",
+      "needsImage": "Расм алмаштириш",
+      "registryImage": "MPA расми",
+      "noImage": "Расмсиз / иконка"
     },
     "shiftCardTransfer": "Картага ўтказма",
     "card": {
@@ -1493,7 +1533,10 @@
         "unreadable": "Чек ўқилмайди",
         "other": "Бошқа"
       }
-    }
+    },
+    "uploadImage": "Расм юклаш",
+    "registryImageHint": "MPA расми — ўзингизникига алмаштиринг",
+    "iconImageHint": "Ҳали иконка / расмсиз"
   },
   "panel.filters.paymentReview": "Тўлов текшируви",
   "panel.shiftCardTransfer": "Картага ўтказма",

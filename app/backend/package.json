@@ -19,6 +19,9 @@
     "test:search": "jest --runInBand",
     "db:search-backfill": "node scripts/backfill-search-text.js",
     "rx:backfill": "node scripts/rx-backfill.cjs",
+    "mpa:sync": "node scripts/mpa-sync.cjs",
+    "rx:match": "node scripts/rx-match.cjs",
+    "mpa:images": "node scripts/mpa-images.cjs",
     "db:search-synonyms": "node scripts/seed-search-synonyms.js",
     "db:classify-categories": "node scripts/classify-categories.cjs",
     "db:search-ensure": "node scripts/ensure-search.js",
@@ -50,6 +53,7 @@
     "morgan": "^1.12.1",
     "multer": "^2.4.0",
     "prisma": "6.19.3",
+    "sharp": "^0.34.4",
     "zod": "^3.25.76"
   },
   "devDependencies": {

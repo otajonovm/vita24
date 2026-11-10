@@ -67,12 +67,13 @@ export default function StockRow({ row, draft, onDraft, onHistory, history, uplo
       {!readOnly && (
         <div className="grid gap-1">
           <LoadingButton type="button" loading={uploading} loadingText={t("common.loading")} onClick={() => fileRef.current?.click()} className="h-10 rounded-xl border border-slate-200 px-3 text-sm font-semibold text-brand disabled:opacity-50">
-            Rasm yuklash
+            {t("panel.uploadImage", "Rasm yuklash")}
           </LoadingButton>
           <input
             ref={fileRef}
             type="file"
             accept="image/jpeg,image/png,image/webp"
+            capture="environment"
             className="sr-only"
             onChange={(event) => {
               const file = event.target.files?.[0];
@@ -80,6 +81,13 @@ export default function StockRow({ row, draft, onDraft, onHistory, history, uplo
               if (file) onUpload(row, file);
             }}
           />
+          {row.needsManualImage && (
+            <p className="text-[11px] font-semibold text-amber-700">
+              {row.imageSource === "REGISTRY"
+                ? t("panel.registryImageHint", "MPA rasmi — o'zingiznikiga almashtiring")
+                : t("panel.iconImageHint", "Hali ikonka / rasmsiz")}
+            </p>
+          )}
           {uploadError && <p className="text-xs text-red-600">{uploadError}</p>}
         </div>
       )}

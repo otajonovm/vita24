@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router-dom";
-import { FileText, Heart, Minus, Pill, Plus } from "lucide-react";
+import { FileText, Heart, Minus, Plus } from "lucide-react";
 import PageMeta from "../components/seo/PageMeta";
+import FormIcon from "../components/medicine/FormIcon";
 import { formatSom } from "../lib/format";
 import { resolveMediaUrl } from "../lib/media";
 import { userError } from "../lib/userError";
@@ -145,10 +146,18 @@ export default function MedicinePage() {
       />
       <div className={`grid place-items-center rounded-2xl bg-emerald-50/70 ${image ? "h-52 md:h-64" : "h-40 md:h-64"}`}>
         {image ? (
-          <img src={image} alt={medicine.name} className="h-full w-full object-contain p-4" />
+          <img
+            src={image}
+            alt={medicine.name}
+            width={280}
+            height={280}
+            loading="lazy"
+            decoding="async"
+            className="h-full w-full object-contain p-4"
+          />
         ) : (
           <span className="grid place-items-center gap-2 text-[#087B51]">
-            <Pill className="h-16 w-16" aria-hidden />
+            <FormIcon form={medicine.formIcon || medicine.dosageForm} className="h-16 w-16" />
             {shown(medicine.dosageForm) ? <span className="text-xs font-bold">{medicine.dosageForm}</span> : null}
           </span>
         )}
@@ -156,13 +165,17 @@ export default function MedicinePage() {
       <div>
         <h1 className="text-2xl font-extrabold text-slate-900">{medicine.name}</h1>
         {shown(medicine.description) && !sameText(medicine.description, medicine.name) ? <p className="mt-2 text-sm text-slate-600">{medicine.description}</p> : null}
-        {medicine.isPrescription && (
-          <p className="mt-3 inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2 py-1 text-xs font-bold text-red-600">
-            <FileText className="h-3.5 w-3.5" aria-hidden /> {t("medicine.rxRequired")}
+        {medicine.isPrescription ? (
+          <>
+            <p className="mt-3 inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2 py-1 text-xs font-bold text-red-600">
+              <FileText className="h-3.5 w-3.5" aria-hidden /> {t("medicine.rxRequired")}
+            </p>
+            <p className="mt-2 text-sm text-slate-600">{t("medicine.rxNote")}</p>
+          </>
+        ) : (
+          <p className="mt-3 inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-800">
+            {t("medicine.otcBadge")}
           </p>
-        )}
-        {medicine.isPrescription && (
-          <p className="mt-2 text-sm text-slate-600">{t("medicine.rxNote")}</p>
         )}
         <p className="mt-4 text-xl font-extrabold tabular-nums">
           {branch && price ? price : t("medicine.priceAfterBranch")}

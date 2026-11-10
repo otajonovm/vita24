@@ -5,41 +5,44 @@ import { peekPublicSettings, loadPublicSettings } from "../../lib/publicSettings
 import { suggestMedicines } from "../../services/api";
 import { useBranchStore } from "../../store/useBranchStore";
 
+const EMPTY = [];
+
 export default function SearchEmpty({
   suggestion,
-  suggestions = [],
-  popular = [],
-  popularQueries: popularQueriesProp = [],
-  categories = [],
+  suggestions = EMPTY,
+  popular = EMPTY,
+  popularQueries: popularQueriesProp,
+  categories = EMPTY,
   onSuggest,
   onCategory,
 }) {
   const { t } = useTranslation();
   const branch = useBranchStore((state) => state.branch);
-  const ideas = suggestions.length ? suggestions : suggestion ? [suggestion] : [];
-  const [popularQueries, setPopularQueries] = useState(popularQueriesProp);
+  const ideas = suggestions.length ? suggestions : suggestion ? [suggestion] : EMPTY;
+  const [fetchedQueries, setFetchedQueries] = useState(EMPTY);
   const [settings, setSettings] = useState(() => peekPublicSettings());
-
-  useEffect(() => {
-    setPopularQueries(popularQueriesProp);
-  }, [popularQueriesProp]);
+  const popularQueries =
+    Array.isArray(popularQueriesProp) && popularQueriesProp.length > 0 ? popularQueriesProp : fetchedQueries;
 
   useEffect(() => {
     let active = true;
     loadPublicSettings().then((data) => {
       if (active) setSettings(data);
     });
-    if (!popularQueriesProp.length) {
+    // Prop bo'sh bo'lsa — bir marta API dan mashhur so'rovlarni olamiz.
+    if (!(Array.isArray(popularQueriesProp) && popularQueriesProp.length > 0)) {
       suggestMedicines({ branchId: branch?.id, search: "" })
         .then((data) => {
-          if (active) setPopularQueries(data.popularQueries || []);
+          if (!active) return;
+          const next = Array.isArray(data.popularQueries) ? data.popularQueries : EMPTY;
+          setFetchedQueries((prev) => (prev === next || (prev.length === 0 && next.length === 0) ? prev : next));
         })
         .catch(() => {});
     }
     return () => {
       active = false;
     };
-  }, [branch?.id, popularQueriesProp.length]);
+  }, [branch?.id, popularQueriesProp]);
 
   const telegramUrl =
     settings?.telegramBotUrl || (settings?.telegramBotUsername ? `https://t.me/${settings.telegramBotUsername}` : "");
