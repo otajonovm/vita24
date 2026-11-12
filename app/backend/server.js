@@ -198,18 +198,26 @@ encryptStoredLekkoKeys()
       // Flag fayl ($DATA_DIR/mpa-bootstrap-done) bo'lsa qayta ishlamaydi.
       if (String(process.env.MPA_BOOTSTRAP_ONCE || "").trim() === "1") {
         try {
+          const fs = require("fs");
+          const path = require("path");
           const { spawn } = require("child_process");
+          const { dataPath } = require("./src/lib/dataDir");
+          const logFile = dataPath("mpa-bootstrap.log");
+          fs.mkdirSync(path.dirname(logFile), { recursive: true });
+          const out = fs.openSync(logFile, "a");
           const child = spawn(process.execPath, ["scripts/mpa-bootstrap-once.cjs"], {
             cwd: __dirname,
             detached: true,
-            stdio: "inherit",
+            stdio: ["ignore", out, out],
             env: process.env,
           });
           child.unref();
-          console.log("[mpa-bootstrap] fon jarayon ishga tushdi");
+          console.log(`[mpa-bootstrap] fon jarayon ishga tushdi pid=${child.pid} log=${logFile}`);
         } catch (error) {
           console.error("[mpa-bootstrap] ishga tushmadi:", error.message);
         }
+      } else {
+        console.log("[mpa-bootstrap] o'tkazib yuborildi (MPA_BOOTSTRAP_ONCE!=1)");
       }
     });
   });
