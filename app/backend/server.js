@@ -194,5 +194,22 @@ encryptStoredLekkoKeys()
       } catch (error) {
         console.error("[ensure-search] Yuklanmadi:", error.message);
       }
+      // Bir martalik MPA bootstrap: Railway SSH ishlamasa MPA_BOOTSTRAP_ONCE=1 qo'yiladi.
+      // Flag fayl ($DATA_DIR/mpa-bootstrap-done) bo'lsa qayta ishlamaydi.
+      if (String(process.env.MPA_BOOTSTRAP_ONCE || "").trim() === "1") {
+        try {
+          const { spawn } = require("child_process");
+          const child = spawn(process.execPath, ["scripts/mpa-bootstrap-once.cjs"], {
+            cwd: __dirname,
+            detached: true,
+            stdio: "inherit",
+            env: process.env,
+          });
+          child.unref();
+          console.log("[mpa-bootstrap] fon jarayon ishga tushdi");
+        } catch (error) {
+          console.error("[mpa-bootstrap] ishga tushmadi:", error.message);
+        }
+      }
     });
   });
