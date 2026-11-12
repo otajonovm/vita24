@@ -7,7 +7,7 @@
     "predev": "node scripts/db-ctl.js start && node scripts/copy-shared.js",
     "dev": "nodemon server.js",
     "prestart": "node scripts/copy-shared.js",
-    "start": "prisma migrate deploy && node server.js",
+    "start": "prisma migrate deploy && node scripts/classify-categories.cjs --apply && node server.js",
     "db:generate": "node scripts/prisma-generate.js",
     "postinstall": "node scripts/prisma-generate.js",
     "db:up": "docker compose up -d",

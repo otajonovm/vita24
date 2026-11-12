@@ -195,29 +195,26 @@ encryptStoredLekkoKeys()
         console.error("[ensure-search] Yuklanmadi:", error.message);
       }
       // Bir martalik MPA bootstrap: Railway SSH ishlamasa MPA_BOOTSTRAP_ONCE=1 qo'yiladi.
-      // Flag fayl ($DATA_DIR/mpa-bootstrap-done) bo'lsa qayta ishlamaydi.
+      console.log(`[mpa-bootstrap] env=${String(process.env.MPA_BOOTSTRAP_ONCE || "")}`);
       if (String(process.env.MPA_BOOTSTRAP_ONCE || "").trim() === "1") {
-        try {
-          const fs = require("fs");
-          const path = require("path");
-          const { spawn } = require("child_process");
-          const { dataPath } = require("./src/lib/dataDir");
-          const logFile = dataPath("mpa-bootstrap.log");
-          fs.mkdirSync(path.dirname(logFile), { recursive: true });
-          const out = fs.openSync(logFile, "a");
-          const child = spawn(process.execPath, ["scripts/mpa-bootstrap-once.cjs"], {
-            cwd: __dirname,
-            detached: true,
-            stdio: ["ignore", out, out],
-            env: process.env,
-          });
-          child.unref();
-          console.log(`[mpa-bootstrap] fon jarayon ishga tushdi pid=${child.pid} log=${logFile}`);
-        } catch (error) {
-          console.error("[mpa-bootstrap] ishga tushmadi:", error.message);
-        }
-      } else {
-        console.log("[mpa-bootstrap] o'tkazib yuborildi (MPA_BOOTSTRAP_ONCE!=1)");
+        setImmediate(() => {
+          try {
+            console.log("[mpa-bootstrap] ishga tushmoqda...");
+            require("child_process").execFile(
+              process.execPath,
+              [require("path").join(__dirname, "scripts", "mpa-bootstrap-once.cjs")],
+              { cwd: __dirname, env: process.env, maxBuffer: 20 * 1024 * 1024 },
+              (error, stdout, stderr) => {
+                if (stdout) console.log(stdout);
+                if (stderr) console.error(stderr);
+                if (error) console.error("[mpa-bootstrap] xato:", error.message);
+                else console.log("[mpa-bootstrap] yakunlandi");
+              }
+            );
+          } catch (error) {
+            console.error("[mpa-bootstrap] ishga tushmadi:", error.message);
+          }
+        });
       }
     });
   });
