@@ -1,6 +1,7 @@
 const axios = require("axios");
 
-const MPA_API_BASE = process.env.MPA_API_BASE || "https://api.pharmagency.uz/drug-catalog-api/v2";
+// 2026-11: api.pharmagency.uz DNS o'chgan; katalog endi api.mpa.uz da.
+const MPA_API_BASE = process.env.MPA_API_BASE || "https://api.mpa.uz/drug-catalog-api/v2";
 const MPA_FILE_BASE = process.env.MPA_FILE_BASE || "https://api.mpa.uz/file-api/v1/drugs";
 const MPA_TIMEOUT_MS = Number(process.env.MPA_TIMEOUT_MS || 20_000);
 const MPA_DELAY_MS = Number(process.env.MPA_DELAY_MS || 400);

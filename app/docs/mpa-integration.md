@@ -3,6 +3,8 @@
 Vita24 Lekko katalogiga MPA (mpa.uz / api.pharmagency.uz) ochiq reyestridan retsept belgisi va vaqtinchalik rasmlarni ulaydi.
 
 > **Diqqat:** MPA API rasmiy hujjatlanmagan. Endpoint yoki maydonlar o‘zgarsa `app/backend/src/services/mpaClient.js` ni yangilang, `--limit` bilan dry-run qiling, keyin to‘liq sinxronni ishga tushiring.
+>
+> Hozirgi baza: `https://api.mpa.uz/drug-catalog-api/v2` (eski `api.pharmagency.uz` DNS dan o‘chirilgan).
 
 ## Buyruqlar tartibi (production)
 
